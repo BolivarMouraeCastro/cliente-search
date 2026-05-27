@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
+export const dynamic = 'force-dynamic'; // Força a rota a ser sempre dinâmica e não usar cache
+
 // Initialize the Google Generative AI with the API key from environment
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
