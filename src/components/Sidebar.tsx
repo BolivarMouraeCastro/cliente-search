@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
-import { useSession, signOut } from 'next-auth/react';
+import { useSession, signIn, signOut } from 'next-auth/react';
 import Link from 'next/link';
 
 export default function Sidebar() {
@@ -161,14 +161,14 @@ export default function Sidebar() {
               </button>
             </>
           ) : (
-            <Link href="/api/auth/signin" className="sidebar-link" style={{ flex: 1 }}>
+            <button onClick={() => signIn('google', { callbackUrl: '/' })} className="sidebar-link" style={{ flex: 1, textAlign: 'left', background: 'transparent', border: 'none', cursor: 'pointer', padding: 'var(--space-sm) var(--space-md)' }}>
               <svg className="sidebar-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
                 <polyline points="10 17 15 12 10 7" />
                 <line x1="15" y1="12" x2="3" y2="12" />
               </svg>
               <span className="sidebar-link-text">Entrar</span>
-            </Link>
+            </button>
           )}
         </div>
       </aside>
