@@ -81,9 +81,41 @@ export default function Sidebar() {
 
       {/* Sidebar */}
       <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
-        <div className="sidebar-brand">
-          <div className="sidebar-brand-icon">BM</div>
-          <span className="sidebar-brand-text">BM&C</span>
+        <div className="sidebar-brand" style={{ flexDirection: 'column', gap: '0.25rem', padding: 'var(--space-xl) var(--space-md)', textAlign: 'center' }}>
+          <div style={{ marginBottom: '0.5rem', color: 'var(--accent-blue)', display: 'flex', justifyContent: 'center' }}>
+            <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3v18" />
+              <path d="M3 10a4 4 0 0 0 8 0" />
+              <path d="M3 10h8" />
+              <path d="M13 10a4 4 0 0 0 8 0" />
+              <path d="M13 10h8" />
+              <path d="M12 7H4.5" />
+              <path d="M12 7h7.5" />
+              <path d="M7 3v4" />
+              <path d="M17 3v4" />
+              <path d="M9 21h6" />
+            </svg>
+          </div>
+          <span style={{ 
+            fontFamily: 'var(--font-serif)', 
+            fontSize: '1.4rem', 
+            fontWeight: 700, 
+            letterSpacing: '0.05em',
+            background: 'var(--gradient-brand)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent'
+          }}>
+            BM&C
+          </span>
+          <span style={{
+            fontSize: '0.65rem',
+            fontWeight: 500,
+            color: 'var(--text-muted)',
+            letterSpacing: '0.2em',
+            textTransform: 'uppercase'
+          }}>
+            Advogados
+          </span>
         </div>
 
         <nav className="sidebar-nav">
