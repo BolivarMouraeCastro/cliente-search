@@ -8,18 +8,6 @@ import { Client } from '@/types';
 const RECENT_SEARCHES_KEY = 'bmc_recent';
 const MAX_RECENT = 6;
 
-// Dynamic colors for chart bars
-const BAR_COLORS = [
-  '#3b82f6', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444',
-  '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16',
-  '#06b6d4', '#a855f7', '#eab308', '#22c55e', '#e11d48',
-];
-
-interface StatusData {
-  status: string;
-  count: number;
-}
-
 function getRecentSearches(): string[] {
   if (typeof window === 'undefined') return [];
   try {
@@ -47,6 +35,8 @@ export default function HomePage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+
   useEffect(() => {
     setRecentSearches(getRecentSearches());
   }, []);

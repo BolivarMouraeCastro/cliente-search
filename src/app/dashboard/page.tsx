@@ -1,12 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import SearchBar from '@/components/SearchBar';
-import ClientCard from '@/components/ClientCard';
-import { Client } from '@/types';
-
-const RECENT_SEARCHES_KEY = 'bmc_recent';
-const MAX_RECENT = 6;
+import { useState, useEffect } from 'react';
 
 // Dynamic colors for chart bars
 const BAR_COLORS = [
@@ -18,28 +12,6 @@ const BAR_COLORS = [
 interface StatusData {
   status: string;
   count: number;
-}
-
-function getRecentSearches(): string[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const stored = localStorage.getItem(RECENT_SEARCHES_KEY);
-    return stored ? JSON.parse(stored) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveRecentSearch(query: string) {
-  if (!query.trim()) return;
-  try {
-    const recent = getRecentSearches().filter((s) => s !== query);
-    recent.unshift(query);
-    localStorage.setItem(
-      RECENT_SEARCHES_KEY,
-      JSON.stringify(recent.slice(0, MAX_RECENT))
-    );
-  } catch { /* ignore */ }
 }
 
 export default function DashboardPage() {
