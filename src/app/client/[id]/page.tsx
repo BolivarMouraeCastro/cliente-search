@@ -6,7 +6,6 @@ import EmailTimeline from '@/components/EmailTimeline';
 import FileList from '@/components/FileList';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import { Client, Email, DriveFile } from '@/types';
-import ReactMarkdown from 'react-markdown';
 
 type TabKey = 'emails' | 'files' | 'data';
 
@@ -48,10 +47,6 @@ export default function ClientDetailPage() {
   const [loadingClient, setLoadingClient] = useState(true);
   const [loadingEmails, setLoadingEmails] = useState(false);
   const [loadingFiles, setLoadingFiles] = useState(false);
-
-  const [aiReport, setAiReport] = useState<string | null>(null);
-  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
-  const [aiError, setAiError] = useState<string | null>(null);
 
   // Fetch client data
   useEffect(() => {
@@ -118,29 +113,6 @@ export default function ClientDetailPage() {
     }
     fetchData();
   }, [client?.id]);
-
-  const handleGenerateReport = async () => {
-    setIsGeneratingReport(true);
-    setAiError(null);
-    try {
-      const res = await fetch('/api/generate-report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          clientName: client?.nome,
-          emails,
-          files: files.map(f => ({ name: f.name, modifiedTime: f.modifiedTime })) // Send only necessary info
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erro desconhecido');
-      setAiReport(data.report);
-    } catch (err: any) {
-      setAiError(err.message);
-    } finally {
-      setIsGeneratingReport(false);
-    }
-  };
 
   if (loadingClient) {
     return (
@@ -243,74 +215,7 @@ export default function ClientDetailPage() {
               <LoadingSpinner size="md" />
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-              {/* IA Report Section */}
-              {emails.length > 0 && (
-                <div style={{
-                  background: 'var(--bg-glass)',
-                  border: '1px solid var(--border-accent)',
-                  borderRadius: '1rem',
-                  padding: '1.5rem',
-                  boxShadow: 'var(--shadow-glow-blue)',
-                  position: 'relative',
-                  overflow: 'hidden'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: aiReport ? '1.5rem' : '0' }}>
-                    <div>
-                      <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ color: 'var(--accent-blue)' }}>✨</span> Relatório Inteligente (IA)
-                      </h3>
-                      <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                        Gere uma explicação humanizada sobre o caso cruzando e-mails com documentos.
-                      </p>
-                    </div>
-                    {!aiReport && (
-                      <button
-                        onClick={handleGenerateReport}
-                        disabled={isGeneratingReport}
-                        style={{
-                          background: 'var(--gradient-brand)',
-                          color: '#fff',
-                          border: 'none',
-                          padding: '0.75rem 1.5rem',
-                          borderRadius: '0.75rem',
-                          fontWeight: 600,
-                          cursor: isGeneratingReport ? 'wait' : 'pointer',
-                          opacity: isGeneratingReport ? 0.7 : 1,
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.5rem'
-                        }}
-                      >
-                        {isGeneratingReport ? 'Gerando...' : 'Gerar Relatório'}
-                      </button>
-                    )}
-                  </div>
-                  
-                  {aiError && (
-                    <div style={{ color: 'var(--error)', fontSize: '0.85rem', marginTop: '1rem' }}>
-                      {aiError}
-                    </div>
-                  )}
-
-                  {aiReport && (
-                    <div style={{
-                      background: 'rgba(0,0,0,0.2)',
-                      padding: '1.5rem',
-                      borderRadius: '0.75rem',
-                      borderLeft: '4px solid var(--accent-blue)',
-                      fontSize: '0.95rem',
-                      lineHeight: '1.6',
-                      color: 'var(--text-primary)'
-                    }} className="ai-report-content">
-                      <ReactMarkdown>{aiReport}</ReactMarkdown>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <EmailTimeline emails={emails} />
-            </div>
+            <EmailTimeline emails={emails} />
           )
         )}
 
