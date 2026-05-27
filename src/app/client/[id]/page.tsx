@@ -6,6 +6,7 @@ import EmailTimeline from '@/components/EmailTimeline';
 import FileList from '@/components/FileList';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import { Client, Email, DriveFile } from '@/types';
+import ReactMarkdown from 'react-markdown';
 
 type TabKey = 'emails' | 'files' | 'data';
 
@@ -48,6 +49,10 @@ export default function ClientDetailPage() {
   const [loadingEmails, setLoadingEmails] = useState(false);
   const [loadingFiles, setLoadingFiles] = useState(false);
 
+  const [aiReport, setAiReport] = useState<string | null>(null);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
   // Fetch client data
   useEffect(() => {
     async function fetchClient() {
@@ -67,73 +72,75 @@ export default function ClientDetailPage() {
     fetchClient();
   }, [clientId]);
 
-  // Fetch emails when tab is active and client is loaded
+  // Fetch emails and files when client is loaded
   useEffect(() => {
-    if (!client || activeTab !== 'emails') return;
+    if (!client) return;
 
-    async function fetchEmails() {
+    async function fetchData() {
       setLoadingEmails(true);
+      setLoadingFiles(true);
       try {
-        const res = await fetch(
+        // Fetch Emails
+        const resEmails = await fetch(
           `/api/emails?clientName=${encodeURIComponent(client!.nome)}&clientId=${encodeURIComponent(client!.id)}`
         );
-        if (res.ok) {
-          const data = await res.json();
-          setEmails(data.emails || []);
-
-          // If status was auto-updated to DISTRIBUÍDO, refresh client data
+        let emailsData = [];
+        if (resEmails.ok) {
+          const data = await resEmails.json();
+          emailsData = data.emails || [];
+          setEmails(emailsData);
           if (data.statusUpdated) {
             const clientRes = await fetch(`/api/clients?id=${encodeURIComponent(client!.id)}`);
             if (clientRes.ok) {
               const clientData = await clientRes.json();
-              if (clientData.client) {
-                setClient(clientData.client);
-              }
+              if (clientData.client) setClient(clientData.client);
             }
           }
+        }
+
+        // Fetch Files
+        const resFiles = await fetch(
+          `/api/files?clientName=${encodeURIComponent(client!.nome)}&clientId=${encodeURIComponent(client!.id)}`
+        );
+        let filesData = [];
+        if (resFiles.ok) {
+          const data = await resFiles.json();
+          filesData = data.files || [];
+          setFiles(filesData);
         }
       } catch {
         setEmails([]);
-      } finally {
-        setLoadingEmails(false);
-      }
-    }
-    fetchEmails();
-  }, [client, activeTab]);
-
-  // Fetch files when tab is active and client is loaded
-  useEffect(() => {
-    if (!client || activeTab !== 'files') return;
-
-    async function fetchFiles() {
-      setLoadingFiles(true);
-      try {
-        const res = await fetch(
-          `/api/files?clientName=${encodeURIComponent(client!.nome)}&clientId=${encodeURIComponent(client!.id)}`
-        );
-        if (res.ok) {
-          const data = await res.json();
-          setFiles(data.files || []);
-
-          // If status was auto-updated to DISTRIBUÍDO, refresh client data
-          if (data.statusUpdated) {
-            const clientRes = await fetch(`/api/clients?id=${encodeURIComponent(client!.id)}`);
-            if (clientRes.ok) {
-              const clientData = await clientRes.json();
-              if (clientData.client) {
-                setClient(clientData.client);
-              }
-            }
-          }
-        }
-      } catch {
         setFiles([]);
       } finally {
+        setLoadingEmails(false);
         setLoadingFiles(false);
       }
     }
-    fetchFiles();
-  }, [client, activeTab]);
+    fetchData();
+  }, [client?.id]);
+
+  const handleGenerateReport = async () => {
+    setIsGeneratingReport(true);
+    setAiError(null);
+    try {
+      const res = await fetch('/api/generate-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientName: client?.nome,
+          emails,
+          files: files.map(f => ({ name: f.name, createdTime: f.createdTime })) // Send only necessary info
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro desconhecido');
+      setAiReport(data.report);
+    } catch (err: any) {
+      setAiError(err.message);
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
 
   if (loadingClient) {
     return (
@@ -236,7 +243,74 @@ export default function ClientDetailPage() {
               <LoadingSpinner size="md" />
             </div>
           ) : (
-            <EmailTimeline emails={emails} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              {/* IA Report Section */}
+              {emails.length > 0 && (
+                <div style={{
+                  background: 'var(--bg-glass)',
+                  border: '1px solid var(--border-accent)',
+                  borderRadius: '1rem',
+                  padding: '1.5rem',
+                  boxShadow: 'var(--shadow-glow-blue)',
+                  position: 'relative',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: aiReport ? '1.5rem' : '0' }}>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ color: 'var(--accent-blue)' }}>✨</span> Relatório Inteligente (IA)
+                      </h3>
+                      <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                        Gere uma explicação humanizada sobre o caso cruzando e-mails com documentos.
+                      </p>
+                    </div>
+                    {!aiReport && (
+                      <button
+                        onClick={handleGenerateReport}
+                        disabled={isGeneratingReport}
+                        style={{
+                          background: 'var(--gradient-brand)',
+                          color: '#fff',
+                          border: 'none',
+                          padding: '0.75rem 1.5rem',
+                          borderRadius: '0.75rem',
+                          fontWeight: 600,
+                          cursor: isGeneratingReport ? 'wait' : 'pointer',
+                          opacity: isGeneratingReport ? 0.7 : 1,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.5rem'
+                        }}
+                      >
+                        {isGeneratingReport ? 'Gerando...' : 'Gerar Relatório'}
+                      </button>
+                    )}
+                  </div>
+                  
+                  {aiError && (
+                    <div style={{ color: 'var(--error)', fontSize: '0.85rem', marginTop: '1rem' }}>
+                      {aiError}
+                    </div>
+                  )}
+
+                  {aiReport && (
+                    <div style={{
+                      background: 'rgba(0,0,0,0.2)',
+                      padding: '1.5rem',
+                      borderRadius: '0.75rem',
+                      borderLeft: '4px solid var(--accent-blue)',
+                      fontSize: '0.95rem',
+                      lineHeight: '1.6',
+                      color: 'var(--text-primary)'
+                    }} className="ai-report-content">
+                      <ReactMarkdown>{aiReport}</ReactMarkdown>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <EmailTimeline emails={emails} />
+            </div>
           )
         )}
 
