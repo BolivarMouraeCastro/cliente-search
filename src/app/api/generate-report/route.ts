@@ -6,6 +6,8 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 export async function POST(req: Request) {
   try {
+    console.log("Verificando a chave no servidor:", process.env.GEMINI_API_KEY ? "Existe (tamanho: " + process.env.GEMINI_API_KEY.length + ")" : "Nao existe");
+    
     if (!process.env.GEMINI_API_KEY) {
       return NextResponse.json(
         { error: 'A chave do Gemini (GEMINI_API_KEY) não está configurada no servidor.' },
