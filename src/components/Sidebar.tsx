@@ -26,7 +26,7 @@ export default function Sidebar() {
 
   const navLinks = [
     {
-      href: '/',
+      href: '/dashboard',
       label: 'Dashboard',
       icon: (
         <svg className="sidebar-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
