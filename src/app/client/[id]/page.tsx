@@ -129,7 +129,7 @@ export default function ClientDetailPage() {
         body: JSON.stringify({
           clientName: client?.nome,
           emails,
-          files: files.map(f => ({ name: f.name, createdTime: f.createdTime })) // Send only necessary info
+          files: files.map(f => ({ name: f.name, modifiedTime: f.modifiedTime })) // Send only necessary info
         }),
       });
       const data = await res.json();
