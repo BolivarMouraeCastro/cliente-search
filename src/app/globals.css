@@ -165,34 +165,36 @@ html {
 
 body {
   font-family: var(--font-sans);
-  background-color: #0a0a0c;
+  background-color: #0e0e11;
   color: var(--text-primary);
   line-height: 1.6;
   min-height: 100vh;
   overflow-x: hidden;
 }
 
-/* ── Background Logo (fixo atrás de tudo) ─────────────────────────────── */
-.bg-logo-wrapper {
+/* Ambient frosted glow */
+body::before {
+  content: '';
   position: fixed;
-  top: 50%;
-  left: 55%;
-  transform: translate(-50%, -50%);
-  width: 380px;
-  height: 380px;
-  z-index: 0;
+  top: -20%;
+  left: 30%;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(212, 175, 55, 0.06) 0%, transparent 70%);
   pointer-events: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  filter: drop-shadow(0 0 40px rgba(212, 175, 55, 0.3)) drop-shadow(0 0 80px rgba(212, 175, 55, 0.15));
+  z-index: 0;
 }
 
-.bg-logo {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  opacity: 0.25;
+body::after {
+  content: '';
+  position: fixed;
+  bottom: -10%;
+  right: 20%;
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, rgba(197, 160, 89, 0.04) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
 }
 
 a {

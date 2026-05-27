@@ -36,10 +36,6 @@ export default function RootLayout({
         <Providers>
           <div className="app-layout">
             <Sidebar />
-            {/* Logo de fundo fixo */}
-            <div className="bg-logo-wrapper">
-              <img src="/bmc-wall.png" alt="" className="bg-logo" />
-            </div>
             <main className="main-content">{children}</main>
           </div>
         </Providers>
