@@ -165,10 +165,11 @@ html {
 
 body {
   font-family: var(--font-sans);
-  background-color: var(--bg-primary);
+  background-color: #0a0a0c;
   background-image: url('/bmc-wall.png');
-  background-size: cover;
-  background-position: center;
+  background-size: 50%;
+  background-position: center center;
+  background-repeat: no-repeat;
   background-attachment: fixed;
   color: var(--text-primary);
   line-height: 1.6;
@@ -176,14 +177,14 @@ body {
   overflow-x: hidden;
 }
 
-/* Glass overlay on the whole background */
+/* White frosted glass overlay */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
-  background: rgba(18, 18, 20, 0.7); /* Tonalidade escura para contraste */
-  backdrop-filter: blur(15px);
-  -webkit-backdrop-filter: blur(15px);
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   pointer-events: none;
   z-index: -1;
 }
@@ -195,7 +196,7 @@ body::after {
   left: 0;
   width: 100%;
   height: 100%;
-  background: radial-gradient(circle at 50% 50%, transparent 0%, rgba(18, 18, 20, 0.85) 100%);
+  background: radial-gradient(circle at 50% 50%, transparent 0%, rgba(10, 10, 12, 0.4) 100%);
   pointer-events: none;
   z-index: -1;
 }
