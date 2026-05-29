@@ -310,6 +310,22 @@ const CLOSED_PROCESS_KEYWORDS = [
   'baixa dos autos',
   'encerramento do processo',
   'processo arquivado',
+  // Acordo homologado (encerra o processo)
+  'acordo homologado',
+  'homologação de acordo',
+  'homologacao de acordo',
+  'homologar o acordo',
+  'sentença homologatória',
+  'sentenca homologatoria',
+  'homologo o acordo',
+  'homologo para que produza',
+  'declaro extinto o processo',
+  'julgo extinto',
+  'extingo o processo',
+  'cumprimento de acordo',
+  'acordo judicial',
+  'termo de conciliação',
+  'termo de conciliacao',
 ];
 
 /**

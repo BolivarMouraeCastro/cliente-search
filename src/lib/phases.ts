@@ -37,6 +37,14 @@ export const ALL_PHASES: PhaseConfig[] = [
     order: 2,
   },
   {
+    id: 'acordo',
+    name: 'Acordo Homologado',
+    simple: 'As partes fizeram um acordo e o juiz homologou — processo encerrado',
+    sheetStatus: 'ARQUIVADO',
+    keywords: ['acordo homologado', 'homologação de acordo', 'homologacao de acordo', 'homologar o acordo', 'sentença homologatória', 'sentenca homologatoria', 'homologo o acordo', 'homologo para que produza', 'termo de conciliação', 'termo de conciliacao', 'acordo judicial'],
+    order: 11,
+  },
+  {
     id: 'audiencia_inicial',
     name: 'Audiência Inicial',
     simple: 'Primeira audiência para tentar acordo',
@@ -217,6 +225,7 @@ export const NEXT_PHASE: Record<string, string> = {
   recurso: 'acordao',
   acordao: 'transito',
   transito: 'execucao',
+  acordo: '',
 };
 
 /**
@@ -308,6 +317,13 @@ export const PHASE_EXPLANATIONS: Record<string, { titulo: string; oQueAconteceu:
     oQueEsperar: 'Se a empresa pagar voluntariamente, o processo é encerrado. Caso contrário, o juiz pode determinar penhora de bens, bloqueio de contas e outras medidas.',
     prazo: 'A execução pode durar de poucos meses a vários anos, dependendo da situação financeira da empresa.',
     acaoNecessaria: 'Acompanhar com o advogado as tentativas de recebimento. Manter dados bancários atualizados para recebimento.',
+  },
+  acordo: {
+    titulo: 'Acordo Homologado',
+    oQueAconteceu: 'As partes (reclamante e reclamada) chegaram a um acordo, e o juiz homologou a conciliação em audiência ou por petição. O processo foi encerrado com base nesse acordo.',
+    oQueEsperar: 'A empresa deve cumprir os termos do acordo dentro do prazo estipulado. Se o pagamento for em parcelas, acompanhar o cumprimento de cada parcela.',
+    prazo: 'O prazo de pagamento depende do que foi acordado. Geralmente entre 5 e 30 dias para pagamento à vista, ou conforme as parcelas combinadas.',
+    acaoNecessaria: 'Verificar se o pagamento do acordo foi realizado no prazo. Se não for cumprido, o advogado pode solicitar a execução forçada do acordo.',
   },
 };
 
