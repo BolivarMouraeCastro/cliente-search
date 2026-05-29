@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth-options';
 import { getClients } from '@/lib/sheets';
 import { ALL_PHASES, PhaseConfig } from '@/lib/phases';
 import { Client } from '@/types';
@@ -7,6 +9,7 @@ export const dynamic = 'force-dynamic';
 
 const DATAJUD_API_KEY = process.env.DATAJUD_API_KEY || 'cDZHYzlZa0JadVREZDJCendQbXY6SkJlTzNjLV9TRENyQk1RdnFKZGRQdw==';
 const DATAJUD_BASE_URL = 'https://api-publica.datajud.cnj.jus.br';
+const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID ?? '';
 
 const TRT_ENDPOINTS: Record<string, string> = {
   'trt1': 'api_publica_trt1', 'trt2': 'api_publica_trt2', 'trt3': 'api_publica_trt3',
@@ -52,8 +55,13 @@ export async function GET() {
       return NextResponse.json(cacheData);
     }
 
+    const session = await getServerSession(authOptions);
+    if (!session?.accessToken) {
+      return NextResponse.json({ error: 'Unauthorized. Please sign in.' }, { status: 401 });
+    }
+
     // 1. Fetch all clients from Google Sheets
-    const clients = await getClients();
+    const clients = await getClients(session.accessToken, SPREADSHEET_ID);
     
     // 2. Filter clients with process numbers and group by TRT
     const clientsWithProcess = clients.filter(c => c.numeroProcesso && c.numeroProcesso.trim() !== '');
