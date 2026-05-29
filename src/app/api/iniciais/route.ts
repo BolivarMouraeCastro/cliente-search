@@ -149,14 +149,21 @@ export async function GET(_request: NextRequest) {
 
         for (const child of directChildren) {
           if (isFolder(child)) {
-            // Sub-category folder (e.g., "1.1 R.I") — get its contents
+            // Check if this is a sub-category (e.g., "1.1 R.I") by seeing if it has folder children
             const subItems = childrenOf.get(child.id) || [];
-            for (const sub of subItems) {
-              items.push({ name: sub.name, id: sub.id });
+            const subFolders = subItems.filter(isFolder);
+            
+            if (subFolders.length > 0) {
+              // This IS a sub-category — its folder children are the clients
+              for (const sub of subFolders) {
+                items.push({ name: sub.name, id: sub.id });
+              }
+            } else {
+              // This is a client folder directly inside the status folder
+              items.push({ name: child.name, id: child.id });
             }
-          } else {
-            items.push({ name: child.name, id: child.id });
           }
+          // Skip files — only folders are "clients"
         }
 
         totalItems += items.length;
