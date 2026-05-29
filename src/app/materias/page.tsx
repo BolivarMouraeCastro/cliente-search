@@ -84,14 +84,14 @@ export default function MateriasDashboardPage() {
     async function fetchData() {
       try {
         const res = await fetch('/api/materias');
+        const json = await res.json();
         if (res.ok) {
-          const json = await res.json();
           setData(json);
         } else {
-          setError('Erro ao carregar dados do DataJud.');
+          setError(json.error || `Erro ${res.status}: ${res.statusText}`);
         }
-      } catch {
-        setError('Erro de conexão ao carregar painel.');
+      } catch (err: any) {
+        setError(`Erro de conexão: ${err?.message || 'desconhecido'}`);
       } finally {
         setLoading(false);
       }

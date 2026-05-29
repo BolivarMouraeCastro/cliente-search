@@ -116,8 +116,11 @@ export async function GET() {
       trtGroups[trt].push(proc);
     }
 
-    // 4. Query DataJud in batches per TRT
+    // 4. Query DataJud in PARALLEL batches per TRT (to avoid Vercel timeout)
     const aggregatedResults: Record<string, any> = {};
+
+    // Build all fetch promises first
+    const fetchPromises: Promise<void>[] = [];
 
     for (const [trt, trtProcesses] of Object.entries(trtGroups)) {
       const endpoint = TRT_ENDPOINTS[trt] || 'api_publica_trt2';
@@ -138,17 +141,17 @@ export async function GET() {
           size: chunk.length,
         };
 
-        try {
-          const res = await fetch(url, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `APIKey ${DATAJUD_API_KEY}`,
-            },
-            body: JSON.stringify(body),
-          });
-
-          if (res.ok) {
+        const promise = fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `APIKey ${DATAJUD_API_KEY}`,
+          },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(8000), // 8s timeout per request
+        })
+          .then(async (res) => {
+            if (!res.ok) return;
             const data = await res.json();
             const hits = data?.hits?.hits || [];
 
@@ -169,7 +172,7 @@ export async function GET() {
 
               movements.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-              // Detect phase from most recent movement
+              // Detect phase
               let currentPhase = null;
               const lastMov = movements[0] || { date: '', description: 'Processo distribuído', complement: '' };
 
@@ -204,12 +207,17 @@ export async function GET() {
                 };
               }
             }
-          }
-        } catch (fetchErr) {
-          console.error(`DataJud fetch error for ${trt}:`, fetchErr);
-        }
+          })
+          .catch((fetchErr) => {
+            console.error(`DataJud fetch error for ${trt}:`, fetchErr);
+          });
+
+        fetchPromises.push(promise);
       }
     }
+
+    // Run all fetches in parallel
+    await Promise.allSettled(fetchPromises);
 
     // 5. Group by Phase
     const phaseMap = new Map<string, PhaseGroup>();
@@ -257,6 +265,8 @@ export async function GET() {
 
   } catch (error) {
     console.error('API /api/materias error:', error);
-    return NextResponse.json({ error: 'Erro ao consolidar matérias' }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Erro interno do servidor';
+    return NextResponse.json({ error: `Erro ao consolidar matérias: ${message}` }, { status: 500 });
   }
 }
+
