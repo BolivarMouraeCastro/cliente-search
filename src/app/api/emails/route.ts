@@ -9,6 +9,21 @@ export const dynamic = 'force-dynamic';
 
 const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID ?? '';
 
+/**
+ * Parse a date string in DD/MM/YYYY format to a Date object.
+ */
+function parseEntradaDate(dateStr: string): Date | null {
+  if (!dateStr || dateStr.trim() === '') return null;
+  const parts = dateStr.trim().split('/');
+  if (parts.length !== 3) return null;
+  const day = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10) - 1;
+  let year = parseInt(parts[2], 10);
+  if (year < 100) year += 2000;
+  if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
+  return new Date(year, month, day);
+}
+
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -24,6 +39,7 @@ export async function GET(request: NextRequest) {
     const clientName = searchParams.get('clientName');
     const clientId = searchParams.get('clientId');
     const processNumber = searchParams.get('processNumber');
+    const entrada = searchParams.get('entrada'); // Data de entrada do cliente (DD/MM/YYYY)
 
     // Se nenhum clientName fornecido, retornar atualizações recentes do tribunal
     if (!clientName || clientName.trim() === '') {
@@ -32,12 +48,35 @@ export async function GET(request: NextRequest) {
     }
 
     // Buscar emails relacionados ao cliente específico
-    // Usar número do processo para filtragem se disponível
-    const emails = await getClientEmails(
+    let emails = await getClientEmails(
       session.accessToken,
       clientName.trim(),
       processNumber || undefined
     );
+
+    // ═══════════════════════════════════════════════════════════════
+    // FILTRO POR DATA DE ENTRADA: Se o cliente tem data de entrada,
+    // filtrar emails para só mostrar os relevantes ao processo atual.
+    // Ignora emails anteriores a 60 dias antes da entrada (margem
+    // para emails pré-distribuição como consultas iniciais).
+    // Se o cliente JÁ TEM número de processo, não filtra por data
+    // porque o número do processo já garante precisão.
+    // ═══════════════════════════════════════════════════════════════
+    if (entrada && (!processNumber || processNumber.trim() === '')) {
+      const parsedEntrada = parseEntradaDate(entrada);
+      if (parsedEntrada) {
+        // 60 dias antes da entrada como margem
+        const cutoffDate = new Date(parsedEntrada.getTime() - 60 * 24 * 60 * 60 * 1000);
+        const beforeCount = emails.length;
+        emails = emails.filter((email) => {
+          const emailDate = new Date(email.date);
+          return emailDate >= cutoffDate;
+        });
+        if (emails.length < beforeCount) {
+          console.log(`Filtered ${beforeCount - emails.length} old emails for ${clientName} (entrada: ${entrada})`);
+        }
+      }
+    }
 
     // Auto-atualizar status e número do processo
     let statusUpdated = false;

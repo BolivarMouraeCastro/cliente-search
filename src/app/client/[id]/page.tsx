@@ -78,10 +78,15 @@ export default function ClientDetailPage() {
       setLoadingEmails(true);
       setLoadingFiles(true);
       try {
-        // Fetch Emails
-        const resEmails = await fetch(
-          `/api/emails?clientName=${encodeURIComponent(client!.nome)}&clientId=${encodeURIComponent(client!.id)}${client!.numeroProcesso ? `&processNumber=${encodeURIComponent(client!.numeroProcesso)}` : ''}`
-        );
+        // Fetch Emails — passa data de entrada para filtrar processos antigos
+        const emailParams = new URLSearchParams({
+          clientName: client!.nome,
+          clientId: client!.id,
+        });
+        if (client!.numeroProcesso) emailParams.set('processNumber', client!.numeroProcesso);
+        if (client!.entrada) emailParams.set('entrada', client!.entrada);
+
+        const resEmails = await fetch(`/api/emails?${emailParams.toString()}`);
         let emailsData = [];
         if (resEmails.ok) {
           const data = await resEmails.json();
@@ -109,9 +114,11 @@ export default function ClientDetailPage() {
 
         // Fetch Hearings (from external spreadsheet)
         try {
-          const resHearings = await fetch(
-            `/api/hearings?clientName=${encodeURIComponent(client!.nome)}${client!.numeroProcesso ? `&processNumber=${encodeURIComponent(client!.numeroProcesso)}` : ''}`
-          );
+          const hearingParams = new URLSearchParams({ clientName: client!.nome });
+          if (client!.numeroProcesso) hearingParams.set('processNumber', client!.numeroProcesso);
+          if (client!.entrada) hearingParams.set('entrada', client!.entrada);
+
+          const resHearings = await fetch(`/api/hearings?${hearingParams.toString()}`);
           if (resHearings.ok) {
             const hearingsData = await resHearings.json();
             setHearings(hearingsData.hearings || []);
