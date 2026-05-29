@@ -22,8 +22,8 @@ export interface PhaseConfig {
 export const ALL_PHASES: PhaseConfig[] = [
   {
     id: 'distribuicao',
-    name: 'Distribuição',
-    simple: 'Processo foi registrado no tribunal',
+    name: 'Fase Não Identificada',
+    simple: 'Verificar manualmente no tribunal',
     sheetStatus: 'DISTRIBUÍDO',
     keywords: ['distribuí', 'distribui', 'distribuiç', 'distribuido', 'distribuída', 'petição inicial', 'petiç inicial', 'recebimento da inicial', 'autuação', 'autuado'],
     order: 1,
