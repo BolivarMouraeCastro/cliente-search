@@ -93,32 +93,51 @@ export default function Sidebar() {
 
       {/* Sidebar */}
       <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
-        <div className="sidebar-brand" style={{ flexDirection: 'column', gap: '0', padding: 'var(--space-lg) var(--space-md)', textAlign: 'center', position: 'relative' }}>
+        <div className="sidebar-brand" style={{ 
+          flexDirection: 'column', gap: '0', 
+          padding: 'var(--space-xl) var(--space-md)', 
+          textAlign: 'center', position: 'relative',
+        }}>
           {/* Gold glow behind logo */}
           <div style={{
             position: 'absolute',
             top: '50%',
             left: '50%',
             transform: 'translate(-50%, -50%)',
-            width: '120px',
-            height: '120px',
+            width: '160px',
+            height: '160px',
             borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(212, 175, 55, 0.12) 0%, transparent 70%)',
+            background: 'radial-gradient(circle, rgba(212, 175, 55, 0.2) 0%, rgba(170, 128, 53, 0.08) 50%, transparent 70%)',
             pointerEvents: 'none',
           }} />
-          <img 
-            src="/bmc-logo.png" 
-            alt="BM&C Advogados" 
-            style={{ 
-              width: '100px', 
-              height: '100px', 
-              objectFit: 'contain', 
-              margin: '0 auto',
-              filter: 'drop-shadow(0 0 12px rgba(212, 175, 55, 0.3))',
-              position: 'relative',
-              zIndex: 1,
-            }} 
-          />
+          {/* Glass frame around logo */}
+          <div style={{
+            position: 'relative',
+            width: '140px',
+            height: '140px',
+            margin: '0 auto',
+            borderRadius: '1.25rem',
+            background: 'rgba(12, 12, 18, 0.3)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            border: '1px solid rgba(212, 175, 55, 0.15)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'hidden',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)',
+          }}>
+            <img 
+              src="/bmc-logo.png" 
+              alt="BM&C Advogados" 
+              style={{ 
+                width: '120px', 
+                height: '120px', 
+                objectFit: 'contain',
+                filter: 'drop-shadow(0 0 16px rgba(212, 175, 55, 0.4))',
+              }} 
+            />
+          </div>
         </div>
 
         <nav className="sidebar-nav">
