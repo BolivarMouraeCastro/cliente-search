@@ -120,34 +120,46 @@ function extractProcessNumber(subject: string, body: string): string {
 
 /**
  * Detect the type/phase of the court notification based on keywords.
+ * Scans subject + first 5000 chars of body to catch TRT event lists.
  */
 function detectPhase(subject: string, body: string): string {
-  const text = `${subject} ${body.substring(0, 1000)}`.toLowerCase();
+  const text = `${subject} ${body.substring(0, 5000)}`.toLowerCase();
 
-  if (text.includes("distribuí") || text.includes("distribui")) return "Distribuição";
-  if (text.includes("citação") || text.includes("citaç")) return "Citação";
-  if (text.includes("intimação") || text.includes("intimaç")) return "Intimação";
-  if (text.includes("notificação") || text.includes("notificaç")) return "Notificação";
-  if (text.includes("audiência") || text.includes("audienc")) return "Audiência";
-  if (text.includes("despacho")) return "Despacho";
-  if (text.includes("sentença") || text.includes("sentenç")) return "Sentença";
-  if (text.includes("acórdão") || text.includes("acordão") || text.includes("acordao")) return "Acórdão";
-  if (text.includes("recurso")) return "Recurso";
-  if (text.includes("embargo")) return "Embargos";
-  if (text.includes("execução") || text.includes("execuç")) return "Execução";
-  if (text.includes("penhora")) return "Penhora";
-  if (text.includes("perícia") || text.includes("perici")) return "Perícia";
-  if (text.includes("alvará")) return "Alvará";
-  if (text.includes("trânsito em julgado") || text.includes("transito em julgado")) return "Trânsito em Julgado";
-  if (text.includes("acordo")) return "Acordo";
-  if (text.includes("julgamento")) return "Julgamento";
-  if (text.includes("pauta")) return "Pauta de Julgamento";
-  if (text.includes("mandado")) return "Mandado";
-  if (text.includes("contestação") || text.includes("contestaç")) return "Contestação";
-  if (text.includes("petição") || text.includes("petiç")) return "Petição";
-  if (text.includes("ato ordinatório") || text.includes("ato ordinatorio")) return "Ato Ordinatório";
+  // Order matters — check more specific/advanced phases first
+  if (text.includes('trânsito em julgado') || text.includes('transito em julgado')) return 'Trânsito em Julgado';
+  if (text.includes('acórdão') || text.includes('acordão') || text.includes('acordao')) return 'Acórdão';
+  if (text.includes('recurso ordinário') || text.includes('recurso ordinario')) return 'Recurso';
+  if (text.includes('homologada a liquidação') || text.includes('homologada a liquidacao')) return 'Execução';
+  if (text.includes('cálculo de liquidação') || text.includes('calculo de liquidacao')) return 'Execução';
+  if (text.includes('planilha de cálculo') || text.includes('planilha de calculo')) return 'Execução';
+  if (text.includes('impugnação') || text.includes('impugnacao')) return 'Execução';
+  if (text.includes('cumprimento de sentença') || text.includes('cumprimento de sentenca')) return 'Execução';
+  if (text.includes('execução') || text.includes('execuç')) return 'Execução';
+  if (text.includes('penhora') || text.includes('bloqueio')) return 'Execução';
+  if (text.includes('alvará')) return 'Execução';
+  if (text.includes('sentença') || text.includes('sentenç')) return 'Sentença';
+  if (text.includes('decisão - decisão') || text.includes('decisao - decisao')) return 'Sentença';
+  if (text.includes('decisão') || text.includes('decisao')) return 'Sentença';
+  if (text.includes('julgamento')) return 'Sentença';
+  if (text.includes('perícia') || text.includes('perici')) return 'Perícia';
+  if (text.includes('audiência') || text.includes('audienc')) return 'Audiência';
+  if (text.includes('pauta')) return 'Audiência';
+  if (text.includes('acordo homologado') || text.includes('homologação de acordo')) return 'Acordo';
+  if (text.includes('acordo')) return 'Acordo';
+  if (text.includes('recurso')) return 'Recurso';
+  if (text.includes('embargo')) return 'Embargos';
+  if (text.includes('contestação') || text.includes('contestaç')) return 'Contestação';
+  if (text.includes('citação') || text.includes('citaç')) return 'Citação';
+  if (text.includes('intimação') || text.includes('intimaç')) return 'Intimação';
+  if (text.includes('notificação') || text.includes('notificaç')) return 'Notificação';
+  if (text.includes('despacho')) return 'Despacho';
+  if (text.includes('distribuí') || text.includes('distribui')) return 'Distribuição';
+  if (text.includes('mandado')) return 'Mandado';
+  if (text.includes('petição') || text.includes('petiç')) return 'Petição';
+  if (text.includes('ato ordinatório') || text.includes('ato ordinatorio')) return 'Ato Ordinatório';
+  if (text.includes('concluso')) return 'Movimentação';
 
-  return "Movimentação";
+  return 'Movimentação';
 }
 
 /**
@@ -281,11 +293,12 @@ export async function getClientEmails(
   try {
     const gmail = getGmailService(accessToken);
 
-    // Se temos um número de processo, buscar por ele para resultados precisos
-    // Caso contrário, busca por nome
+    // Buscar com AMBAS as estratégias quando temos número do processo
+    // para não perder nenhum e-mail importante
     let query: string;
     if (processNumber && processNumber.trim() !== '') {
-      query = `"${processNumber}"`;
+      // Busca por número do processo OU nome do cliente
+      query = `"${processNumber}" OR "${clientName}"`;
     } else {
       query = `"${clientName}" OR subject:"${clientName}"`;
     }
@@ -293,7 +306,7 @@ export async function getClientEmails(
     const listResponse = await gmail.users.messages.list({
       userId: 'me',
       q: query,
-      maxResults: 30,
+      maxResults: 50,
     });
 
     const messageIds = listResponse.data.messages;

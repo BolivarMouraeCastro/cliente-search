@@ -175,18 +175,25 @@ export interface EmailLike {
 
 /**
  * Classify an email into a phase. Returns the phase config or null.
+ * Scans 5000 chars of body to catch TRT event lists at the bottom.
+ * Returns the MOST ADVANCED phase found (highest order).
  */
 export function classifyEmail(email: EmailLike): PhaseConfig | null {
-  const bodyPreview = (email.body || '').substring(0, 1500);
+  const bodyPreview = (email.body || '').substring(0, 5000);
   const text = `${email.subject} ${email.snippet} ${bodyPreview}`;
 
+  // Find the most advanced phase (highest order number)
+  let bestPhase: PhaseConfig | null = null;
+  let bestOrder = -1;
+
   for (const phase of ALL_PHASES) {
-    if (matchesPhase(text, phase.keywords)) {
-      return phase;
+    if (matchesPhase(text, phase.keywords) && phase.order > bestOrder) {
+      bestPhase = phase;
+      bestOrder = phase.order;
     }
   }
 
-  return null;
+  return bestPhase;
 }
 
 /**
