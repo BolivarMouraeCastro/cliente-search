@@ -1,15 +1,14 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
-import { getClients } from '@/lib/sheets';
 import { ALL_PHASES, PhaseConfig } from '@/lib/phases';
-import { Client } from '@/types';
+import { getSheetsService } from '@/lib/google-auth';
 
 export const dynamic = 'force-dynamic';
 
 const DATAJUD_API_KEY = process.env.DATAJUD_API_KEY || 'cDZHYzlZa0JadVREZDJCendQbXY6SkJlTzNjLV9TRENyQk1RdnFKZGRQdw==';
 const DATAJUD_BASE_URL = 'https://api-publica.datajud.cnj.jus.br';
-const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID ?? '';
+const HEARINGS_SPREADSHEET_ID = process.env.HEARINGS_SPREADSHEET_ID ?? '1eXJz8UCQImJIqaEHe8V8cwuuJ0YkABviUzz7wOQdFVA';
 
 const TRT_ENDPOINTS: Record<string, string> = {
   'trt1': 'api_publica_trt1', 'trt2': 'api_publica_trt2', 'trt3': 'api_publica_trt3',
@@ -35,10 +34,21 @@ function normalizeProcessNumber(processNumber: string): string {
   return processNumber.replace(/[.\-]/g, '');
 }
 
+// Data structure for a process entry from the hearings spreadsheet
+interface HearingProcess {
+  reclamante: string;
+  reclamada: string;
+  numeroProcesso: string;
+  advogado: string;
+}
+
 export interface PhaseGroup {
   phase: PhaseConfig;
-  clients: {
-    client: Client;
+  processes: {
+    reclamante: string;
+    reclamada: string;
+    numeroProcesso: string;
+    advogado: string;
     lastMovementDate: string;
     lastMovementDesc: string;
   }[];
@@ -60,156 +70,184 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized. Please sign in.' }, { status: 401 });
     }
 
-    // 1. Fetch all clients from Google Sheets
-    const clients = await getClients(session.accessToken, SPREADSHEET_ID);
-    
-    // 2. Filter clients with process numbers and group by TRT
-    const clientsWithProcess = clients.filter(c => c.numeroProcesso && c.numeroProcesso.trim() !== '');
-    
-    const trtGroups: Record<string, Client[]> = {};
-    for (const c of clientsWithProcess) {
-      const trt = detectTRT(c.numeroProcesso);
-      if (!trtGroups[trt]) trtGroups[trt] = [];
-      trtGroups[trt].push(c);
+    // 1. READ process numbers from HEARINGS SPREADSHEET (READ-ONLY, no changes)
+    const sheets = getSheetsService(session.accessToken);
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: HEARINGS_SPREADSHEET_ID,
+      range: 'A:H',
+      valueRenderOption: 'FORMATTED_VALUE',
+      dateTimeRenderOption: 'FORMATTED_STRING',
+    });
+
+    const rows = response.data.values;
+    if (!rows || rows.length <= 1) {
+      return NextResponse.json({
+        totalProcessos: 0, encontrados: 0, naoEncontrados: 0, fases: [],
+      });
     }
 
-    // 3. Process batches
+    // 2. Extract UNIQUE process numbers from hearings (Column E = index 4)
+    //    Also keep reclamante (C=2), reclamada (D=3), advogado (H=7) for display
+    const processMap = new Map<string, HearingProcess>();
+
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      const processNumber = (row[4] ?? '').trim();
+      if (!processNumber) continue;
+
+      // Deduplicate by process number (keep first occurrence)
+      if (!processMap.has(processNumber)) {
+        processMap.set(processNumber, {
+          reclamante: (row[2] ?? '').trim(),
+          reclamada: (row[3] ?? '').trim(),
+          numeroProcesso: processNumber,
+          advogado: (row[7] ?? '').trim(),
+        });
+      }
+    }
+
+    const uniqueProcesses = Array.from(processMap.values());
+
+    // 3. Group by TRT
+    const trtGroups: Record<string, HearingProcess[]> = {};
+    for (const proc of uniqueProcesses) {
+      const trt = detectTRT(proc.numeroProcesso);
+      if (!trtGroups[trt]) trtGroups[trt] = [];
+      trtGroups[trt].push(proc);
+    }
+
+    // 4. Query DataJud in batches per TRT
     const aggregatedResults: Record<string, any> = {};
 
-    for (const [trt, trtClients] of Object.entries(trtGroups)) {
+    for (const [trt, trtProcesses] of Object.entries(trtGroups)) {
       const endpoint = TRT_ENDPOINTS[trt] || 'api_publica_trt2';
-      
-      // DataJud allows batch queries via terms
-      // Create a map for easy lookup
-      const processMap = new Map(trtClients.map(c => [normalizeProcessNumber(c.numeroProcesso), c]));
-      const normalizedNumbers = Array.from(processMap.keys());
 
-      // Query in chunks of 50 to avoid request too large errors
+      const normalizedMap = new Map(
+        trtProcesses.map(p => [normalizeProcessNumber(p.numeroProcesso), p])
+      );
+      const normalizedNumbers = Array.from(normalizedMap.keys());
+
+      // Chunks of 50
       const chunkSize = 50;
       for (let i = 0; i < normalizedNumbers.length; i += chunkSize) {
         const chunk = normalizedNumbers.slice(i, i + chunkSize);
-        
+
         const url = `${DATAJUD_BASE_URL}/${endpoint}/_search`;
         const body = {
-          query: {
-            terms: {
-              numeroProcesso: chunk,
-            },
-          },
+          query: { terms: { numeroProcesso: chunk } },
           size: chunk.length,
         };
 
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `APIKey ${DATAJUD_API_KEY}`,
-          },
-          body: JSON.stringify(body),
-        });
+        try {
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `APIKey ${DATAJUD_API_KEY}`,
+            },
+            body: JSON.stringify(body),
+          });
 
-        if (response.ok) {
-          const data = await response.json();
-          const hits = data?.hits?.hits || [];
+          if (res.ok) {
+            const data = await res.json();
+            const hits = data?.hits?.hits || [];
 
-          for (const hit of hits) {
-            const source = hit._source;
-            const procNum = source.numeroProcesso;
-            const client = processMap.get(procNum);
-            if (!client) continue;
+            for (const hit of hits) {
+              const source = hit._source;
+              const procNum = source.numeroProcesso;
+              const proc = normalizedMap.get(procNum);
+              if (!proc) continue;
 
-            const rawMovements = source.movimentos || source.movimentacoes || [];
-            
-            // Extract movements
-            const movements = rawMovements.map((mov: any) => {
-              const desc = (mov.nome as string) || (mov.descricao as string) || '';
-              const complementos = (mov.complementosTabelados as Array<{ descricao?: string; nome?: string }>) || [];
-              const complementText = complementos.map(c => c.descricao || c.nome || '').filter(Boolean).join('; ');
-              return {
-                date: (mov.dataHora as string) || '',
-                description: desc,
-                complement: complementText,
-              };
-            });
+              const rawMovements = source.movimentos || source.movimentacoes || [];
 
-            // Sort newest first
-            movements.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+              const movements = rawMovements.map((mov: any) => {
+                const desc = (mov.nome as string) || (mov.descricao as string) || '';
+                const complementos = (mov.complementosTabelados as Array<{ descricao?: string; nome?: string }>) || [];
+                const complementText = complementos.map((c: any) => c.descricao || c.nome || '').filter(Boolean).join('; ');
+                return { date: (mov.dataHora as string) || '', description: desc, complement: complementText };
+              });
 
-            // Detect phase
-            let currentPhase = null;
-            let lastMov = movements[0] || { date: '', description: 'Processo distribuído', complement: '' };
+              movements.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-            for (const mov of movements) {
-              const text = `${mov.description} ${mov.complement}`.toLowerCase();
-              let bestPhase = null;
-              let bestOrder = -1;
-              
-              for (const phase of ALL_PHASES) {
-                if (phase.keywords.some((kw) => text.includes(kw)) && phase.order > bestOrder) {
-                  bestPhase = phase;
-                  bestOrder = phase.order;
+              // Detect phase from most recent movement
+              let currentPhase = null;
+              const lastMov = movements[0] || { date: '', description: 'Processo distribuído', complement: '' };
+
+              for (const mov of movements) {
+                const text = `${mov.description} ${mov.complement}`.toLowerCase();
+                let bestPhase = null;
+                let bestOrder = -1;
+
+                for (const phase of ALL_PHASES) {
+                  if (phase.keywords.some((kw) => text.includes(kw)) && phase.order > bestOrder) {
+                    bestPhase = phase;
+                    bestOrder = phase.order;
+                  }
+                }
+
+                if (bestPhase) {
+                  currentPhase = bestPhase;
+                  break;
                 }
               }
-              
-              if (bestPhase) {
-                currentPhase = bestPhase;
-                break;
+
+              if (!currentPhase) {
+                currentPhase = ALL_PHASES.find(p => p.id === 'distribuicao');
+              }
+
+              if (currentPhase) {
+                aggregatedResults[procNum] = {
+                  proc,
+                  phase: currentPhase,
+                  lastMovementDate: lastMov.date,
+                  lastMovementDesc: lastMov.description,
+                };
               }
             }
-
-            if (!currentPhase) {
-               // Fallback if no specific keyword matched
-               currentPhase = ALL_PHASES.find(p => p.id === 'distribuicao');
-            }
-
-            if (currentPhase) {
-               aggregatedResults[procNum] = {
-                 client,
-                 phase: currentPhase,
-                 lastMovementDate: lastMov.date,
-                 lastMovementDesc: lastMov.description,
-               };
-            }
           }
+        } catch (fetchErr) {
+          console.error(`DataJud fetch error for ${trt}:`, fetchErr);
         }
       }
     }
 
-    // 4. Group by Phase
+    // 5. Group by Phase
     const phaseMap = new Map<string, PhaseGroup>();
     for (const phase of ALL_PHASES) {
-      phaseMap.set(phase.id, { phase, clients: [] });
+      phaseMap.set(phase.id, { phase, processes: [] });
     }
 
-    let unindexedClients = 0;
+    let unindexedCount = 0;
 
-    for (const c of clientsWithProcess) {
-       const norm = normalizeProcessNumber(c.numeroProcesso);
-       const result = aggregatedResults[norm];
-       if (result) {
-          const group = phaseMap.get(result.phase.id);
-          if (group) {
-             group.clients.push({
-               client: result.client,
-               lastMovementDate: result.lastMovementDate,
-               lastMovementDesc: result.lastMovementDesc,
-             });
-          }
-       } else {
-          unindexedClients++;
-       }
+    for (const proc of uniqueProcesses) {
+      const norm = normalizeProcessNumber(proc.numeroProcesso);
+      const result = aggregatedResults[norm];
+      if (result) {
+        const group = phaseMap.get(result.phase.id);
+        if (group) {
+          group.processes.push({
+            reclamante: result.proc.reclamante,
+            reclamada: result.proc.reclamada,
+            numeroProcesso: result.proc.numeroProcesso,
+            advogado: result.proc.advogado,
+            lastMovementDate: result.lastMovementDate,
+            lastMovementDesc: result.lastMovementDesc,
+          });
+        }
+      } else {
+        unindexedCount++;
+      }
     }
 
-    // Convert map to sorted array
     const sortedPhases = Array.from(phaseMap.values())
-      .filter(p => p.clients.length > 0)
-      .sort((a, b) => b.phase.order - a.phase.order); // Highest order first
+      .filter(p => p.processes.length > 0)
+      .sort((a, b) => b.phase.order - a.phase.order);
 
     const finalData = {
-       totalProcessos: clientsWithProcess.length,
-       encontrados: Object.keys(aggregatedResults).length,
-       naoEncontrados: unindexedClients,
-       fases: sortedPhases,
+      totalProcessos: uniqueProcesses.length,
+      encontrados: Object.keys(aggregatedResults).length,
+      naoEncontrados: unindexedCount,
+      fases: sortedPhases,
     };
 
     cacheData = finalData;
