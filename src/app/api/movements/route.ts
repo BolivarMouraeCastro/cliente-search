@@ -116,6 +116,7 @@ export interface DataJudResponse {
   movements: Movement[];
   totalMovements: number;
   materiasSummary: { category: string; icon: string; color: string; count: number }[];
+  currentPhase?: { name: string; date: string; simple: string } | null;
 }
 
 // Cache
@@ -195,6 +196,7 @@ export async function GET(request: NextRequest) {
         movements: [],
         totalMovements: 0,
         materiasSummary: [],
+        currentPhase: null,
       });
     }
 
@@ -224,6 +226,33 @@ export async function GET(request: NextRequest) {
       const dateB = new Date(b.date).getTime();
       return dateB - dateA;
     });
+
+    // Detect Current Phase based on the most recent relevant movement
+    let currentPhase = null;
+    const { ALL_PHASES } = await import('@/lib/phases');
+    
+    // We scan movements from newest to oldest to find the latest phase
+    for (const mov of movements) {
+      const text = `${mov.description} ${mov.complement}`.toLowerCase();
+      let bestPhase = null;
+      let bestOrder = -1;
+      
+      for (const phase of ALL_PHASES) {
+        if (phase.keywords.some((kw) => text.includes(kw)) && phase.order > bestOrder) {
+          bestPhase = phase;
+          bestOrder = phase.order;
+        }
+      }
+      
+      if (bestPhase) {
+        currentPhase = {
+          name: bestPhase.name,
+          date: mov.date,
+          simple: bestPhase.simple
+        };
+        break; // Stop at the most recent movement that indicates a phase
+      }
+    }
 
     // Build matérias summary
     const materiasMap = new Map<string, { icon: string; color: string; count: number }>();
@@ -257,6 +286,7 @@ export async function GET(request: NextRequest) {
       movements,
       totalMovements: movements.length,
       materiasSummary,
+      currentPhase,
     };
 
     // Save to cache

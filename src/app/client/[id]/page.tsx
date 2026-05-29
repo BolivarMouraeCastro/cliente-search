@@ -347,6 +347,7 @@ export default function ClientDetailPage() {
               totalMovements={movements?.totalMovements || 0}
               loading={loadingMovements}
               error={movementsError}
+              currentPhase={movements?.currentPhase || null}
             />
           ) : (
             <div style={{

@@ -32,6 +32,7 @@ interface MovementsTimelineProps {
   totalMovements: number;
   loading: boolean;
   error: string | null;
+  currentPhase?: { name: string; date: string; simple: string } | null;
 }
 
 function formatDate(dateStr: string): string {
@@ -71,6 +72,7 @@ export default function MovementsTimeline({
   totalMovements,
   loading,
   error,
+  currentPhase,
 }: MovementsTimelineProps) {
   const [filter, setFilter] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
@@ -130,6 +132,40 @@ export default function MovementsTimeline({
 
   return (
     <div>
+      {/* Smart Phase Detector Highlight */}
+      {currentPhase && (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.15))',
+          border: '1px solid rgba(16, 185, 129, 0.3)',
+          borderRadius: '1rem', padding: '1.25rem', marginBottom: '1.5rem',
+          display: 'flex', gap: '1rem', alignItems: 'center'
+        }}>
+          <div style={{
+            width: '48px', height: '48px', borderRadius: '50%',
+            background: 'var(--bg-primary)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center',
+            fontSize: '1.5rem', flexShrink: 0,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+          }}>
+            🤖
+          </div>
+          <div>
+            <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#10b981', fontWeight: 700, marginBottom: '0.2rem' }}>
+              Fase Atual Detectada
+            </div>
+            <div style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+              {currentPhase.name}
+            </div>
+            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.25rem', lineHeight: 1.4 }}>
+              {currentPhase.simple}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+              Baseado na movimentação de {formatDate(currentPhase.date)}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Process Info Header */}
       <div style={{
         background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(139, 92, 246, 0.08))',
