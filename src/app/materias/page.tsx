@@ -67,14 +67,43 @@ export default function MateriasDashboardPage() {
   const [nextMonth, setNextMonth] = useState(1);
   const [nextYear, setNextYear] = useState(2025);
   const [loadingLabel, setLoadingLabel] = useState('');
+  const [autoLoading, setAutoLoading] = useState(false);
+  const [initialized, setInitialized] = useState(false);
 
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
   const currentYear = now.getFullYear();
 
+  // Restore saved data from localStorage on mount
+  React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem('materias_data');
+      const savedNext = localStorage.getItem('materias_next');
+      if (saved && savedNext) {
+        const parsedData = JSON.parse(saved) as MonthData[];
+        const parsedNext = JSON.parse(savedNext) as { month: number; year: number };
+        if (parsedData.length > 0) {
+          setAllData(parsedData);
+          setNextMonth(parsedNext.month);
+          setNextYear(parsedNext.year);
+        }
+      }
+    } catch { /* ignore parse errors */ }
+    setInitialized(true);
+  }, []);
+
+  // Save to localStorage whenever data changes
+  React.useEffect(() => {
+    if (!initialized || allData.length === 0) return;
+    try {
+      localStorage.setItem('materias_data', JSON.stringify(allData));
+      localStorage.setItem('materias_next', JSON.stringify({ month: nextMonth, year: nextYear }));
+    } catch { /* storage full, ignore */ }
+  }, [allData, nextMonth, nextYear, initialized]);
+
   const isFinished = nextYear > currentYear || (nextYear === currentYear && nextMonth > currentMonth);
 
-  const loadMonth = useCallback(async (month: number, year: number) => {
+  const loadMonth = useCallback(async (month: number, year: number): Promise<boolean> => {
     setLoading(true);
     setError(null);
     setLoadingLabel(`${MONTH_NAMES[month]} ${year}`);
@@ -85,7 +114,7 @@ export default function MateriasDashboardPage() {
 
       if (!res.ok) {
         setError(json.error || `Erro ${res.status}`);
-        return;
+        return false;
       }
 
       setAllData(prev => [...prev, json]);
@@ -98,12 +127,42 @@ export default function MateriasDashboardPage() {
         setNextMonth(month + 1);
         setNextYear(year);
       }
+      return true;
     } catch (err: any) {
       setError(`Erro de conexão: ${err?.message || 'desconhecido'}`);
+      return false;
     } finally {
       setLoading(false);
       setLoadingLabel('');
     }
+  }, []);
+
+  // Auto-load all remaining months
+  const loadAll = useCallback(async () => {
+    setAutoLoading(true);
+    let m = nextMonth;
+    let y = nextYear;
+
+    while (!(y > currentYear || (y === currentYear && m > currentMonth))) {
+      const success = await loadMonth(m, y);
+      if (!success) break; // Stop on error
+
+      // Advance
+      if (m === 12) { m = 1; y += 1; }
+      else { m += 1; }
+
+      // Small delay to avoid overwhelming
+      await new Promise(r => setTimeout(r, 500));
+    }
+    setAutoLoading(false);
+  }, [nextMonth, nextYear, currentMonth, currentYear, loadMonth]);
+
+  const clearData = useCallback(() => {
+    setAllData([]);
+    setNextMonth(1);
+    setNextYear(2025);
+    localStorage.removeItem('materias_data');
+    localStorage.removeItem('materias_next');
   }, []);
 
   // Merge all loaded months into a single view
@@ -153,51 +212,87 @@ export default function MateriasDashboardPage() {
         background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(139, 92, 246, 0.06))',
         border: '1px solid rgba(59, 130, 246, 0.2)',
         borderRadius: '1rem', padding: '1.5rem', marginBottom: '1.5rem',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        flexWrap: 'wrap', gap: '1rem',
       }}>
-        <div>
-          <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '0.3rem' }}>
-            Próximo mês a carregar
-          </div>
-          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-            {isFinished ? '✅ Todos os meses carregados!' : `${MONTH_NAMES[nextMonth]} ${nextYear}`}
-          </div>
-          {loadedMonths.length > 0 && (
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>
-              Carregados: {loadedMonths.join(', ')}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+          <div>
+            <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '0.3rem' }}>
+              {isFinished ? 'Status' : 'Próximo mês a carregar'}
             </div>
-          )}
-        </div>
-
-        {!isFinished && (
-          <button
-            onClick={() => loadMonth(nextMonth, nextYear)}
-            disabled={loading}
-            style={{
-              background: loading ? 'var(--border)' : 'var(--accent-blue)',
-              color: 'white',
-              border: 'none',
-              padding: '0.75rem 1.5rem',
-              borderRadius: '2rem',
-              fontSize: '0.9rem',
-              fontWeight: 700,
-              cursor: loading ? 'not-allowed' : 'pointer',
-              display: 'flex', alignItems: 'center', gap: '0.5rem',
-              transition: 'all 0.2s',
-              boxShadow: loading ? 'none' : '0 4px 12px rgba(59, 130, 246, 0.3)',
-            }}
-          >
-            {loading ? (
-              <>
-                <LoadingSpinner size="sm" />
-                Buscando {loadingLabel}...
-              </>
-            ) : (
-              <>🔍 Carregar {MONTH_NAMES[nextMonth]} {nextYear}</>
+            <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+              {isFinished ? '✅ Todos os meses carregados!' : `${MONTH_NAMES[nextMonth]} ${nextYear}`}
+            </div>
+            {loadedMonths.length > 0 && (
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>
+                💾 Dados salvos automaticamente · {loadedMonths.length} {loadedMonths.length === 1 ? 'mês carregado' : 'meses carregados'}
+              </div>
             )}
-          </button>
-        )}
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {/* Load single month */}
+            {!isFinished && (
+              <button
+                onClick={() => loadMonth(nextMonth, nextYear)}
+                disabled={loading || autoLoading}
+                style={{
+                  background: loading ? 'var(--border)' : 'var(--accent-blue)',
+                  color: 'white', border: 'none',
+                  padding: '0.6rem 1.2rem', borderRadius: '2rem',
+                  fontSize: '0.8rem', fontWeight: 700,
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  display: 'flex', alignItems: 'center', gap: '0.4rem',
+                  boxShadow: loading ? 'none' : '0 3px 10px rgba(59, 130, 246, 0.3)',
+                }}
+              >
+                {loading && !autoLoading ? (
+                  <><LoadingSpinner size="sm" /> {loadingLabel}...</>
+                ) : (
+                  <>🔍 {MONTH_NAMES[nextMonth]} {nextYear}</>
+                )}
+              </button>
+            )}
+
+            {/* Load ALL remaining months */}
+            {!isFinished && (
+              <button
+                onClick={loadAll}
+                disabled={loading || autoLoading}
+                style={{
+                  background: autoLoading ? 'var(--border)' : 'linear-gradient(135deg, #10b981, #059669)',
+                  color: 'white', border: 'none',
+                  padding: '0.6rem 1.2rem', borderRadius: '2rem',
+                  fontSize: '0.8rem', fontWeight: 700,
+                  cursor: autoLoading ? 'not-allowed' : 'pointer',
+                  display: 'flex', alignItems: 'center', gap: '0.4rem',
+                  boxShadow: autoLoading ? 'none' : '0 3px 10px rgba(16, 185, 129, 0.3)',
+                }}
+              >
+                {autoLoading ? (
+                  <><LoadingSpinner size="sm" /> Carregando {loadingLabel}...</>
+                ) : (
+                  <>⚡ Carregar Todos</>
+                )}
+              </button>
+            )}
+
+            {/* Clear/Reset */}
+            {allData.length > 0 && (
+              <button
+                onClick={clearData}
+                disabled={loading || autoLoading}
+                style={{
+                  background: 'transparent', color: 'var(--text-muted)',
+                  border: '1px solid var(--border)',
+                  padding: '0.6rem 1rem', borderRadius: '2rem',
+                  fontSize: '0.75rem', fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                🗑️ Limpar
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Error */}
