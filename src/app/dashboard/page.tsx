@@ -31,6 +31,32 @@ const STATUS_COLORS: Record<string, string> = {
   refazer: '#ef4444',
 };
 
+// Parse initial petition folder names: "NOME DO CLIENTE - DATA DE PRESCRIÇÃO E NOME DA EMPRESA"
+function parseInicialName(raw: string): { cliente: string; prescricao: string; empresa: string } {
+  // Try to split by " - " first
+  const dashIdx = raw.indexOf(' - ');
+  if (dashIdx === -1) {
+    return { cliente: raw, prescricao: '', empresa: '' };
+  }
+
+  const cliente = raw.substring(0, dashIdx).trim();
+  const rest = raw.substring(dashIdx + 3).trim();
+
+  // Try to find a date pattern (dd/mm/yyyy or dd.mm.yyyy) in the rest
+  const dateMatch = rest.match(/(\d{1,2}[\/\.]\d{1,2}[\/\.]\d{2,4})/);
+  if (dateMatch) {
+    const prescricao = dateMatch[1];
+    // Everything after the date (and any separator) is the company
+    const afterDate = rest.substring(rest.indexOf(prescricao) + prescricao.length).trim();
+    // Remove leading separators like "e", "E", "-", ","
+    const empresa = afterDate.replace(/^[\s\-,eE]+/, '').trim();
+    return { cliente, prescricao, empresa };
+  }
+
+  // No date found — rest might just be company
+  return { cliente, prescricao: '', empresa: rest };
+}
+
 interface StatusData {
   status: string;
   count: number;
@@ -477,21 +503,51 @@ export default function DashboardPage() {
                             </div>
                           ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                              {s.items.map((item, idx) => (
-                                <div key={idx} style={{
-                                  fontSize: '0.8rem',
-                                  color: 'var(--text-secondary)',
-                                  padding: '0.35rem 0.5rem',
-                                  background: 'rgba(255,255,255,0.03)',
-                                  borderRadius: '0.4rem',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '0.5rem',
-                                }}>
-                                  <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>•</span>
-                                  {item.name}
-                                </div>
-                              ))}
+                              {/* Table header */}
+                              <div style={{
+                                display: 'grid', gridTemplateColumns: '1fr auto 1fr',
+                                gap: '0.5rem', padding: '0.3rem 0.5rem',
+                                fontSize: '0.65rem', textTransform: 'uppercase', fontWeight: 700,
+                                color: 'var(--text-muted)', letterSpacing: '0.04em',
+                                borderBottom: '1px solid rgba(255,255,255,0.06)',
+                              }}>
+                                <span>Cliente</span>
+                                <span>Prescrição</span>
+                                <span>Empresa</span>
+                              </div>
+                              {s.items.map((item, idx) => {
+                                const parsed = parseInicialName(item.name);
+                                return (
+                                  <div key={idx} style={{
+                                    display: 'grid', gridTemplateColumns: '1fr auto 1fr',
+                                    gap: '0.5rem',
+                                    fontSize: '0.8rem',
+                                    padding: '0.4rem 0.5rem',
+                                    background: idx % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent',
+                                    borderRadius: '0.3rem',
+                                    alignItems: 'center',
+                                  }}>
+                                    <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                                      {parsed.cliente}
+                                    </span>
+                                    <span style={{
+                                      fontSize: '0.7rem',
+                                      color: parsed.prescricao ? '#f59e0b' : 'var(--text-muted)',
+                                      fontFamily: 'monospace',
+                                      fontWeight: 600,
+                                      background: parsed.prescricao ? 'rgba(245, 158, 11, 0.1)' : 'transparent',
+                                      padding: parsed.prescricao ? '0.1rem 0.4rem' : '0',
+                                      borderRadius: '0.3rem',
+                                      whiteSpace: 'nowrap',
+                                    }}>
+                                      {parsed.prescricao || '—'}
+                                    </span>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                      {parsed.empresa || '—'}
+                                    </span>
+                                  </div>
+                                );
+                              })}
                             </div>
                           )}
                         </div>
