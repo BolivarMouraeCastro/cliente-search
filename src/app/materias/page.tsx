@@ -61,7 +61,7 @@ export default function MateriasDashboardPage() {
   const [allData, setAllData] = useState<MonthData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [collapsedPhases, setCollapsedPhases] = useState<Set<string>>(new Set());
+
 
   // Track which month we're loading next
   const [nextMonth, setNextMonth] = useState(1);
@@ -163,6 +163,59 @@ export default function MateriasDashboardPage() {
     setNextYear(2025);
     localStorage.removeItem('materias_data');
     localStorage.removeItem('materias_next');
+  }, []);
+
+  // Generate and download a Word document for a phase
+  const downloadWord = useCallback((group: PhaseGroup) => {
+    const today = new Date().toLocaleDateString('pt-BR');
+    const rows = group.processes.map((p, i) =>
+      `<tr>
+        <td style="padding:6px 10px;border:1px solid #ccc;text-align:center;">${i + 1}</td>
+        <td style="padding:6px 10px;border:1px solid #ccc;font-weight:bold;">${p.reclamante}</td>
+        <td style="padding:6px 10px;border:1px solid #ccc;font-family:monospace;font-size:11px;">${p.numeroProcesso}</td>
+        <td style="padding:6px 10px;border:1px solid #ccc;">${p.reclamada}</td>
+        <td style="padding:6px 10px;border:1px solid #ccc;">${p.advogado || '—'}</td>
+      </tr>`
+    ).join('');
+
+    const html = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office"
+            xmlns:w="urn:schemas-microsoft-com:office:word"
+            xmlns="http://www.w3.org/TR/REC-html40">
+      <head><meta charset="utf-8">
+      <style>
+        body { font-family: Calibri, Arial, sans-serif; margin: 40px; }
+        h1 { font-size: 18px; color: #1a1a1a; margin-bottom: 4px; }
+        h2 { font-size: 13px; color: #666; font-weight: normal; margin-top: 0; }
+        table { border-collapse: collapse; width: 100%; margin-top: 16px; }
+        th { background: #2563eb; color: white; padding: 8px 10px; border: 1px solid #1d4ed8; text-align: left; font-size: 12px; }
+        td { font-size: 12px; }
+        .footer { margin-top: 24px; font-size: 10px; color: #999; }
+      </style></head>
+      <body>
+        <h1>${group.phase.name}</h1>
+        <h2>${group.phase.simple} — ${group.processes.length} processos</h2>
+        <table>
+          <tr>
+            <th style="width:30px;">#</th>
+            <th>Reclamante</th>
+            <th>Nº Processo</th>
+            <th>Reclamada</th>
+            <th>Advogado</th>
+          </tr>
+          ${rows}
+        </table>
+        <p class="footer">Gerado em ${today} — BM&C Advogados · Dados do DataJud (CNJ)</p>
+      </body></html>
+    `;
+
+    const blob = new Blob([html], { type: 'application/msword' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${group.phase.name.replace(/[^a-zA-Zà-ú0-9 ]/g, '')}.doc`;
+    a.click();
+    URL.revokeObjectURL(url);
   }, []);
 
   // Merge all loaded months into a single view
@@ -324,12 +377,11 @@ export default function MateriasDashboardPage() {
             </div>
           </div>
 
-          {/* Phases List */}
+          {/* Phases Grid */}
           <h2 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>📊 Fases Atuais</h2>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
             {sortedPhases.map((group) => {
-              const isCollapsed = collapsedPhases.has(group.phase.id);
               const color = PHASE_COLORS[group.phase.id] || '#64748b';
               const icon = PHASE_ICONS[group.phase.id] || '📋';
 
@@ -338,98 +390,53 @@ export default function MateriasDashboardPage() {
                   key={group.phase.id}
                   style={{
                     background: 'var(--bg-secondary)',
-                    border: `1px solid var(--border)`,
+                    border: '1px solid var(--border)',
                     borderLeft: `4px solid ${color}`,
                     borderRadius: '1rem', overflow: 'hidden',
+                    padding: '1.25rem',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                   }}
                 >
-                  {/* Header */}
-                  <div
-                    onClick={() => {
-                      setCollapsedPhases(prev => {
-                        const next = new Set(prev);
-                        if (next.has(group.phase.id)) next.delete(group.phase.id);
-                        else next.add(group.phase.id);
-                        return next;
-                      });
-                    }}
-                    style={{
-                      padding: '1rem 1.25rem', cursor: 'pointer',
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                      background: `${color}08`,
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                      <div style={{
-                        background: color, color: 'white', fontSize: '1rem', fontWeight: 800,
-                        minWidth: '36px', height: '36px', borderRadius: '50%',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        boxShadow: `0 2px 8px ${color}40`,
-                      }}>
-                        {group.processes.length}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <div style={{
+                      background: color, color: 'white', fontSize: '1rem', fontWeight: 800,
+                      minWidth: '38px', height: '38px', borderRadius: '50%',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      boxShadow: `0 2px 8px ${color}40`,
+                    }}>
+                      {group.processes.length}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                        {icon} {group.phase.name}
                       </div>
-                      <div>
-                        <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-                          {icon} {group.phase.name}
-                        </div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                          {group.phase.simple}
-                        </div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                        {group.phase.simple}
                       </div>
                     </div>
-                    <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                      {isCollapsed ? '▶' : '▼'}
-                    </span>
                   </div>
 
-                  {/* Process List — ALWAYS VISIBLE by default */}
-                  {!isCollapsed && (
-                    <div style={{ borderTop: '1px solid var(--border)', background: 'var(--bg-primary)' }}>
-                      {/* Table header */}
-                      <div style={{
-                        display: 'grid', gridTemplateColumns: '1fr 1fr auto',
-                        padding: '0.5rem 1.25rem', gap: '1rem',
-                        fontSize: '0.65rem', textTransform: 'uppercase', fontWeight: 700,
-                        color: 'var(--text-muted)', letterSpacing: '0.05em',
-                        borderBottom: '1px solid var(--border)',
-                      }}>
-                        <span>Reclamante</span>
-                        <span>Nº Processo</span>
-                        <span>Advogado</span>
-                      </div>
-
-                      {group.processes.map((p, idx) => (
-                        <div
-                          key={idx}
-                          style={{
-                            display: 'grid', gridTemplateColumns: '1fr 1fr auto',
-                            padding: '0.6rem 1.25rem', gap: '1rem', alignItems: 'center',
-                            borderBottom: idx === group.processes.length - 1 ? 'none' : '1px solid var(--border)',
-                            fontSize: '0.85rem',
-                          }}
-                        >
-                          <div>
-                            <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
-                              {p.reclamante}
-                            </div>
-                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                              vs {p.reclamada}
-                            </div>
-                          </div>
-                          <div style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: color, fontWeight: 600 }}>
-                            {p.numeroProcesso}
-                          </div>
-                          <div style={{
-                            fontSize: '0.7rem', color: 'var(--text-muted)',
-                            background: 'var(--bg-secondary)', padding: '0.2rem 0.5rem',
-                            borderRadius: '1rem', fontWeight: 600, whiteSpace: 'nowrap',
-                          }}>
-                            {p.advogado || '—'}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  {/* Download Word Button */}
+                  <button
+                    onClick={() => downloadWord(group)}
+                    title={`Baixar lista de ${group.phase.name} em Word`}
+                    style={{
+                      background: 'rgba(59, 130, 246, 0.1)',
+                      color: '#3b82f6',
+                      border: '1px solid rgba(59, 130, 246, 0.25)',
+                      width: '40px', height: '40px',
+                      borderRadius: '0.75rem',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      cursor: 'pointer',
+                      fontSize: '1.1rem',
+                      transition: 'all 0.15s',
+                      flexShrink: 0,
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(59, 130, 246, 0.2)'; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(59, 130, 246, 0.1)'; }}
+                  >
+                    📥
+                  </button>
                 </div>
               );
             })}
