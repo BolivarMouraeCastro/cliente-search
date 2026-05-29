@@ -1,4 +1,4 @@
-'use server';
+// API route for Google Drive Iniciais pipeline
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
@@ -107,6 +107,17 @@ export async function GET(_request: NextRequest) {
 
     // Level 1: list lawyer folders
     const lawyerFolders = await listFolder(accessToken, INICIAIS_FOLDER_ID);
+
+    // Debug: if no folders found, return diagnostic info
+    if (lawyerFolders.length === 0) {
+      return NextResponse.json({
+        lawyers: [],
+        totalGeral: 0,
+        updatedAt: new Date().toISOString(),
+        debug: `Nenhum item encontrado na pasta ${INICIAIS_FOLDER_ID}. Verifique se a conta logada tem acesso a essa pasta do Drive.`,
+      });
+    }
+
     const lawyers = lawyerFolders.filter(isFolder);
 
     // Process each lawyer in parallel
@@ -178,11 +189,12 @@ export async function GET(_request: NextRequest) {
       lawyers: lawyerResults,
       totalGeral: lawyerResults.reduce((sum, l) => sum + l.totalItems, 0),
       updatedAt: new Date().toISOString(),
+      debug: `Encontrados ${lawyerFolders.length} itens na pasta raiz, ${lawyers.length} advogados.`,
     });
   } catch (err) {
     console.error('Iniciais API error:', err);
     return NextResponse.json(
-      { error: 'Erro ao ler pasta do Drive' },
+      { error: `Erro ao ler pasta do Drive: ${err instanceof Error ? err.message : String(err)}` },
       { status: 500 }
     );
   }

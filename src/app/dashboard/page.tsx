@@ -97,6 +97,10 @@ export default function DashboardPage() {
           const data = await res.json();
           setLawyers(data.lawyers || []);
           setTotalIniciais(data.totalGeral || 0);
+          // Show debug info if no lawyers found
+          if (data.debug && (!data.lawyers || data.lawyers.length === 0)) {
+            setIniciaisError(data.debug);
+          }
         } else {
           const errData = await res.json().catch(() => ({}));
           setIniciaisError(errData.error || 'Erro ao carregar iniciais');
