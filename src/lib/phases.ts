@@ -227,3 +227,87 @@ export function isStatusAdvanced(currentStatus: string, newStatus: string): bool
   const newOrder = STATUS_ORDER[newStatus.toUpperCase()] ?? 0;
   return newOrder > currentOrder;
 }
+
+// ---------------------------------------------------------------------------
+// Detailed phase explanations — what happens NOW and what to expect
+// ---------------------------------------------------------------------------
+export const PHASE_EXPLANATIONS: Record<string, { titulo: string; oQueAconteceu: string; oQueEsperar: string; prazo: string; acaoNecessaria: string }> = {
+  distribuicao: {
+    titulo: 'Processo Distribuído',
+    oQueAconteceu: 'O processo foi registrado no sistema do tribunal e atribuído a uma Vara do Trabalho. A partir de agora, um juiz está responsável pelo caso.',
+    oQueEsperar: 'O próximo passo é a Citação — o tribunal vai notificar a empresa (reclamada) sobre a existência do processo, informando que ela precisa se defender.',
+    prazo: 'A citação costuma sair entre 15 e 60 dias após a distribuição, dependendo da pauta do tribunal.',
+    acaoNecessaria: 'Nenhuma ação necessária no momento. Aguardar a citação da empresa.',
+  },
+  citacao: {
+    titulo: 'Empresa Citada',
+    oQueAconteceu: 'A empresa foi oficialmente notificada sobre o processo trabalhista. Ela agora sabe que precisa comparecer e se defender.',
+    oQueEsperar: 'O juiz vai marcar uma Audiência Inicial (ou Audiência de Conciliação) para tentar um acordo entre as partes antes de seguir com o processo.',
+    prazo: 'A audiência inicial costuma ser marcada entre 30 e 90 dias após a citação.',
+    acaoNecessaria: 'Preparar documentos e informações para a audiência. O advogado vai orientar sobre o que levar.',
+  },
+  audiencia_inicial: {
+    titulo: 'Audiência Inicial Marcada',
+    oQueAconteceu: 'Foi marcada a primeira audiência do processo, chamada de Audiência de Conciliação. O objetivo principal é tentar um acordo.',
+    oQueEsperar: 'Na audiência, o juiz vai propor um acordo. Se não houver acordo, o processo segue para a fase de instrução (produção de provas, oitiva de testemunhas).',
+    prazo: 'Comparecer na data marcada. Se não houver acordo, a audiência de instrução é marcada geralmente entre 30 e 120 dias depois.',
+    acaoNecessaria: '⚠️ IMPORTANTE: O cliente DEVE comparecer à audiência. A ausência pode resultar em arquivamento do processo.',
+  },
+  audiencia_una: {
+    titulo: 'Audiência Una Marcada',
+    oQueAconteceu: 'Foi marcada uma Audiência Una — uma audiência única que concentra conciliação, instrução (provas/testemunhas) e julgamento no mesmo ato.',
+    oQueEsperar: 'Nesta audiência, tudo acontece de uma vez: tentativa de acordo, oitiva de testemunhas, e possivelmente já sai a sentença do juiz.',
+    prazo: 'Comparecer na data marcada com todas as testemunhas previamente combinadas com o advogado.',
+    acaoNecessaria: '⚠️ IMPORTANTE: O cliente DEVE comparecer com testemunhas. A audiência una é decisiva.',
+  },
+  audiencia_instrucao: {
+    titulo: 'Audiência de Instrução Marcada',
+    oQueAconteceu: 'Não houve acordo na audiência anterior. Agora será realizada a Audiência de Instrução, onde serão ouvidas testemunhas e apresentadas provas.',
+    oQueEsperar: 'Após a instrução, o juiz terá elementos para proferir a sentença. A sentença pode sair na própria audiência ou em até 30 dias depois.',
+    prazo: 'Comparecer na data marcada com as testemunhas indicadas pelo advogado.',
+    acaoNecessaria: '⚠️ IMPORTANTE: Levar testemunhas! Sem elas, pode haver prejuízo na produção de provas.',
+  },
+  pericia: {
+    titulo: 'Perícia Designada',
+    oQueAconteceu: 'O juiz determinou a realização de uma perícia técnica (insalubridade, periculosidade ou outra). Um perito especializado vai avaliar as condições de trabalho.',
+    oQueEsperar: 'O perito vai elaborar um laudo que será usado pelo juiz para decidir sobre os pedidos relacionados. Após o laudo, as partes podem contestar.',
+    prazo: 'A perícia costuma ser realizada em 30 a 60 dias. O laudo sai em até 30 dias após a perícia.',
+    acaoNecessaria: 'Aguardar contato do perito para agendamento. Colaborar com informações solicitadas.',
+  },
+  sentenca: {
+    titulo: 'Sentença Proferida',
+    oQueAconteceu: 'O juiz analisou todas as provas e argumentos e proferiu a sentença — a decisão sobre o caso. O resultado pode ser procedente (ganhou), improcedente (perdeu) ou parcialmente procedente.',
+    oQueEsperar: 'Qualquer uma das partes pode recorrer da decisão (Recurso Ordinário). Se ninguém recorrer no prazo, a sentença transita em julgado (vira definitiva).',
+    prazo: 'O prazo para recurso é de 8 dias úteis após a publicação da sentença.',
+    acaoNecessaria: 'Analisar com o advogado se vale a pena recorrer ou aceitar a decisão.',
+  },
+  recurso: {
+    titulo: 'Recurso Interposto',
+    oQueAconteceu: 'Uma das partes não concordou com a sentença e apresentou recurso. O caso agora será analisado por um tribunal superior (TRT — 2ª instância).',
+    oQueEsperar: 'O tribunal (turma de desembargadores) vai reanalisar o caso e emitir um Acórdão — a decisão do recurso. Pode manter, reformar ou anular a sentença.',
+    prazo: 'O julgamento do recurso costuma levar de 6 meses a 2 anos, dependendo do tribunal.',
+    acaoNecessaria: 'Aguardar o julgamento. O advogado acompanha os prazos processuais.',
+  },
+  acordao: {
+    titulo: 'Acórdão Publicado',
+    oQueAconteceu: 'O tribunal julgou o recurso e publicou o Acórdão — a decisão colegiada. Os desembargadores decidiram se mantêm ou reformam a sentença original.',
+    oQueEsperar: 'As partes podem interpor novos recursos (Embargos de Declaração, Recurso de Revista). Se não houver mais recursos, ocorre o trânsito em julgado.',
+    prazo: 'O prazo para novos recursos é de 8 dias úteis após a publicação do acórdão.',
+    acaoNecessaria: 'Analisar com o advogado se há possibilidade/necessidade de novo recurso.',
+  },
+  transito: {
+    titulo: 'Trânsito em Julgado',
+    oQueAconteceu: 'A decisão judicial se tornou DEFINITIVA. Não cabe mais nenhum recurso. O processo agora entra na fase de cumprimento/execução da decisão.',
+    oQueEsperar: 'Se o resultado foi favorável, inicia-se a fase de Execução — cálculo e pagamento dos valores devidos. Se desfavorável, o processo é arquivado.',
+    prazo: 'A liquidação (cálculo dos valores) costuma levar de 30 a 90 dias. O pagamento depende da empresa.',
+    acaoNecessaria: 'O advogado vai iniciar os cálculos de liquidação para apurar os valores devidos.',
+  },
+  execucao: {
+    titulo: 'Fase de Execução',
+    oQueAconteceu: 'O processo está na fase final — a fase de pagamento. Os valores já foram calculados e a empresa foi intimada a pagar.',
+    oQueEsperar: 'Se a empresa pagar voluntariamente, o processo é encerrado. Caso contrário, o juiz pode determinar penhora de bens, bloqueio de contas e outras medidas.',
+    prazo: 'A execução pode durar de poucos meses a vários anos, dependendo da situação financeira da empresa.',
+    acaoNecessaria: 'Acompanhar com o advogado as tentativas de recebimento. Manter dados bancários atualizados para recebimento.',
+  },
+};
+

@@ -1,7 +1,7 @@
 'use client';
 
 import { Email } from '@/types';
-import { ALL_PHASES, PHASE_MAP, classifyEmail, isTRTEmail, NEXT_PHASE } from '@/lib/phases';
+import { ALL_PHASES, PHASE_MAP, classifyEmail, isTRTEmail, NEXT_PHASE, PHASE_EXPLANATIONS } from '@/lib/phases';
 
 interface EmailTimelineProps {
   emails: Email[];
@@ -90,6 +90,9 @@ export default function EmailTimeline({ emails }: EmailTimelineProps) {
 
   const currentColor = currentPhase ? getPhaseColor(currentPhase.id) : '#3b82f6';
 
+  // Detailed explanation for the current phase
+  const explanation = currentPhase ? PHASE_EXPLANATIONS[currentPhase.id] : undefined;
+
   return (
     <div>
       {/* ======= CURRENT PHASE - BIG AND CLEAR ======= */}
@@ -122,6 +125,71 @@ export default function EmailTimeline({ emails }: EmailTimelineProps) {
           </div>
         )}
       </div>
+
+      {/* ======= DETAILED EXPLANATION CARD ======= */}
+      {explanation && (
+        <div style={{
+          background: 'rgba(255,255,255,0.03)',
+          border: '1px solid rgba(255,255,255,0.1)',
+          borderRadius: '1rem',
+          padding: '1.5rem',
+          marginBottom: '1.5rem',
+        }}>
+          <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: currentColor, fontWeight: 700, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={currentColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="16" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12.01" y2="8" />
+            </svg>
+            Entenda o que está acontecendo
+          </div>
+
+          {/* O que aconteceu */}
+          <div style={{ marginBottom: '1rem' }}>
+            <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.3rem' }}>
+              📋 O que aconteceu
+            </div>
+            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+              {explanation.oQueAconteceu}
+            </div>
+          </div>
+
+          {/* O que esperar */}
+          <div style={{ marginBottom: '1rem' }}>
+            <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.3rem' }}>
+              🔮 O que esperar agora
+            </div>
+            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+              {explanation.oQueEsperar}
+            </div>
+          </div>
+
+          {/* Prazo estimado */}
+          <div style={{ marginBottom: '1rem' }}>
+            <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.3rem' }}>
+              ⏱️ Prazo estimado
+            </div>
+            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+              {explanation.prazo}
+            </div>
+          </div>
+
+          {/* Ação necessária */}
+          <div style={{
+            padding: '0.75rem 1rem',
+            background: explanation.acaoNecessaria.includes('IMPORTANTE') ? 'rgba(245, 158, 11, 0.08)' : 'rgba(16, 185, 129, 0.08)',
+            border: `1px solid ${explanation.acaoNecessaria.includes('IMPORTANTE') ? 'rgba(245, 158, 11, 0.2)' : 'rgba(16, 185, 129, 0.2)'}`,
+            borderRadius: '0.5rem',
+          }}>
+            <div style={{ fontSize: '0.7rem', fontWeight: 700, color: explanation.acaoNecessaria.includes('IMPORTANTE') ? '#f59e0b' : '#10b981', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.3rem' }}>
+              ✅ Ação necessária
+            </div>
+            <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', lineHeight: 1.6, fontWeight: 500 }}>
+              {explanation.acaoNecessaria}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ======= NEXT STEP ======= */}
       {nextPhase && (
