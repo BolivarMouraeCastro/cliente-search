@@ -65,7 +65,7 @@ export default function MateriasDashboardPage() {
 
   // Track which month we're loading next
   const [nextMonth, setNextMonth] = useState(1);
-  const [nextYear, setNextYear] = useState(2025);
+  const [nextYear, setNextYear] = useState(2023);
   const [loadingLabel, setLoadingLabel] = useState('');
   const [autoLoading, setAutoLoading] = useState(false);
   const [initialized, setInitialized] = useState(false);
@@ -160,7 +160,7 @@ export default function MateriasDashboardPage() {
   const clearData = useCallback(() => {
     setAllData([]);
     setNextMonth(1);
-    setNextYear(2025);
+    setNextYear(2023);
     localStorage.removeItem('materias_data');
     localStorage.removeItem('materias_next');
   }, []);
