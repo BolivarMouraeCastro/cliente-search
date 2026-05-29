@@ -10,6 +10,7 @@ export interface Client {
   responsavel: string;
   empresa: string;
   funcao: string;
+  numeroProcesso: string;
 }
 
 export interface Email {

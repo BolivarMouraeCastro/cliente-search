@@ -33,6 +33,7 @@ const dataLabels: Record<string, string> = {
   responsavel: 'Responsável',
   empresa: 'Nome da Empresa',
   funcao: 'Função',
+  numeroProcesso: 'Número do Processo',
 };
 
 export default function ClientDetailPage() {
@@ -77,7 +78,7 @@ export default function ClientDetailPage() {
       try {
         // Fetch Emails
         const resEmails = await fetch(
-          `/api/emails?clientName=${encodeURIComponent(client!.nome)}&clientId=${encodeURIComponent(client!.id)}`
+          `/api/emails?clientName=${encodeURIComponent(client!.nome)}&clientId=${encodeURIComponent(client!.id)}${client!.numeroProcesso ? `&processNumber=${encodeURIComponent(client!.numeroProcesso)}` : ''}`
         );
         let emailsData = [];
         if (resEmails.ok) {
@@ -172,6 +173,11 @@ export default function ClientDetailPage() {
         {client.empresa && (
           <div className="client-detail-company">{client.empresa}</div>
         )}
+        {client.numeroProcesso && (
+          <div style={{ fontSize: '0.85rem', color: 'var(--accent-purple, #8b5cf6)', fontFamily: 'monospace', fontWeight: 600, marginTop: '0.25rem' }}>
+            Processo: {client.numeroProcesso}
+          </div>
+        )}
         <div className="client-detail-badges">
           {client.status && (
             <span className={`badge ${getStatusBadgeClass(client.status)}`}>
@@ -192,6 +198,48 @@ export default function ClientDetailPage() {
             </span>
           )}
         </div>
+        {client.status?.toUpperCase().trim() === 'ARQUIVADO' && (
+          <div style={{
+            marginTop: '1rem',
+            padding: '0.75rem 1rem',
+            background: 'rgba(239, 68, 68, 0.08)',
+            border: '1px solid rgba(239, 68, 68, 0.2)',
+            borderRadius: '0.75rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem',
+          }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+            </svg>
+            <div>
+              <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#ef4444' }}>Processo Arquivado</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Este processo foi encerrado (certidão de arquivamento ou trânsito em julgado detectado).</div>
+            </div>
+          </div>
+        )}
+        {client.status?.toUpperCase().trim() === 'BOLIVAR' && (
+          <div style={{
+            marginTop: '1rem',
+            padding: '0.75rem 1rem',
+            background: 'rgba(59, 130, 246, 0.08)',
+            border: '1px solid rgba(59, 130, 246, 0.2)',
+            borderRadius: '0.75rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem',
+          }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="16" />
+              <line x1="8" y1="12" x2="16" y2="12" />
+            </svg>
+            <div>
+              <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--accent-blue)' }}>Processo Novo (Bolivar)</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Este processo está aguardando distribuição. Ainda não possui número de processo judicial.</div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Tabs */}

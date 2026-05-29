@@ -185,17 +185,23 @@ function messageToEmail(message: gmail_v1.Schema$Message): Email {
  */
 export async function getClientEmails(
   accessToken: string,
-  clientName: string
+  clientName: string,
+  processNumber?: string
 ): Promise<Email[]> {
   try {
     const gmail = getGmailService(accessToken);
 
-    // Search for emails containing the client's name
-    // Use quotes for exact name match and also search without quotes for broader results
-    const query = `"${clientName}" OR subject:"${clientName}"`;
+    // Se temos um número de processo, buscar por ele para resultados precisos
+    // Caso contrário, busca por nome
+    let query: string;
+    if (processNumber && processNumber.trim() !== '') {
+      query = `"${processNumber}"`;
+    } else {
+      query = `"${clientName}" OR subject:"${clientName}"`;
+    }
 
     const listResponse = await gmail.users.messages.list({
-      userId: "me",
+      userId: 'me',
       q: query,
       maxResults: 30,
     });
@@ -205,7 +211,7 @@ export async function getClientEmails(
       return [];
     }
 
-    // Fetch full message details for each result
+    // Buscar detalhes completos de cada mensagem
     const emails: Email[] = [];
 
     for (const msg of messageIds) {
@@ -213,9 +219,9 @@ export async function getClientEmails(
 
       try {
         const fullMessage = await gmail.users.messages.get({
-          userId: "me",
+          userId: 'me',
           id: msg.id,
-          format: "full",
+          format: 'full',
         });
 
         emails.push(messageToEmail(fullMessage.data));
@@ -224,15 +230,15 @@ export async function getClientEmails(
       }
     }
 
-    // Sort by date ASCENDING (chronological order - oldest first)
+    // Ordenar por data ASCENDENTE (ordem cronológica - mais antigo primeiro)
     emails.sort(
       (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
     );
 
     return emails;
   } catch (error) {
-    console.error("Error fetching client emails:", error);
-    throw new Error("Failed to fetch emails from Gmail");
+    console.error('Error fetching client emails:', error);
+    throw new Error('Failed to fetch emails from Gmail');
   }
 }
 
@@ -285,4 +291,40 @@ export async function getRecentUpdates(
     console.error("Error fetching recent updates:", error);
     throw new Error("Failed to fetch recent email updates from Gmail");
   }
+}
+
+/**
+ * Palavras-chave que indicam que um processo foi encerrado/arquivado.
+ * Usado para auto-detecção e marcação de processos como ARQUIVADO.
+ */
+const CLOSED_PROCESS_KEYWORDS = [
+  'certidão de arquivamento',
+  'certidao de arquivamento',
+  'trânsito em julgado',
+  'transito em julgado',
+  'extinção do processo',
+  'extincao do processo',
+  'processo extinto',
+  'arquivamento definitivo',
+  'baixa definitiva',
+  'baixa dos autos',
+  'encerramento do processo',
+  'processo arquivado',
+];
+
+/**
+ * Verificar se algum email indica que o processo foi encerrado.
+ * Retorna true se palavras-chave de encerramento forem encontradas.
+ */
+export function detectClosedProcess(emails: Email[]): boolean {
+  for (const email of emails) {
+    const text = `${email.subject} ${email.body.substring(0, 2000)}`.toLowerCase();
+    for (const keyword of CLOSED_PROCESS_KEYWORDS) {
+      if (text.includes(keyword)) {
+        console.log(`Detected closed process keyword: "${keyword}" in email: ${email.subject}`);
+        return true;
+      }
+    }
+  }
+  return false;
 }

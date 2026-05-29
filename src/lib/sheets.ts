@@ -28,7 +28,7 @@ function setCachedClients(key: string, data: Client[]): void {
 }
 
 // ---------------------------------------------------------------------------
-// Column mapping  A=ENTRADA … J=FUNÇÃO
+// Column mapping  A=ENTRADA … K=NÚMERO DO PROCESSO
 // ---------------------------------------------------------------------------
 
 /**
@@ -104,6 +104,7 @@ function rowToClient(row: string[], index: number): Client {
     responsavel: row[7] ?? "",
     empresa: row[8] ?? "",
     funcao: row[9] ?? "",
+    numeroProcesso: row[10] ?? "",
   };
 }
 
@@ -129,7 +130,7 @@ export async function getClients(
     // Read all values from the first sheet
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: "A:J",
+      range: "A:K",
       valueRenderOption: "FORMATTED_VALUE",
       dateTimeRenderOption: "FORMATTED_STRING",
     });
@@ -230,6 +231,39 @@ export async function updateClientStatus(
 }
 
 /**
+ * Write the process number to Column K for a specific client row.
+ * Used for auto-detection from Gmail emails.
+ */
+export async function writeProcessNumber(
+  accessToken: string,
+  spreadsheetId: string,
+  rowIndex: string,
+  processNumber: string
+): Promise<boolean> {
+  try {
+    const sheets = getSheetsService(accessToken);
+    const range = `K${rowIndex}`;
+
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range,
+      valueInputOption: 'RAW',
+      requestBody: {
+        values: [[processNumber]],
+      },
+    });
+
+    // Invalidar cache
+    cache.delete(`clients:${spreadsheetId}`);
+    console.log(`Saved process number for row ${rowIndex}: ${processNumber}`);
+    return true;
+  } catch (error) {
+    console.error('Error writing process number:', error);
+    return false;
+  }
+}
+
+/**
  * Update multiple fields for a specific client row.
  * Supports: empresa (column I), funcao (column J).
  */
@@ -280,7 +314,7 @@ export async function updateClientFields(
 
 /**
  * Append a new client row to the end of the spreadsheet.
- * Columns: A=Entrada, B=Nome, C=Admissão, D=Demissão, E=Status, F=Matéria, G=Origem, H=Responsável, I=Empresa, J=Função
+ * Columns: A=Entrada, B=Nome, C=Admissão, D=Demissão, E=Status, F=Matéria, G=Origem, H=Responsável, I=Empresa, J=Função, K=Número do Processo
  */
 export async function appendClientRow(
   accessToken: string,
@@ -292,7 +326,7 @@ export async function appendClientRow(
 
     await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: "A:J",
+      range: "A:K",
       valueInputOption: "RAW",
       insertDataOption: "INSERT_ROWS",
       requestBody: {
@@ -307,6 +341,7 @@ export async function appendClientRow(
           "", // H - Responsável
           data.empresa || "", // I - Empresa
           data.funcao || "", // J - Função
+          '', // K - Número do Processo
         ]],
       },
     });
