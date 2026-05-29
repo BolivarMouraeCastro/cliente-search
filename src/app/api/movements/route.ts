@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
-const DATAJUD_API_KEY = process.env.DATAJUD_API_KEY ?? '';
+// Chave pública do DataJud (CNJ) - disponível em https://datajud-wiki.cnj.jus.br/api-publica/acesso
+const DATAJUD_API_KEY = process.env.DATAJUD_API_KEY || 'cDZHYzlZa0JadVREZDJCendQbXY6SkJlTzNjLV9TRENyQk1RdnFKZGRQdw==';
 const DATAJUD_BASE_URL = 'https://api-publica.datajud.cnj.jus.br';
 
 // TRT endpoints mapping
