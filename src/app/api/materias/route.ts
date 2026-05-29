@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { ALL_PHASES, PhaseConfig } from '@/lib/phases';
@@ -23,10 +23,7 @@ const TRT_ENDPOINTS: Record<string, string> = {
 
 function detectTRT(processNumber: string): string {
   const match = processNumber.match(/\.\d{4}\.\d\.(\d{2})\./);
-  if (match) {
-    const trtNum = parseInt(match[1], 10);
-    return `trt${trtNum}`;
-  }
+  if (match) return `trt${parseInt(match[1], 10)}`;
   return 'trt2';
 }
 
@@ -34,12 +31,50 @@ function normalizeProcessNumber(processNumber: string): string {
   return processNumber.replace(/[.\-]/g, '');
 }
 
-// Data structure for a process entry from the hearings spreadsheet
+/**
+ * Parse a date string from the spreadsheet.
+ * Handles DD/MM/YYYY, M/D/YYYY, ISO, and Google Sheets serial numbers.
+ */
+function parseDate(value: string): { month: number; year: number } | null {
+  if (!value || value.trim() === '') return null;
+  const trimmed = value.trim();
+
+  // Google Sheets serial number
+  if (/^\d{4,5}$/.test(trimmed)) {
+    const serial = parseInt(trimmed, 10);
+    const epoch = new Date(1899, 11, 30);
+    const date = new Date(epoch.getTime() + serial * 86400000);
+    return { month: date.getMonth() + 1, year: date.getFullYear() };
+  }
+
+  // ISO format YYYY-MM-DD
+  if (/^\d{4}-\d{1,2}-\d{1,2}/.test(trimmed)) {
+    const parts = trimmed.split(/[-T]/);
+    return { month: parseInt(parts[1], 10), year: parseInt(parts[0], 10) };
+  }
+
+  // DD/MM/YYYY or M/D/YYYY
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(trimmed)) {
+    const parts = trimmed.split('/');
+    const first = parseInt(parts[0], 10);
+    const second = parseInt(parts[1], 10);
+    // If first > 12, it's DD/MM/YYYY
+    if (first > 12) return { month: second, year: parseInt(parts[2], 10) };
+    // If second > 12, it's MM/DD/YYYY → month=first
+    if (second > 12) return { month: first, year: parseInt(parts[2], 10) };
+    // Ambiguous, assume DD/MM/YYYY (Brazilian format)
+    return { month: second, year: parseInt(parts[2], 10) };
+  }
+
+  return null;
+}
+
 interface HearingProcess {
   reclamante: string;
   reclamada: string;
   numeroProcesso: string;
   advogado: string;
+  dataAudiencia: string;
 }
 
 export interface PhaseGroup {
@@ -49,64 +84,89 @@ export interface PhaseGroup {
     reclamada: string;
     numeroProcesso: string;
     advogado: string;
+    dataAudiencia: string;
     lastMovementDate: string;
     lastMovementDesc: string;
   }[];
 }
 
-// Memory Cache to prevent spamming DataJud
-let cacheData: any = null;
-let cacheTime = 0;
-const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
+// In-memory cache for hearings spreadsheet rows (avoid re-reading)
+let hearingsRowsCache: string[][] | null = null;
+let hearingsRowsCacheTime = 0;
+const HEARINGS_CACHE_TTL = 5 * 60 * 1000; // 5 min
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    if (cacheData && Date.now() - cacheTime < CACHE_TTL) {
-      return NextResponse.json(cacheData);
+    const { searchParams } = new URL(request.url);
+    const month = parseInt(searchParams.get('month') || '0', 10);
+    const year = parseInt(searchParams.get('year') || '0', 10);
+
+    if (!month || !year || month < 1 || month > 12 || year < 2020) {
+      return NextResponse.json(
+        { error: 'Parâmetros inválidos. Use ?month=1&year=2025' },
+        { status: 400 }
+      );
     }
 
     const session = await getServerSession(authOptions);
     if (!session?.accessToken) {
-      return NextResponse.json({ error: 'Unauthorized. Please sign in.' }, { status: 401 });
+      return NextResponse.json({ error: 'Faça login primeiro.' }, { status: 401 });
     }
 
-    // 1. READ process numbers from HEARINGS SPREADSHEET (READ-ONLY, no changes)
-    const sheets = getSheetsService(session.accessToken);
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: HEARINGS_SPREADSHEET_ID,
-      range: 'A:H',
-      valueRenderOption: 'FORMATTED_VALUE',
-      dateTimeRenderOption: 'FORMATTED_STRING',
-    });
+    // 1. Read hearings spreadsheet (cached)
+    let rows = hearingsRowsCache;
+    if (!rows || Date.now() - hearingsRowsCacheTime > HEARINGS_CACHE_TTL) {
+      const sheets = getSheetsService(session.accessToken);
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId: HEARINGS_SPREADSHEET_ID,
+        range: 'A:H',
+        valueRenderOption: 'FORMATTED_VALUE',
+        dateTimeRenderOption: 'FORMATTED_STRING',
+      });
+      rows = response.data.values || [];
+      hearingsRowsCache = rows;
+      hearingsRowsCacheTime = Date.now();
+    }
 
-    const rows = response.data.values;
-    if (!rows || rows.length <= 1) {
+    if (rows.length <= 1) {
       return NextResponse.json({
-        totalProcessos: 0, encontrados: 0, naoEncontrados: 0, fases: [],
+        month, year, totalProcessos: 0, encontrados: 0, naoEncontrados: 0, fases: [],
       });
     }
 
-    // 2. Extract UNIQUE process numbers from hearings (Column E = index 4)
-    //    Also keep reclamante (C=2), reclamada (D=3), advogado (H=7) for display
+    // 2. Filter rows by requested month/year (Column A = date)
     const processMap = new Map<string, HearingProcess>();
 
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
+      const dateStr = (row[0] ?? '').trim();
       const processNumber = (row[4] ?? '').trim();
-      if (!processNumber) continue;
 
-      // Deduplicate by process number (keep first occurrence)
+      if (!processNumber || !dateStr) continue;
+
+      const parsed = parseDate(dateStr);
+      if (!parsed) continue;
+      if (parsed.month !== month || parsed.year !== year) continue;
+
+      // Deduplicate by process number
       if (!processMap.has(processNumber)) {
         processMap.set(processNumber, {
           reclamante: (row[2] ?? '').trim(),
           reclamada: (row[3] ?? '').trim(),
           numeroProcesso: processNumber,
           advogado: (row[7] ?? '').trim(),
+          dataAudiencia: dateStr,
         });
       }
     }
 
     const uniqueProcesses = Array.from(processMap.values());
+
+    if (uniqueProcesses.length === 0) {
+      return NextResponse.json({
+        month, year, totalProcessos: 0, encontrados: 0, naoEncontrados: 0, fases: [],
+      });
+    }
 
     // 3. Group by TRT
     const trtGroups: Record<string, HearingProcess[]> = {};
@@ -116,30 +176,21 @@ export async function GET() {
       trtGroups[trt].push(proc);
     }
 
-    // 4. Query DataJud in PARALLEL batches per TRT (to avoid Vercel timeout)
+    // 4. Query DataJud in PARALLEL
     const aggregatedResults: Record<string, any> = {};
-
-    // Build all fetch promises first
     const fetchPromises: Promise<void>[] = [];
 
     for (const [trt, trtProcesses] of Object.entries(trtGroups)) {
       const endpoint = TRT_ENDPOINTS[trt] || 'api_publica_trt2';
-
       const normalizedMap = new Map(
         trtProcesses.map(p => [normalizeProcessNumber(p.numeroProcesso), p])
       );
       const normalizedNumbers = Array.from(normalizedMap.keys());
 
-      // Chunks of 50
       const chunkSize = 50;
       for (let i = 0; i < normalizedNumbers.length; i += chunkSize) {
         const chunk = normalizedNumbers.slice(i, i + chunkSize);
-
         const url = `${DATAJUD_BASE_URL}/${endpoint}/_search`;
-        const body = {
-          query: { terms: { numeroProcesso: chunk } },
-          size: chunk.length,
-        };
 
         const promise = fetch(url, {
           method: 'POST',
@@ -147,8 +198,8 @@ export async function GET() {
             'Content-Type': 'application/json',
             'Authorization': `APIKey ${DATAJUD_API_KEY}`,
           },
-          body: JSON.stringify(body),
-          signal: AbortSignal.timeout(8000), // 8s timeout per request
+          body: JSON.stringify({ query: { terms: { numeroProcesso: chunk } }, size: chunk.length }),
+          signal: AbortSignal.timeout(8000),
         })
           .then(async (res) => {
             if (!res.ok) return;
@@ -162,17 +213,14 @@ export async function GET() {
               if (!proc) continue;
 
               const rawMovements = source.movimentos || source.movimentacoes || [];
-
               const movements = rawMovements.map((mov: any) => {
                 const desc = (mov.nome as string) || (mov.descricao as string) || '';
                 const complementos = (mov.complementosTabelados as Array<{ descricao?: string; nome?: string }>) || [];
                 const complementText = complementos.map((c: any) => c.descricao || c.nome || '').filter(Boolean).join('; ');
                 return { date: (mov.dataHora as string) || '', description: desc, complement: complementText };
               });
-
               movements.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-              // Detect phase
               let currentPhase = null;
               const lastMov = movements[0] || { date: '', description: 'Processo distribuído', complement: '' };
 
@@ -180,43 +228,32 @@ export async function GET() {
                 const text = `${mov.description} ${mov.complement}`.toLowerCase();
                 let bestPhase = null;
                 let bestOrder = -1;
-
                 for (const phase of ALL_PHASES) {
                   if (phase.keywords.some((kw) => text.includes(kw)) && phase.order > bestOrder) {
                     bestPhase = phase;
                     bestOrder = phase.order;
                   }
                 }
-
-                if (bestPhase) {
-                  currentPhase = bestPhase;
-                  break;
-                }
+                if (bestPhase) { currentPhase = bestPhase; break; }
               }
 
-              if (!currentPhase) {
-                currentPhase = ALL_PHASES.find(p => p.id === 'distribuicao');
-              }
+              if (!currentPhase) currentPhase = ALL_PHASES.find(p => p.id === 'distribuicao');
 
               if (currentPhase) {
                 aggregatedResults[procNum] = {
-                  proc,
-                  phase: currentPhase,
+                  proc, phase: currentPhase,
                   lastMovementDate: lastMov.date,
                   lastMovementDesc: lastMov.description,
                 };
               }
             }
           })
-          .catch((fetchErr) => {
-            console.error(`DataJud fetch error for ${trt}:`, fetchErr);
-          });
+          .catch((err) => console.error(`DataJud error ${trt}:`, err));
 
         fetchPromises.push(promise);
       }
     }
 
-    // Run all fetches in parallel
     await Promise.allSettled(fetchPromises);
 
     // 5. Group by Phase
@@ -226,7 +263,6 @@ export async function GET() {
     }
 
     let unindexedCount = 0;
-
     for (const proc of uniqueProcesses) {
       const norm = normalizeProcessNumber(proc.numeroProcesso);
       const result = aggregatedResults[norm];
@@ -238,6 +274,7 @@ export async function GET() {
             reclamada: result.proc.reclamada,
             numeroProcesso: result.proc.numeroProcesso,
             advogado: result.proc.advogado,
+            dataAudiencia: result.proc.dataAudiencia,
             lastMovementDate: result.lastMovementDate,
             lastMovementDesc: result.lastMovementDesc,
           });
@@ -251,22 +288,17 @@ export async function GET() {
       .filter(p => p.processes.length > 0)
       .sort((a, b) => b.phase.order - a.phase.order);
 
-    const finalData = {
+    return NextResponse.json({
+      month, year,
       totalProcessos: uniqueProcesses.length,
       encontrados: Object.keys(aggregatedResults).length,
       naoEncontrados: unindexedCount,
       fases: sortedPhases,
-    };
-
-    cacheData = finalData;
-    cacheTime = Date.now();
-
-    return NextResponse.json(finalData);
+    });
 
   } catch (error) {
     console.error('API /api/materias error:', error);
-    const message = error instanceof Error ? error.message : 'Erro interno do servidor';
-    return NextResponse.json({ error: `Erro ao consolidar matérias: ${message}` }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Erro interno';
+    return NextResponse.json({ error: `Erro: ${message}` }, { status: 500 });
   }
 }
-
