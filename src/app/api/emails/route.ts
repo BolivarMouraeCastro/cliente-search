@@ -53,60 +53,71 @@ export async function GET(request: NextRequest) {
       );
 
       if (client) {
-        // --- Auto-salvar número do processo se ainda não armazenado ---
-        if (!client.numeroProcesso || client.numeroProcesso.trim() === '') {
-          const emailWithProcess = emails.find((e) => e.processNumber && e.processNumber.trim() !== '');
-          if (emailWithProcess?.processNumber) {
-            const saved = await writeProcessNumber(
-              session.accessToken,
-              SPREADSHEET_ID,
-              clientId,
-              emailWithProcess.processNumber
-            );
-            if (saved) {
-              processNumberSaved = true;
-              console.log(`Auto-saved process number ${emailWithProcess.processNumber} for client: ${clientName} (row ${clientId})`);
-            }
-          }
-        }
+        const currentStatus = client.status.toUpperCase().trim();
+        const isBolivar = currentStatus === 'BOLIVAR';
 
-        // --- Detectar processo encerrado/arquivado ---
-        const isClosed = detectClosedProcess(emails);
-        if (isClosed) {
-          isArchived = true;
-          const currentStatus = client.status.toUpperCase().trim();
-          if (currentStatus !== 'ARQUIVADO') {
-            const updated = await updateClientStatus(
-              session.accessToken,
-              SPREADSHEET_ID,
-              clientId,
-              'ARQUIVADO'
-            );
-            if (updated) {
-              statusUpdated = true;
-              newStatus = 'ARQUIVADO';
-              console.log(`Auto-archived process for client: ${clientName} (row ${clientId})`);
+        // ═══════════════════════════════════════════════════════════════
+        // PROTEÇÃO BOLIVAR: Clientes com status BOLIVAR são NOVOS e
+        // ainda não foram distribuídos na justiça. Os e-mails encontrados
+        // no Gmail pertencem a processos ANTIGOS do mesmo cliente.
+        // NÃO salvar número de processo NEM atualizar status.
+        // ═══════════════════════════════════════════════════════════════
+        if (!isBolivar) {
+          // --- Auto-salvar número do processo se ainda não armazenado ---
+          if (!client.numeroProcesso || client.numeroProcesso.trim() === '') {
+            const emailWithProcess = emails.find((e) => e.processNumber && e.processNumber.trim() !== '');
+            if (emailWithProcess?.processNumber) {
+              const saved = await writeProcessNumber(
+                session.accessToken,
+                SPREADSHEET_ID,
+                clientId,
+                emailWithProcess.processNumber
+              );
+              if (saved) {
+                processNumberSaved = true;
+                console.log(`Auto-saved process number ${emailWithProcess.processNumber} for client: ${clientName} (row ${clientId})`);
+              }
             }
           }
-        } else {
-          // --- Atualização normal baseada em fase (somente se NÃO arquivado) ---
-          const detectedStatus = detectCurrentPhase(emails);
-          if (detectedStatus) {
-            const currentStatus = client.status.toUpperCase().trim();
-            if (currentStatus !== 'ARQUIVADO' && (isStatusAdvanced(currentStatus, detectedStatus) || !currentStatus)) {
+
+          // --- Detectar processo encerrado/arquivado ---
+          const isClosed = detectClosedProcess(emails);
+          if (isClosed) {
+            isArchived = true;
+            if (currentStatus !== 'ARQUIVADO') {
               const updated = await updateClientStatus(
                 session.accessToken,
                 SPREADSHEET_ID,
                 clientId,
-                detectedStatus
+                'ARQUIVADO'
               );
               if (updated) {
                 statusUpdated = true;
-                newStatus = detectedStatus;
-                console.log(`Auto-updated status to "${detectedStatus}" for client: ${clientName} (row ${clientId})`);
+                newStatus = 'ARQUIVADO';
+                console.log(`Auto-archived process for client: ${clientName} (row ${clientId})`);
+              }
+            }
+          } else {
+            // --- Atualização normal baseada em fase (somente se NÃO arquivado) ---
+            const detectedStatus = detectCurrentPhase(emails);
+            if (detectedStatus) {
+              if (currentStatus !== 'ARQUIVADO' && (isStatusAdvanced(currentStatus, detectedStatus) || !currentStatus)) {
+                const updated = await updateClientStatus(
+                  session.accessToken,
+                  SPREADSHEET_ID,
+                  clientId,
+                  detectedStatus
+                );
+                if (updated) {
+                  statusUpdated = true;
+                  newStatus = detectedStatus;
+                  console.log(`Auto-updated status to "${detectedStatus}" for client: ${clientName} (row ${clientId})`);
+                }
               }
             }
           }
+        } else {
+          console.log(`Skipping auto-detection for BOLIVAR client: ${clientName} (row ${clientId}) — new process, emails may belong to older cases`);
         }
       }
     }
