@@ -147,23 +147,22 @@ export async function GET(_request: NextRequest) {
         const items: { name: string; id: string }[] = [];
         const directChildren = childrenOf.get(sf.id) || [];
 
+        // Detect sub-categories by numbering pattern: "1.1 R.I", "2.2 Prescrições", etc.
+        const isSubCategory = (name: string) => /^\d+[\.\-]/.test(name.trim());
+
         for (const child of directChildren) {
-          if (isFolder(child)) {
-            // Check if this is a sub-category (e.g., "1.1 R.I") by seeing if it has folder children
-            const subItems = childrenOf.get(child.id) || [];
-            const subFolders = subItems.filter(isFolder);
-            
-            if (subFolders.length > 0) {
-              // This IS a sub-category — its folder children are the clients
-              for (const sub of subFolders) {
-                items.push({ name: sub.name, id: sub.id });
-              }
-            } else {
-              // This is a client folder directly inside the status folder
-              items.push({ name: child.name, id: child.id });
+          if (!isFolder(child)) continue; // Skip files
+
+          if (isSubCategory(child.name)) {
+            // This is a numbered sub-category — count its direct FOLDER children as clients
+            const subItems = (childrenOf.get(child.id) || []).filter(isFolder);
+            for (const sub of subItems) {
+              items.push({ name: sub.name, id: sub.id });
             }
+          } else {
+            // This is a client folder directly (e.g. "JOÃO SILVA - 15/06/2025 EMPRESA")
+            items.push({ name: child.name, id: child.id });
           }
-          // Skip files — only folders are "clients"
         }
 
         totalItems += items.length;
