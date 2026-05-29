@@ -22,6 +22,10 @@ export interface Email {
   from: string;
   processNumber?: string;
   phase?: string;
+  // Dados de audiência extraídos do e-mail
+  audienciaData?: string;
+  audienciaHora?: string;
+  audienciaOrgao?: string;
 }
 
 export interface DriveFile {

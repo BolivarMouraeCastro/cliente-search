@@ -93,6 +93,33 @@ export default function EmailTimeline({ emails }: EmailTimelineProps) {
   // Detailed explanation for the current phase
   const explanation = currentPhase ? PHASE_EXPLANATIONS[currentPhase.id] : undefined;
 
+  // --- Hearing (audiência) details ---
+  // Find the most recent hearing email with extracted details
+  const hearingPhaseIds = ['audiencia_inicial', 'audiencia_una', 'audiencia_instrucao'];
+  const allHearingEmails = hearingPhaseIds
+    .flatMap((id) => phaseEmails[id] || [])
+    .filter((e) => e.audienciaData || e.audienciaHora || e.audienciaOrgao);
+
+  // Get the last (most recent) hearing email
+  const hearingEmail = allHearingEmails.length > 0
+    ? allHearingEmails[allHearingEmails.length - 1]
+    : undefined;
+
+  // Determine if the hearing is in the future or already happened
+  let hearingIsFuture = false;
+  let hearingDateParsed: Date | null = null;
+  if (hearingEmail?.audienciaData) {
+    const parts = hearingEmail.audienciaData.split('/');
+    if (parts.length === 3) {
+      const day = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      let year = parseInt(parts[2], 10);
+      if (year < 100) year += 2000;
+      hearingDateParsed = new Date(year, month, day, 23, 59, 59);
+      hearingIsFuture = hearingDateParsed > new Date();
+    }
+  }
+
   return (
     <div>
       {/* ======= CURRENT PHASE - BIG AND CLEAR ======= */}
@@ -125,6 +152,95 @@ export default function EmailTimeline({ emails }: EmailTimelineProps) {
           </div>
         )}
       </div>
+
+      {/* ======= HEARING DETAILS CARD ======= */}
+      {hearingEmail && (hearingEmail.audienciaData || hearingEmail.audienciaHora || hearingEmail.audienciaOrgao) && (
+        <div style={{
+          background: hearingIsFuture
+            ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.04))'
+            : 'linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(16, 185, 129, 0.04))',
+          border: `1px solid ${hearingIsFuture ? 'rgba(245, 158, 11, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`,
+          borderRadius: '1rem',
+          padding: '1.25rem 1.5rem',
+          marginBottom: '1.5rem',
+        }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem',
+            fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em',
+            fontWeight: 700, color: hearingIsFuture ? '#f59e0b' : '#10b981',
+          }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+            {hearingIsFuture ? '📅 Audiência Marcada' : '✅ Audiência Realizada'}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem' }}>
+            {/* Data */}
+            {hearingEmail.audienciaData && (
+              <div>
+                <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>
+                  Data
+                </div>
+                <div style={{
+                  fontSize: '1.2rem', fontWeight: 900,
+                  color: hearingIsFuture ? '#f59e0b' : '#10b981',
+                }}>
+                  {hearingEmail.audienciaData}
+                </div>
+              </div>
+            )}
+
+            {/* Horário */}
+            {hearingEmail.audienciaHora && (
+              <div>
+                <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>
+                  Horário
+                </div>
+                <div style={{
+                  fontSize: '1.2rem', fontWeight: 900,
+                  color: hearingIsFuture ? '#f59e0b' : '#10b981',
+                }}>
+                  {hearingEmail.audienciaHora}
+                </div>
+              </div>
+            )}
+
+            {/* Órgão Julgador */}
+            {hearingEmail.audienciaOrgao && (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>
+                  Órgão Julgador
+                </div>
+                <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  {hearingEmail.audienciaOrgao}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {hearingIsFuture && (
+            <div style={{
+              marginTop: '1rem', padding: '0.6rem 0.75rem',
+              background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.2)',
+              borderRadius: '0.5rem', fontSize: '0.8rem', color: '#f59e0b', fontWeight: 600,
+            }}>
+              ⚠️ O cliente DEVE comparecer! A ausência pode resultar em arquivamento do processo.
+            </div>
+          )}
+
+          {!hearingIsFuture && (
+            <div style={{
+              marginTop: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)',
+            }}>
+              Esta audiência já foi realizada. O próximo passo é aguardar a sentença do juiz ou nova audiência de instrução.
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ======= DETAILED EXPLANATION CARD ======= */}
       {explanation && (

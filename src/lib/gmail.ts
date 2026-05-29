@@ -151,6 +151,94 @@ function detectPhase(subject: string, body: string): string {
 }
 
 /**
+ * Extract hearing (audiência) details: date, time, and court from email text.
+ * TRT hearing notifications typically contain patterns like:
+ * - "audiência designada para 15/03/2024 às 14:00"
+ * - "audiência para o dia 15.03.2024, às 14h00"
+ * - "Vara do Trabalho de São Paulo"
+ */
+function extractHearingDetails(subject: string, body: string): {
+  audienciaData?: string;
+  audienciaHora?: string;
+  audienciaOrgao?: string;
+} {
+  const text = `${subject} ${body.substring(0, 3000)}`;
+  const lower = text.toLowerCase();
+
+  // Only extract if it's about an audiência
+  const isHearing = lower.includes('audiência') || lower.includes('audiencia') ||
+    lower.includes('pauta de audiência') || lower.includes('pauta de audiencia');
+  if (!isHearing) return {};
+
+  let audienciaData: string | undefined;
+  let audienciaHora: string | undefined;
+  let audienciaOrgao: string | undefined;
+
+  // --- Extract DATE ---
+  // Patterns: DD/MM/YYYY, DD.MM.YYYY, DD-MM-YYYY
+  const datePatterns = [
+    // "para o dia DD/MM/YYYY" or "para DD/MM/YYYY" or "dia DD/MM/YYYY"
+    /(?:para\s+(?:o\s+)?dia|dia|data|em|para)\s+(\d{1,2}[\/.]\d{1,2}[\/.]\d{2,4})/i,
+    // "DD/MM/YYYY às" or "DD.MM.YYYY,"
+    /(\d{1,2}[\/.]\d{1,2}[\/.]\d{2,4})\s*(?:,?\s*(?:às|as|a partir))/i,
+    // Any date near audiência context
+    /audiên\w*[^.]{0,60}?(\d{1,2}[\/.]\d{1,2}[\/.]\d{2,4})/i,
+    /(\d{1,2}[\/.]\d{1,2}[\/.]\d{2,4})[^.]{0,60}?audiên/i,
+  ];
+
+  for (const pattern of datePatterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) {
+      audienciaData = match[1].replace(/\./g, '/');
+      break;
+    }
+  }
+
+  // --- Extract TIME ---
+  // Patterns: HH:MM, HHhMM, HH:MMh, às HH:MM
+  const timePatterns = [
+    /(?:às|as|horário|hora)\s*:?\s*(\d{1,2})\s*(?::|h|H)\s*(\d{2})/i,
+    /(\d{1,2})\s*(?::|h|H)\s*(\d{2})\s*(?:h|hs|hrs|horas|min|minutos)?/i,
+  ];
+
+  for (const pattern of timePatterns) {
+    const match = text.match(pattern);
+    if (match?.[1] && match?.[2]) {
+      const hour = parseInt(match[1], 10);
+      // Validate it's a reasonable hour for a hearing (7-20)
+      if (hour >= 7 && hour <= 20) {
+        audienciaHora = `${String(hour).padStart(2, '0')}:${match[2]}`;
+        break;
+      }
+    }
+  }
+
+  // --- Extract COURT (Órgão Julgador) ---
+  const courtPatterns = [
+    // "Nª Vara do Trabalho de CIDADE"
+    /(\d{1,3}[ªºa]?\s*Vara\s+do\s+Trabalho[^,.;\n]{0,60})/i,
+    // "Tribunal Regional do Trabalho"
+    /(Tribunal\s+Regional\s+do\s+Trabalho[^,.;\n]{0,60})/i,
+    // "TRT da Nª Região"
+    /(TRT\s+da?\s+\d{1,2}[ªºa]?\s+Regi[ãa]o)/i,
+    // "Juízo da Nª Vara" or "perante a Nª Vara"
+    /(?:juízo|juizo|perante)\s+(?:da?\s+)?(\d{1,3}[ªºa]?\s*Vara[^,.;\n]{0,60})/i,
+    // "Órgão: ..."
+    /[óo]rg[ãa]o\s*(?:julgador)?\s*:?\s*([^\n,.;]{5,80})/i,
+  ];
+
+  for (const pattern of courtPatterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) {
+      audienciaOrgao = match[1].trim();
+      break;
+    }
+  }
+
+  return { audienciaData, audienciaHora, audienciaOrgao };
+}
+
+/**
  * Convert a Gmail message to our Email interface with enriched data.
  */
 function messageToEmail(message: gmail_v1.Schema$Message): Email {
@@ -161,6 +249,7 @@ function messageToEmail(message: gmail_v1.Schema$Message): Email {
   const body = extractBody(message.payload ?? undefined);
   const processNumber = extractProcessNumber(subject, body);
   const phase = detectPhase(subject, body);
+  const hearing = extractHearingDetails(subject, body);
 
   return {
     id: message.id ?? "",
@@ -171,6 +260,7 @@ function messageToEmail(message: gmail_v1.Schema$Message): Email {
     from,
     processNumber,
     phase,
+    ...hearing,
   };
 }
 
