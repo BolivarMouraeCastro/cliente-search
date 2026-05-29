@@ -93,41 +93,32 @@ export default function Sidebar() {
 
       {/* Sidebar */}
       <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
-        <div className="sidebar-brand" style={{ flexDirection: 'column', gap: '0.25rem', padding: 'var(--space-xl) var(--space-md)', textAlign: 'center' }}>
-          <div style={{ marginBottom: '0.5rem', color: 'var(--accent-blue)', display: 'flex', justifyContent: 'center' }}>
-            <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 3v18" />
-              <path d="M3 10a4 4 0 0 0 8 0" />
-              <path d="M3 10h8" />
-              <path d="M13 10a4 4 0 0 0 8 0" />
-              <path d="M13 10h8" />
-              <path d="M12 7H4.5" />
-              <path d="M12 7h7.5" />
-              <path d="M7 3v4" />
-              <path d="M17 3v4" />
-              <path d="M9 21h6" />
-            </svg>
-          </div>
-          <span style={{ 
-            fontFamily: 'var(--font-serif)', 
-            fontSize: '1.4rem', 
-            fontWeight: 700, 
-            letterSpacing: '0.05em',
-            background: 'var(--gradient-brand)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent'
-          }}>
-            BM&C
-          </span>
-          <span style={{
-            fontSize: '0.65rem',
-            fontWeight: 500,
-            color: 'var(--text-muted)',
-            letterSpacing: '0.2em',
-            textTransform: 'uppercase'
-          }}>
-            Advogados
-          </span>
+        <div className="sidebar-brand" style={{ flexDirection: 'column', gap: '0', padding: 'var(--space-lg) var(--space-md)', textAlign: 'center', position: 'relative' }}>
+          {/* Gold glow behind logo */}
+          <div style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: '120px',
+            height: '120px',
+            borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(212, 175, 55, 0.12) 0%, transparent 70%)',
+            pointerEvents: 'none',
+          }} />
+          <img 
+            src="/bmc-logo.png" 
+            alt="BM&C Advogados" 
+            style={{ 
+              width: '100px', 
+              height: '100px', 
+              objectFit: 'contain', 
+              margin: '0 auto',
+              filter: 'drop-shadow(0 0 12px rgba(212, 175, 55, 0.3))',
+              position: 'relative',
+              zIndex: 1,
+            }} 
+          />
         </div>
 
         <nav className="sidebar-nav">
