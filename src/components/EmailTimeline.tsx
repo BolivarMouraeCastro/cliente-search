@@ -82,12 +82,53 @@ export default function EmailTimeline({ emails, hearings = [] }: EmailTimelinePr
     }
   }
 
-  // Current phase = last completed
-  const currentPhase = completedPhases[completedPhases.length - 1];
+  // Current phase = last completed (from emails only)
+  let currentPhase = completedPhases[completedPhases.length - 1];
+
+  // --- Hearing (audiência) data from spreadsheet ---
+  const pastHearings = hearings.filter((h) => !h.isFuture);
+  const futureHearings = hearings.filter((h) => h.isFuture);
+  const hasPastHearing = pastHearings.length > 0;
+  const hasFutureHearing = futureHearings.length > 0;
+
+  // --- SMART PHASE OVERRIDE ---
+  // If the hearings spreadsheet shows a hearing already happened,
+  // but emails only detected an early phase (distribuicao, citacao),
+  // upgrade the current phase to reflect reality.
+  const earlyPhases = ['distribuicao', 'citacao'];
+  const phaseFromEmails = currentPhase?.id;
+
+  // Determine effective phase considering hearings
+  let effectivePhaseId = phaseFromEmails;
+  let effectivePhaseName = currentPhase?.name || 'Não identificada';
+  let effectivePhaseSimple = currentPhase?.simple || '';
+
+  if (hasPastHearing && (!phaseFromEmails || earlyPhases.includes(phaseFromEmails))) {
+    // Hearing already happened — we're at least post-audiência
+    effectivePhaseId = 'pos_audiencia';
+    effectivePhaseName = 'Aguardando Sentença';
+    effectivePhaseSimple = 'A audiência já foi realizada — aguardando decisão do juiz';
+  } else if (hasFutureHearing && (!phaseFromEmails || earlyPhases.includes(phaseFromEmails))) {
+    // Hearing is scheduled but hasn't happened yet
+    effectivePhaseId = 'audiencia_marcada';
+    effectivePhaseName = 'Audiência Marcada';
+    effectivePhaseSimple = 'Audiência agendada — o cliente deve comparecer';
+  }
 
   // Next expected phase
-  const nextPhaseId = currentPhase ? NEXT_PHASE[currentPhase.id] : undefined;
-  const nextPhase = nextPhaseId ? PHASE_MAP.get(nextPhaseId) : undefined;
+  let nextPhaseId: string | undefined;
+  let nextPhase = undefined;
+
+  if (effectivePhaseId === 'pos_audiencia') {
+    nextPhase = PHASE_MAP.get('sentenca');
+  } else if (effectivePhaseId === 'audiencia_marcada') {
+    // Next after hearing is sentença
+    nextPhaseId = 'sentenca';
+    nextPhase = PHASE_MAP.get('sentenca');
+  } else {
+    nextPhaseId = currentPhase ? NEXT_PHASE[currentPhase.id] : undefined;
+    nextPhase = nextPhaseId ? PHASE_MAP.get(nextPhaseId) : undefined;
+  }
 
   // Process number
   const processNumber = emails.find((e) => e.processNumber)?.processNumber;
@@ -95,42 +136,37 @@ export default function EmailTimeline({ emails, hearings = [] }: EmailTimelinePr
   // Current phase color
   const getPhaseColor = (id: string) => {
     if (['sentenca', 'acordao', 'transito'].includes(id)) return '#10b981';
-    if (['audiencia_inicial', 'audiencia_una', 'audiencia_instrucao'].includes(id)) return '#f59e0b';
+    if (['audiencia_inicial', 'audiencia_una', 'audiencia_instrucao', 'audiencia_marcada'].includes(id)) return '#f59e0b';
     if (['recurso'].includes(id)) return '#ef4444';
     if (['execucao'].includes(id)) return '#f97316';
+    if (id === 'pos_audiencia') return '#8b5cf6';
     return '#3b82f6';
   };
 
-  const currentColor = currentPhase ? getPhaseColor(currentPhase.id) : '#3b82f6';
+  const currentColor = getPhaseColor(effectivePhaseId || '');
 
-  // Detailed explanation for the current phase
-  const explanation = currentPhase ? PHASE_EXPLANATIONS[currentPhase.id] : undefined;
+  // --- Build smart explanation based on ALL available data ---
+  let explanation = currentPhase ? PHASE_EXPLANATIONS[currentPhase.id] : undefined;
 
-  // --- Hearing (audiência) details ---
-  // Find the most recent hearing email with extracted details
-  const hearingPhaseIds = ['audiencia_inicial', 'audiencia_una', 'audiencia_instrucao'];
-  const allHearingEmails = hearingPhaseIds
-    .flatMap((id) => phaseEmails[id] || [])
-    .filter((e) => e.audienciaData || e.audienciaHora || e.audienciaOrgao);
-
-  // Get the last (most recent) hearing email
-  const hearingEmail = allHearingEmails.length > 0
-    ? allHearingEmails[allHearingEmails.length - 1]
-    : undefined;
-
-  // Determine if the hearing is in the future or already happened
-  let hearingIsFuture = false;
-  let hearingDateParsed: Date | null = null;
-  if (hearingEmail?.audienciaData) {
-    const parts = hearingEmail.audienciaData.split('/');
-    if (parts.length === 3) {
-      const day = parseInt(parts[0], 10);
-      const month = parseInt(parts[1], 10) - 1;
-      let year = parseInt(parts[2], 10);
-      if (year < 100) year += 2000;
-      hearingDateParsed = new Date(year, month, day, 23, 59, 59);
-      hearingIsFuture = hearingDateParsed > new Date();
-    }
+  // Override explanation if hearings data gives us better info
+  if (effectivePhaseId === 'pos_audiencia' && pastHearings.length > 0) {
+    const lastHearing = pastHearings[pastHearings.length - 1];
+    explanation = {
+      titulo: 'Audiência Realizada — Aguardando Sentença',
+      oQueAconteceu: `A audiência${lastHearing.tipoAudiencia ? ` (${lastHearing.tipoAudiencia})` : ''} foi realizada em ${lastHearing.dataAudiencia}${lastHearing.horario ? ` às ${lastHearing.horario}` : ''}${lastHearing.orgaoJulgador ? ` perante ${lastHearing.orgaoJulgador}` : ''}.${lastHearing.advogado ? ` O advogado ${lastHearing.advogado} representou o escritório.` : ''} O juiz já ouviu as partes e, se houve instrução, também as testemunhas.`,
+      oQueEsperar: 'O juiz agora vai analisar as provas e argumentos apresentados para proferir a sentença. A sentença pode sair na própria audiência, em poucos dias, ou em até 30 dias.',
+      prazo: 'A sentença costuma ser publicada entre 5 e 30 dias após a audiência de instrução. Se foi audiência de conciliação sem acordo, pode haver uma nova audiência de instrução.',
+      acaoNecessaria: 'Aguardar a publicação da sentença. O advogado acompanha o andamento no sistema do tribunal.',
+    };
+  } else if (effectivePhaseId === 'audiencia_marcada' && futureHearings.length > 0) {
+    const nextHearing = futureHearings[0];
+    explanation = {
+      titulo: 'Audiência Agendada',
+      oQueAconteceu: `O processo está em andamento e uma audiência${nextHearing.tipoAudiencia ? ` de ${nextHearing.tipoAudiencia}` : ''} foi marcada para ${nextHearing.dataAudiencia}${nextHearing.horario ? ` às ${nextHearing.horario}` : ''}${nextHearing.orgaoJulgador ? ` na ${nextHearing.orgaoJulgador}` : ''}.`,
+      oQueEsperar: 'Na audiência, o juiz pode propor um acordo entre as partes. Se não houver acordo, serão ouvidas as testemunhas e produzidas as provas. Após isso, o juiz terá elementos para proferir a sentença.',
+      prazo: `A audiência está marcada para ${nextHearing.dataAudiencia}${nextHearing.horario ? ` às ${nextHearing.horario}` : ''}. Chegar com antecedência de pelo menos 15 minutos.`,
+      acaoNecessaria: `⚠️ IMPORTANTE: O cliente DEVE comparecer à audiência no dia ${nextHearing.dataAudiencia}. A ausência pode resultar em arquivamento do processo. Levar documento de identidade e testemunhas combinadas com o advogado.`,
+    };
   }
 
   return (
@@ -148,10 +184,10 @@ export default function EmailTimeline({ emails, hearings = [] }: EmailTimelinePr
           📍 Fase Atual do Processo
         </div>
         <div style={{ fontSize: '1.5rem', fontWeight: 900, color: currentColor, marginBottom: '0.5rem' }}>
-          {currentPhase?.name || 'Não identificada'}
+          {effectivePhaseName}
         </div>
         <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', maxWidth: '400px', margin: '0 auto' }}>
-          {currentPhase?.simple || ''}
+          {effectivePhaseSimple}
         </div>
 
         {processNumber && (
