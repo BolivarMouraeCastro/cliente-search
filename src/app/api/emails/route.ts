@@ -38,13 +38,40 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const clientName = searchParams.get('clientName');
     const clientId = searchParams.get('clientId');
-    const processNumber = searchParams.get('processNumber');
+    let processNumber = searchParams.get('processNumber');
     const entrada = searchParams.get('entrada'); // Data de entrada do cliente (DD/MM/YYYY)
 
     // Se nenhum clientName fornecido, retornar atualizações recentes do tribunal
     if (!clientName || clientName.trim() === '') {
       const emails = await getRecentUpdates(session.accessToken);
       return NextResponse.json({ emails, total: emails.length });
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // VALIDAÇÃO DO NÚMERO DO PROCESSO: Verifica se o ano do processo
+    // é compatível com a data de entrada. Ex: processo de 2019 com
+    // entrada em 2026 = número errado (processo antigo do mesmo cliente).
+    // Formato do processo: NNNNNNN-NN.YYYY.N.NN.NNNN
+    // ═══════════════════════════════════════════════════════════════
+    let processNumberIsStale = false;
+    if (processNumber && processNumber.trim() !== '' && entrada) {
+      const processYearMatch = processNumber.match(/\.(\d{4})\./);
+      const parsedEntrada = parseEntradaDate(entrada);
+      if (processYearMatch && parsedEntrada) {
+        const processYear = parseInt(processYearMatch[1], 10);
+        const entradaYear = parsedEntrada.getFullYear();
+        // Se diferença > 2 anos, o processo é antigo
+        if (Math.abs(entradaYear - processYear) > 2) {
+          console.log(`⚠️ Process number ${processNumber} (year ${processYear}) doesn't match entry date ${entrada} (year ${entradaYear}) for ${clientName}. Ignoring stale process number.`);
+          processNumberIsStale = true;
+          // Limpar o número do processo errado da planilha
+          if (clientId && SPREADSHEET_ID) {
+            writeProcessNumber(session.accessToken, SPREADSHEET_ID, clientId, '').catch(() => {});
+            console.log(`Cleared stale process number for ${clientName} (row ${clientId})`);
+          }
+          processNumber = null; // Ignorar número antigo
+        }
+      }
     }
 
     // Buscar emails relacionados ao cliente específico
@@ -57,12 +84,10 @@ export async function GET(request: NextRequest) {
     // ═══════════════════════════════════════════════════════════════
     // FILTRO POR DATA DE ENTRADA: Se o cliente tem data de entrada,
     // filtrar emails para só mostrar os relevantes ao processo atual.
-    // Ignora emails anteriores a 60 dias antes da entrada (margem
-    // para emails pré-distribuição como consultas iniciais).
-    // Se o cliente JÁ TEM número de processo, não filtra por data
-    // porque o número do processo já garante precisão.
+    // SEMPRE filtra quando não tem processo number ou quando o
+    // processo é antigo (stale).
     // ═══════════════════════════════════════════════════════════════
-    if (entrada && (!processNumber || processNumber.trim() === '')) {
+    if (entrada && (!processNumber || processNumber.trim() === '' || processNumberIsStale)) {
       const parsedEntrada = parseEntradaDate(entrada);
       if (parsedEntrada) {
         // 60 dias antes da entrada como margem
