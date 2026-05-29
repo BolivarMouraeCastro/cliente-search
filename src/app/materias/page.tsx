@@ -61,7 +61,7 @@ export default function MateriasDashboardPage() {
   const [allData, setAllData] = useState<MonthData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [expandedPhase, setExpandedPhase] = useState<string | null>(null);
+  const [collapsedPhases, setCollapsedPhases] = useState<Set<string>>(new Set());
 
   // Track which month we're loading next
   const [nextMonth, setNextMonth] = useState(1);
@@ -324,12 +324,12 @@ export default function MateriasDashboardPage() {
             </div>
           </div>
 
-          {/* Phases Grid */}
+          {/* Phases List */}
           <h2 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>📊 Fases Atuais</h2>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '1rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {sortedPhases.map((group) => {
-              const isExpanded = expandedPhase === group.phase.id;
+              const isCollapsed = collapsedPhases.has(group.phase.id);
               const color = PHASE_COLORS[group.phase.id] || '#64748b';
               const icon = PHASE_ICONS[group.phase.id] || '📋';
 
@@ -338,81 +338,94 @@ export default function MateriasDashboardPage() {
                   key={group.phase.id}
                   style={{
                     background: 'var(--bg-secondary)',
-                    border: isExpanded ? `2px solid ${color}` : '1px solid var(--border)',
+                    border: `1px solid var(--border)`,
+                    borderLeft: `4px solid ${color}`,
                     borderRadius: '1rem', overflow: 'hidden',
-                    transition: 'all 0.25s ease',
-                    boxShadow: isExpanded ? `0 4px 20px ${color}20` : 'none',
                   }}
                 >
+                  {/* Header */}
                   <div
-                    onClick={() => setExpandedPhase(isExpanded ? null : group.phase.id)}
+                    onClick={() => {
+                      setCollapsedPhases(prev => {
+                        const next = new Set(prev);
+                        if (next.has(group.phase.id)) next.delete(group.phase.id);
+                        else next.add(group.phase.id);
+                        return next;
+                      });
+                    }}
                     style={{
-                      padding: '1.25rem', cursor: 'pointer',
+                      padding: '1rem 1.25rem', cursor: 'pointer',
                       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                      background: isExpanded ? `${color}08` : 'transparent',
+                      background: `${color}08`,
                     }}
                   >
-                    <div>
-                      <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <span>{icon}</span> {group.phase.name}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <div style={{
+                        background: color, color: 'white', fontSize: '1rem', fontWeight: 800,
+                        minWidth: '36px', height: '36px', borderRadius: '50%',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        boxShadow: `0 2px 8px ${color}40`,
+                      }}>
+                        {group.processes.length}
                       </div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                        {group.phase.simple}
+                      <div>
+                        <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                          {icon} {group.phase.name}
+                        </div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                          {group.phase.simple}
+                        </div>
                       </div>
                     </div>
-                    <div style={{
-                      background: color, color: 'white', fontSize: '1.1rem', fontWeight: 800,
-                      minWidth: '38px', height: '38px', borderRadius: '50%',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      boxShadow: `0 2px 8px ${color}40`,
-                    }}>
-                      {group.processes.length}
-                    </div>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                      {isCollapsed ? '▶' : '▼'}
+                    </span>
                   </div>
 
-                  {isExpanded && (
-                    <div style={{ borderTop: '1px solid var(--border)', background: 'var(--bg-primary)', maxHeight: '400px', overflowY: 'auto' }}>
+                  {/* Process List — ALWAYS VISIBLE by default */}
+                  {!isCollapsed && (
+                    <div style={{ borderTop: '1px solid var(--border)', background: 'var(--bg-primary)' }}>
+                      {/* Table header */}
+                      <div style={{
+                        display: 'grid', gridTemplateColumns: '1fr 1fr auto',
+                        padding: '0.5rem 1.25rem', gap: '1rem',
+                        fontSize: '0.65rem', textTransform: 'uppercase', fontWeight: 700,
+                        color: 'var(--text-muted)', letterSpacing: '0.05em',
+                        borderBottom: '1px solid var(--border)',
+                      }}>
+                        <span>Reclamante</span>
+                        <span>Nº Processo</span>
+                        <span>Advogado</span>
+                      </div>
+
                       {group.processes.map((p, idx) => (
                         <div
                           key={idx}
                           style={{
-                            padding: '0.85rem 1.25rem',
+                            display: 'grid', gridTemplateColumns: '1fr 1fr auto',
+                            padding: '0.6rem 1.25rem', gap: '1rem', alignItems: 'center',
                             borderBottom: idx === group.processes.length - 1 ? 'none' : '1px solid var(--border)',
+                            fontSize: '0.85rem',
                           }}
                         >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.9rem' }}>
-                                {p.reclamante}
-                              </div>
-                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
-                                vs {p.reclamada}
-                              </div>
-                              <div style={{ fontSize: '0.7rem', color: color, fontFamily: 'monospace', marginTop: '0.3rem', fontWeight: 600 }}>
-                                {p.numeroProcesso}
-                              </div>
+                          <div>
+                            <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                              {p.reclamante}
                             </div>
-                            {p.advogado && (
-                              <div style={{
-                                fontSize: '0.7rem', color: 'var(--text-muted)',
-                                background: 'var(--bg-secondary)', padding: '0.25rem 0.6rem',
-                                borderRadius: '1rem', fontWeight: 600, whiteSpace: 'nowrap',
-                              }}>
-                                👤 {p.advogado}
-                              </div>
-                            )}
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                              vs {p.reclamada}
+                            </div>
                           </div>
-                          {p.lastMovementDesc && (
-                            <div style={{
-                              fontSize: '0.7rem', color: 'var(--text-secondary)',
-                              marginTop: '0.4rem', fontStyle: 'italic',
-                              display: 'flex', alignItems: 'center', gap: '0.3rem',
-                            }}>
-                              <span style={{ color }}>●</span>
-                              Última mov: {p.lastMovementDesc}
-                              {p.lastMovementDate && ` (${formatDate(p.lastMovementDate)})`}
-                            </div>
-                          )}
+                          <div style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: color, fontWeight: 600 }}>
+                            {p.numeroProcesso}
+                          </div>
+                          <div style={{
+                            fontSize: '0.7rem', color: 'var(--text-muted)',
+                            background: 'var(--bg-secondary)', padding: '0.2rem 0.5rem',
+                            borderRadius: '1rem', fontWeight: 600, whiteSpace: 'nowrap',
+                          }}>
+                            {p.advogado || '—'}
+                          </div>
                         </div>
                       ))}
                     </div>
