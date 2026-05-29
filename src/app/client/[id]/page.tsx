@@ -4,10 +4,11 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import EmailTimeline from '@/components/EmailTimeline';
 import FileList from '@/components/FileList';
+import MovementsTimeline from '@/components/MovementsTimeline';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import { Client, Email, DriveFile } from '@/types';
 
-type TabKey = 'emails' | 'files' | 'data';
+type TabKey = 'emails' | 'movements' | 'files' | 'data';
 
 function getStatusBadgeClass(status: string): string {
   const s = status.toLowerCase().trim();
@@ -46,6 +47,10 @@ export default function ClientDetailPage() {
   const [files, setFiles] = useState<DriveFile[]>([]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [hearings, setHearings] = useState<any[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [movements, setMovements] = useState<any>(null);
+  const [loadingMovements, setLoadingMovements] = useState(false);
+  const [movementsError, setMovementsError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>('emails');
   const [loadingClient, setLoadingClient] = useState(true);
   const [loadingEmails, setLoadingEmails] = useState(false);
@@ -137,6 +142,36 @@ export default function ClientDetailPage() {
     fetchData();
   }, [client?.id]);
 
+  // Fetch movements from DataJud when tab is activated
+  useEffect(() => {
+    if (activeTab !== 'movements' || !client) return;
+    // Only fetch if we have a process number and haven't loaded yet
+    const processNum = client.numeroProcesso;
+    if (!processNum || processNum.trim() === '' || movements) return;
+
+    async function fetchMovements() {
+      setLoadingMovements(true);
+      setMovementsError(null);
+      try {
+        const res = await fetch(
+          `/api/movements?processNumber=${encodeURIComponent(processNum!)}`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setMovements(data);
+        } else {
+          const err = await res.json();
+          setMovementsError(err.error || 'Erro ao consultar DataJud');
+        }
+      } catch {
+        setMovementsError('Erro de conexão com DataJud');
+      } finally {
+        setLoadingMovements(false);
+      }
+    }
+    fetchMovements();
+  }, [activeTab, client?.id]);
+
   if (loadingClient) {
     return (
       <div className="detail-page">
@@ -175,6 +210,7 @@ export default function ClientDetailPage() {
 
   const tabs: { key: TabKey; label: string }[] = [
     { key: 'emails', label: 'Andamento Processual' },
+    { key: 'movements', label: '🏛️ Movimentações (CNJ)' },
     { key: 'files', label: 'Documentos' },
     { key: 'data', label: 'Dados do Cliente' },
   ];
@@ -296,6 +332,36 @@ export default function ClientDetailPage() {
             </div>
           ) : (
             <FileList files={files} />
+          )
+        )}
+
+        {activeTab === 'movements' && (
+          client?.numeroProcesso ? (
+            <MovementsTimeline
+              movements={movements?.movements || []}
+              materiasSummary={movements?.materiasSummary || []}
+              tribunal={movements?.tribunal || ''}
+              classe={movements?.classe || ''}
+              assunto={movements?.assunto || ''}
+              orgaoJulgador={movements?.orgaoJulgador || ''}
+              totalMovements={movements?.totalMovements || 0}
+              loading={loadingMovements}
+              error={movementsError}
+            />
+          ) : (
+            <div style={{
+              background: 'rgba(59, 130, 246, 0.08)',
+              border: '1px solid rgba(59, 130, 246, 0.2)',
+              borderRadius: '0.75rem', padding: '2rem', textAlign: 'center',
+            }}>
+              <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📭</div>
+              <div style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
+                Número de processo não encontrado
+              </div>
+              <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '0.25rem' }}>
+                O processo precisa ter um número para consultar movimentações no DataJud.
+              </div>
+            </div>
           )
         )}
 
