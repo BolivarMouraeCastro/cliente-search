@@ -121,15 +121,49 @@ export async function GET(request: NextRequest) {
         const isBolivar = currentStatus === 'BOLIVAR';
 
         // ═══════════════════════════════════════════════════════════════
-        // PROTEÇÃO BOLIVAR: Clientes com status BOLIVAR são NOVOS e
-        // ainda não foram distribuídos na justiça. Os e-mails encontrados
-        // no Gmail pertencem a processos ANTIGOS do mesmo cliente.
-        // NÃO salvar número de processo NEM atualizar status.
+        // PROTEÇÃO BOLIVAR INTELIGENTE:
+        // - Se BOLIVAR e encontrou número de processo com ano compatível
+        //   com a data de entrada → processo foi distribuído! Atualizar.
+        // - Se BOLIVAR e NÃO encontrou número compatível → e-mails são
+        //   de processos antigos, NÃO atualizar.
         // ═══════════════════════════════════════════════════════════════
-        if (!isBolivar) {
+        let shouldProcess = !isBolivar;
+
+        if (isBolivar && entrada) {
+          // Verificar se algum e-mail tem número de processo com ano compatível
+          const parsedEntrada = parseEntradaDate(entrada);
+          if (parsedEntrada) {
+            const entradaYear = parsedEntrada.getFullYear();
+            const validProcessEmail = emails.find((e) => {
+              if (!e.processNumber || e.processNumber.trim() === '') return false;
+              const yearMatch = e.processNumber.match(/\.(\d{4})\./);
+              if (!yearMatch) return false;
+              const processYear = parseInt(yearMatch[1], 10);
+              return Math.abs(entradaYear - processYear) <= 2;
+            });
+
+            if (validProcessEmail) {
+              console.log(`BOLIVAR client ${clientName} has valid process ${validProcessEmail.processNumber} (year matches entry). Allowing update.`);
+              shouldProcess = true;
+            }
+          }
+        }
+
+        if (shouldProcess) {
           // --- Auto-salvar número do processo se ainda não armazenado ---
           if (!client.numeroProcesso || client.numeroProcesso.trim() === '') {
-            const emailWithProcess = emails.find((e) => e.processNumber && e.processNumber.trim() !== '');
+            // Para BOLIVAR, só salvar se o ano do processo é compatível
+            const emailWithProcess = emails.find((e) => {
+              if (!e.processNumber || e.processNumber.trim() === '') return false;
+              if (!entrada) return true;
+              const parsedEntrada = parseEntradaDate(entrada);
+              if (!parsedEntrada) return true;
+              const yearMatch = e.processNumber.match(/\.(\d{4})\./);
+              if (!yearMatch) return true;
+              const processYear = parseInt(yearMatch[1], 10);
+              return Math.abs(parsedEntrada.getFullYear() - processYear) <= 2;
+            });
+
             if (emailWithProcess?.processNumber) {
               const saved = await writeProcessNumber(
                 session.accessToken,
@@ -165,7 +199,7 @@ export async function GET(request: NextRequest) {
             // --- Atualização normal baseada em fase (somente se NÃO arquivado) ---
             const detectedStatus = detectCurrentPhase(emails);
             if (detectedStatus) {
-              if (currentStatus !== 'ARQUIVADO' && (isStatusAdvanced(currentStatus, detectedStatus) || !currentStatus)) {
+              if (currentStatus !== 'ARQUIVADO' && (isStatusAdvanced(currentStatus, detectedStatus) || !currentStatus || isBolivar)) {
                 const updated = await updateClientStatus(
                   session.accessToken,
                   SPREADSHEET_ID,
@@ -181,7 +215,7 @@ export async function GET(request: NextRequest) {
             }
           }
         } else {
-          console.log(`Skipping auto-detection for BOLIVAR client: ${clientName} (row ${clientId}) — new process, emails may belong to older cases`);
+          console.log(`Skipping auto-detection for BOLIVAR client: ${clientName} (row ${clientId}) — no valid current process found in emails`);
         }
       }
     }
