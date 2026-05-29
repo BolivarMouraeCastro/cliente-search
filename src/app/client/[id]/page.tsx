@@ -44,6 +44,8 @@ export default function ClientDetailPage() {
   const [client, setClient] = useState<Client | null>(null);
   const [emails, setEmails] = useState<Email[]>([]);
   const [files, setFiles] = useState<DriveFile[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [hearings, setHearings] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>('emails');
   const [loadingClient, setLoadingClient] = useState(true);
   const [loadingEmails, setLoadingEmails] = useState(false);
@@ -103,6 +105,19 @@ export default function ClientDetailPage() {
           const data = await resFiles.json();
           filesData = data.files || [];
           setFiles(filesData);
+        }
+
+        // Fetch Hearings (from external spreadsheet)
+        try {
+          const resHearings = await fetch(
+            `/api/hearings?clientName=${encodeURIComponent(client!.nome)}${client!.numeroProcesso ? `&processNumber=${encodeURIComponent(client!.numeroProcesso)}` : ''}`
+          );
+          if (resHearings.ok) {
+            const hearingsData = await resHearings.json();
+            setHearings(hearingsData.hearings || []);
+          }
+        } catch {
+          setHearings([]);
         }
       } catch {
         setEmails([]);
@@ -263,7 +278,7 @@ export default function ClientDetailPage() {
               <LoadingSpinner size="md" />
             </div>
           ) : (
-            <EmailTimeline emails={emails} />
+            <EmailTimeline emails={emails} hearings={hearings} />
           )
         )}
 

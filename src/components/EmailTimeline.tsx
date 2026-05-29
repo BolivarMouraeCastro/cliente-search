@@ -3,8 +3,21 @@
 import { Email } from '@/types';
 import { ALL_PHASES, PHASE_MAP, classifyEmail, isTRTEmail, NEXT_PHASE, PHASE_EXPLANATIONS } from '@/lib/phases';
 
+interface HearingData {
+  dataAudiencia: string;
+  horario: string;
+  reclamante: string;
+  reclamada: string;
+  numeroProcesso: string;
+  orgaoJulgador: string;
+  tipoAudiencia: string;
+  advogado: string;
+  isFuture: boolean;
+}
+
 interface EmailTimelineProps {
   emails: Email[];
+  hearings?: HearingData[];
 }
 
 function formatDateBR(dateStr: string): string {
@@ -19,7 +32,7 @@ function formatDateBR(dateStr: string): string {
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
-export default function EmailTimeline({ emails }: EmailTimelineProps) {
+export default function EmailTimeline({ emails, hearings = [] }: EmailTimelineProps) {
   if (!emails || emails.length === 0) {
     return (
       <div className="empty-state">
@@ -153,92 +166,112 @@ export default function EmailTimeline({ emails }: EmailTimelineProps) {
         )}
       </div>
 
-      {/* ======= HEARING DETAILS CARD ======= */}
-      {hearingEmail && (hearingEmail.audienciaData || hearingEmail.audienciaHora || hearingEmail.audienciaOrgao) && (
-        <div style={{
-          background: hearingIsFuture
-            ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.04))'
-            : 'linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(16, 185, 129, 0.04))',
-          border: `1px solid ${hearingIsFuture ? 'rgba(245, 158, 11, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`,
-          borderRadius: '1rem',
-          padding: '1.25rem 1.5rem',
-          marginBottom: '1.5rem',
-        }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem',
-            fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em',
-            fontWeight: 700, color: hearingIsFuture ? '#f59e0b' : '#10b981',
-          }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-              <line x1="16" y1="2" x2="16" y2="6" />
-              <line x1="8" y1="2" x2="8" y2="6" />
-              <line x1="3" y1="10" x2="21" y2="10" />
-            </svg>
-            {hearingIsFuture ? '📅 Audiência Marcada' : '✅ Audiência Realizada'}
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem' }}>
-            {/* Data */}
-            {hearingEmail.audienciaData && (
-              <div>
-                <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>
-                  Data
-                </div>
-                <div style={{
-                  fontSize: '1.2rem', fontWeight: 900,
-                  color: hearingIsFuture ? '#f59e0b' : '#10b981',
-                }}>
-                  {hearingEmail.audienciaData}
-                </div>
-              </div>
-            )}
-
-            {/* Horário */}
-            {hearingEmail.audienciaHora && (
-              <div>
-                <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>
-                  Horário
-                </div>
-                <div style={{
-                  fontSize: '1.2rem', fontWeight: 900,
-                  color: hearingIsFuture ? '#f59e0b' : '#10b981',
-                }}>
-                  {hearingEmail.audienciaHora}
-                </div>
-              </div>
-            )}
-
-            {/* Órgão Julgador */}
-            {hearingEmail.audienciaOrgao && (
-              <div style={{ gridColumn: '1 / -1' }}>
-                <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>
-                  Órgão Julgador
-                </div>
-                <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                  {hearingEmail.audienciaOrgao}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {hearingIsFuture && (
-            <div style={{
-              marginTop: '1rem', padding: '0.6rem 0.75rem',
-              background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.2)',
-              borderRadius: '0.5rem', fontSize: '0.8rem', color: '#f59e0b', fontWeight: 600,
+      {/* ======= HEARINGS FROM SPREADSHEET ======= */}
+      {hearings.length > 0 && (
+        <div style={{ marginBottom: '1.5rem' }}>
+          {hearings.map((h, idx) => (
+            <div key={idx} style={{
+              background: h.isFuture
+                ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.04))'
+                : 'linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(16, 185, 129, 0.04))',
+              border: `1px solid ${h.isFuture ? 'rgba(245, 158, 11, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`,
+              borderRadius: '1rem',
+              padding: '1.25rem 1.5rem',
+              marginBottom: '0.75rem',
             }}>
-              ⚠️ O cliente DEVE comparecer! A ausência pode resultar em arquivamento do processo.
-            </div>
-          )}
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem',
+                fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em',
+                fontWeight: 700, color: h.isFuture ? '#f59e0b' : '#10b981',
+              }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                  <line x1="16" y1="2" x2="16" y2="6" />
+                  <line x1="8" y1="2" x2="8" y2="6" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
+                {h.isFuture ? '📅 Audiência Marcada' : '✅ Audiência Realizada'}
+                {h.tipoAudiencia && (
+                  <span style={{ fontSize: '0.6rem', padding: '0.1rem 0.4rem', borderRadius: '999px', background: 'rgba(255,255,255,0.1)', color: 'var(--text-secondary)' }}>
+                    {h.tipoAudiencia}
+                  </span>
+                )}
+              </div>
 
-          {!hearingIsFuture && (
-            <div style={{
-              marginTop: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)',
-            }}>
-              Esta audiência já foi realizada. O próximo passo é aguardar a sentença do juiz ou nova audiência de instrução.
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '1rem' }}>
+                {h.dataAudiencia && (
+                  <div>
+                    <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>
+                      Data
+                    </div>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 900, color: h.isFuture ? '#f59e0b' : '#10b981' }}>
+                      {h.dataAudiencia}
+                    </div>
+                  </div>
+                )}
+                {h.horario && (
+                  <div>
+                    <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>
+                      Horário
+                    </div>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 900, color: h.isFuture ? '#f59e0b' : '#10b981' }}>
+                      {h.horario}
+                    </div>
+                  </div>
+                )}
+                {h.orgaoJulgador && (
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>
+                      Órgão Julgador
+                    </div>
+                    <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      {h.orgaoJulgador}
+                    </div>
+                  </div>
+                )}
+                {h.advogado && (
+                  <div>
+                    <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>
+                      Advogado
+                    </div>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                      {h.advogado}
+                    </div>
+                  </div>
+                )}
+                {h.reclamada && (
+                  <div>
+                    <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>
+                      Reclamada
+                    </div>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                      {h.reclamada}
+                    </div>
+                  </div>
+                )}
+                {h.numeroProcesso && (
+                  <div>
+                    <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>
+                      Processo
+                    </div>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent-purple, #8b5cf6)', fontFamily: 'monospace' }}>
+                      {h.numeroProcesso}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {h.isFuture && (
+                <div style={{
+                  marginTop: '1rem', padding: '0.6rem 0.75rem',
+                  background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.2)',
+                  borderRadius: '0.5rem', fontSize: '0.8rem', color: '#f59e0b', fontWeight: 600,
+                }}>
+                  ⚠️ O cliente DEVE comparecer! A ausência pode resultar em arquivamento do processo.
+                </div>
+              )}
             </div>
-          )}
+          ))}
         </div>
       )}
 
