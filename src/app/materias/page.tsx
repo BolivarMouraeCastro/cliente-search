@@ -453,7 +453,7 @@ export default function MateriasDashboardPage() {
         }}>
           <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>🏛️</div>
           <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
-            Comece carregando Janeiro 2025
+            Comece carregando {MONTH_NAMES[nextMonth]} {nextYear}
           </div>
           <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
             Clique no botão acima para buscar os processos do primeiro mês. Depois vá avançando mês a mês.

@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
     const month = parseInt(searchParams.get('month') || '0', 10);
     const year = parseInt(searchParams.get('year') || '0', 10);
 
-    if (!month || !year || month < 1 || month > 12 || year < 2020) {
+    if (!month || !year || month < 1 || month > 12 || year < 2015) {
       return NextResponse.json(
         { error: 'Parâmetros inválidos. Use ?month=1&year=2025' },
         { status: 400 }
