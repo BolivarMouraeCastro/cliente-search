@@ -298,18 +298,22 @@ export async function getRecentUpdates(
  * Usado para auto-detecção e marcação de processos como ARQUIVADO.
  */
 const CLOSED_PROCESS_KEYWORDS = [
+  // Arquivamento real (fim do processo)
+  'arquivado definitivamente',
+  'arquivamento definitivo',
   'certidão de arquivamento',
   'certidao de arquivamento',
-  'trânsito em julgado',
-  'transito em julgado',
-  'extinção do processo',
-  'extincao do processo',
-  'processo extinto',
-  'arquivamento definitivo',
+  'processo arquivado',
   'baixa definitiva',
   'baixa dos autos',
   'encerramento do processo',
-  'processo arquivado',
+  // Extinção do processo
+  'extinção do processo',
+  'extincao do processo',
+  'processo extinto',
+  'declaro extinto o processo',
+  'julgo extinto',
+  'extingo o processo',
   // Acordo homologado (encerra o processo)
   'acordo homologado',
   'homologação de acordo',
@@ -319,13 +323,13 @@ const CLOSED_PROCESS_KEYWORDS = [
   'sentenca homologatoria',
   'homologo o acordo',
   'homologo para que produza',
-  'declaro extinto o processo',
-  'julgo extinto',
-  'extingo o processo',
   'cumprimento de acordo',
   'acordo judicial',
   'termo de conciliação',
   'termo de conciliacao',
+  // NOTA: "trânsito em julgado" NÃO está aqui porque
+  // no processo trabalhista ele abre a fase de EXECUÇÃO,
+  // não significa que o processo acabou.
 ];
 
 /**

@@ -113,7 +113,19 @@ export const ALL_PHASES: PhaseConfig[] = [
     name: 'Execução',
     simple: 'Fase de pagamento dos valores devidos',
     sheetStatus: 'EM EXECUÇÃO',
-    keywords: ['execução', 'execuç', 'penhora', 'alvará', 'cálculo de liquidação', 'liquidação', 'mandado de penhora', 'hasta pública', 'bloqueio'],
+    keywords: [
+      'execução', 'execuç', 'penhora', 'alvará',
+      'cálculo de liquidação', 'liquidação', 'mandado de penhora',
+      'hasta pública', 'bloqueio',
+      // Cálculos e impugnações
+      'planilha de cálculo', 'planilha de calculo',
+      'impugnação de cálculo', 'impugnacao de calculo',
+      'impugnação aos cálculos', 'impugnacao aos calculos',
+      'cálculos de liquidação', 'calculos de liquidacao',
+      'homologação de cálculo', 'homologacao de calculo',
+      'conta de liquidação', 'conta de liquidacao',
+      'manifestação sobre cálculos', 'manifestacao sobre calculos',
+    ],
     order: 10,
   },
 ];
