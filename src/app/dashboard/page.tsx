@@ -117,22 +117,97 @@ export default function DashboardPage() {
   const [iniciaisApplied, setIniciaisApplied] = useState(false);
   const [applyingIniciais, setApplyingIniciais] = useState(false);
 
-  // Fetch dashboard
+  // Extract fetchDashboard so we can call it after auto-sync
+  const fetchDashboardData = async () => {
+    setDashLoading(true);
+    try {
+      const res = await fetch('/api/dashboard');
+      if (res.ok) {
+        const data = await res.json();
+        setTotalClients(data.totalClients || 0);
+        setStatusData(data.statusDistribution || []);
+      }
+    } catch { /* ignore */ }
+    finally { setDashLoading(false); }
+  };
+
+  // Fetch dashboard on mount
   useEffect(() => {
-    async function fetchDashboard() {
-      setDashLoading(true);
+    fetchDashboardData();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-Sync States
+  const [autoSyncState, setAutoSyncState] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
+  const [autoSyncMessage, setAutoSyncMessage] = useState('');
+
+  // Auto-Sync Effect
+  useEffect(() => {
+    let isMounted = true;
+    async function runAutoSync() {
+      if (!isMounted) return;
+      setAutoSyncState('running');
+      setAutoSyncMessage('Verificando alterações no Drive...');
       try {
-        const res = await fetch('/api/dashboard');
-        if (res.ok) {
-          const data = await res.json();
-          setTotalClients(data.totalClients || 0);
-          setStatusData(data.statusDistribution || []);
+        let appliedCount = 0;
+        
+        // 1. Bolivar
+        const resBol = await fetch('/api/bolivar-sync');
+        if (resBol.ok) {
+          const bolData = await resBol.json();
+          if (bolData.missing && bolData.missing.length > 0) {
+            if (isMounted) setAutoSyncMessage(`Atualizando ${bolData.missing.length} processos Bolivar...`);
+            const updates = bolData.missing.map((m: any) => ({ row: m.row, newStatus: 'DISTRIBUIDO' }));
+            const postBol = await fetch('/api/bolivar-sync', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ updates })
+            });
+            if (postBol.ok) appliedCount += bolData.missing.length;
+          }
         }
-      } catch { /* ignore */ }
-      finally { setDashLoading(false); }
+
+        // 2. Iniciais
+        if (!isMounted) return;
+        const resIni = await fetch('/api/iniciais-sync');
+        if (resIni.ok) {
+          const iniData = await resIni.json();
+          if (iniData.needsUpdate && iniData.needsUpdate.length > 0) {
+            if (isMounted) setAutoSyncMessage(`Atualizando ${iniData.needsUpdate.length} processos de Iniciais...`);
+            const updates = iniData.needsUpdate.map((d: any) => ({ row: d.row }));
+            const postIni = await fetch('/api/iniciais-sync', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ updates })
+            });
+            if (postIni.ok) appliedCount += iniData.needsUpdate.length;
+          }
+        }
+
+        if (isMounted) {
+          setAutoSyncState('success');
+          setAutoSyncMessage(appliedCount > 0 
+            ? `Sincronização automática concluída! ${appliedCount} clientes atualizados na planilha.`
+            : 'Sincronização automática concluída! Planilha já estava 100% atualizada.');
+          
+          // Refresh dashboard if changes were made
+          if (appliedCount > 0) {
+            fetchDashboardData();
+          }
+          
+          // Hide success message after 5 seconds
+          setTimeout(() => {
+            if (isMounted) setAutoSyncState('idle');
+          }, 5000);
+        }
+      } catch (e) {
+        if (isMounted) {
+          setAutoSyncState('error');
+          setAutoSyncMessage('Erro na sincronização automática. Você pode tentar manualmente abaixo.');
+        }
+      }
     }
-    fetchDashboard();
-  }, []);
+    
+    // Start auto-sync slightly after mount to let the UI render first
+    const timer = setTimeout(runAutoSync, 1000);
+    return () => { isMounted = false; clearTimeout(timer); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
 
   // Fetch iniciais from Drive
   useEffect(() => {
@@ -178,9 +253,32 @@ export default function DashboardPage() {
           }}>
             📊 Dashboard Processual
           </h2>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0 0 1.5rem' }}>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0 0 1rem' }}>
             Dados em tempo real da planilha — os status são atualizados automaticamente conforme você consulta cada cliente
           </p>
+
+          {/* Auto-Sync Banner */}
+          {autoSyncState !== 'idle' && (
+            <div style={{
+              background: autoSyncState === 'running' ? 'rgba(59, 130, 246, 0.1)' : 
+                         autoSyncState === 'success' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+              border: `1px solid ${autoSyncState === 'running' ? 'rgba(59, 130, 246, 0.3)' : 
+                                  autoSyncState === 'success' ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+              borderRadius: '0.75rem', padding: '0.75rem 1rem', marginBottom: '1.5rem',
+              display: 'flex', alignItems: 'center', gap: '0.75rem',
+              color: autoSyncState === 'running' ? '#60a5fa' : 
+                     autoSyncState === 'success' ? '#4ade80' : '#f87171',
+              fontSize: '0.85rem', fontWeight: 600,
+              animation: 'fadeIn 0.3s ease-out'
+            }}>
+              {autoSyncState === 'running' && (
+                <div style={{ width: '16px', height: '16px', border: '2px solid #60a5fa', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+              )}
+              {autoSyncState === 'success' && '✨ '}
+              {autoSyncState === 'error' && '⚠️ '}
+              {autoSyncMessage}
+            </div>
+          )}
 
           {/* Stats Cards */}
           <div className="stats-grid">
