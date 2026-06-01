@@ -120,7 +120,12 @@ async function migrateRecursively(accessToken: string, sourceFolderId: string, t
   }
 
   // 4. Rename the old folder to mark as transferred
-  await renameFolder(accessToken, sourceFolderId, sourceFolderName);
+  try {
+    await renameFolder(accessToken, sourceFolderId, sourceFolderName);
+  } catch (err) {
+    console.warn('Could not rename folder due to permissions:', err);
+    // Continue even if rename fails, since copies were successful.
+  }
   return newFolderId;
 }
 
