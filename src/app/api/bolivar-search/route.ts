@@ -47,7 +47,9 @@ export async function GET(req: NextRequest) {
       q: driveQuery,
       fields: 'files(id, name, createdTime)',
       pageSize: '20',
-      orderBy: 'createdTime desc'
+      orderBy: 'createdTime desc',
+      supportsAllDrives: 'true',
+      includeItemsFromAllDrives: 'true'
     });
 
     const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {

@@ -12,7 +12,9 @@ async function findFolder(accessToken: string, nameContains: string, parentId: s
   const params = new URLSearchParams({
     q: driveQuery,
     fields: 'files(id, name)',
-    pageSize: '1'
+    pageSize: '1',
+    supportsAllDrives: 'true',
+    includeItemsFromAllDrives: 'true'
   });
 
   const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
@@ -52,7 +54,7 @@ export async function POST(req: NextRequest) {
     if (!urgentesId) return NextResponse.json({ error: 'Pasta CLIENTES URGENTES não encontrada' }, { status: 404 });
 
     // Step 4: Move the folder by changing its parents
-    const updateUrl = `https://www.googleapis.com/drive/v3/files/${folderId}?addParents=${urgentesId}&removeParents=${BOLIVAR_FOLDER_ID}`;
+    const updateUrl = `https://www.googleapis.com/drive/v3/files/${folderId}?addParents=${urgentesId}&removeParents=${BOLIVAR_FOLDER_ID}&supportsAllDrives=true`;
     
     const moveRes = await fetch(updateUrl, {
       method: 'PATCH',
