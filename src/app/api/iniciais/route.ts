@@ -148,19 +148,25 @@ export async function GET(_request: NextRequest) {
         const directChildren = childrenOf.get(sf.id) || [];
 
         // Detect divider/category folders (NOT clients — clients are INSIDE these)
-        // Matches: numbered (1.1, 2.2) OR known organizational names
+        // These are organizational folders that DIVIDE the work, not actual processes.
+        // Matches: numbered (1.1, 2.2) OR known organizational folder names
+        const DIVIDER_EXACT_NAMES = [
+          'r.i', 'r.i.', 'ri',
+        ];
         const DIVIDER_KEYWORDS = [
-          'processos antigos', 'clientes urgentes', 'r.i',
+          'processos antigos', 'clientes urgentes', 'clientes do escritório',
+          'clientes do escritorio', 'clientes perguntando',
           'prescrições', 'prescricoes', 'prescriçoes',
-          'clientes do escritório', 'clientes do escritorio',
-          'clientes perguntando', 'urgente',
+          'iniciais para fazer', 'correção', 'correcao', 'refazer',
         ];
         const isDividerFolder = (name: string) => {
           const trimmed = name.trim();
-          // Numbered: "1.1 R.I", "2. CORREÇÃO"
-          if (/^\d+[\.\-\)]/.test(trimmed)) return true;
-          // Known keywords
+          // Numbered: "1.1 R.I", "1. INICIAIS", "2) CORREÇÃO"
+          if (/^\d+[\.\-\)\s]/.test(trimmed)) return true;
           const lower = trimmed.toLowerCase();
+          // Exact name match (short names that could be false positives)
+          if (DIVIDER_EXACT_NAMES.includes(lower)) return true;
+          // Keyword match (longer, safe phrases)
           return DIVIDER_KEYWORDS.some(kw => lower.includes(kw));
         };
 
