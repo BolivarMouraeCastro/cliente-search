@@ -104,17 +104,37 @@ export async function GET(_request: NextRequest) {
     // Step 1: Read BOLIVAR Drive folder
     const bolivarItems = await listFolder(token, BOLIVAR_FOLDER_ID);
     const bolivarFolders = bolivarItems.filter(isFolder);
+    const bolivarFiles = bolivarItems.filter(f => !isFolder(f));
+
+    // Also check inside sub-folders (2 levels deep)
+    const allClientFolders: DriveFile[] = [];
+    const subFolderNames: string[] = [];
+
+    for (const folder of bolivarFolders) {
+      // Check if this is a sub-folder containing client folders
+      const children = await listFolder(token, folder.id);
+      const childFolders = children.filter(isFolder);
+
+      if (childFolders.length > 0) {
+        // This is a grouping folder — clients are inside
+        subFolderNames.push(folder.name);
+        allClientFolders.push(...childFolders);
+      } else {
+        // This IS a client folder directly
+        allClientFolders.push(folder);
+      }
+    }
+
+    // Combine: direct client folders + nested ones
+    // If no sub-folders found, use direct list
+    const clientFolders = allClientFolders.length > 0 ? allClientFolders : bolivarFolders;
 
     // If empty, return debug info
-    if (bolivarItems.length === 0) {
+    if (clientFolders.length === 0) {
       return NextResponse.json({
-        kept: [],
-        missing: [],
-        extraInDrive: [],
-        driveFolders: [],
-        totalSpreadsheet: 0,
-        totalDrive: 0,
-        debug: driveDebug || `Pasta "${folderMeta.name}" (${BOLIVAR_FOLDER_ID}) acessada com sucesso mas retornou 0 itens. Verifique se os processos estão DENTRO dessa pasta.`,
+        kept: [], missing: [], extraInDrive: [], driveFolders: [],
+        totalSpreadsheet: 0, totalDrive: 0,
+        debug: driveDebug || `Pasta "${folderMeta.name}" acessada. ${bolivarItems.length} itens (${bolivarFolders.length} pastas, ${bolivarFiles.length} arquivos). Nenhum processo encontrado.`,
       });
     }
 
@@ -128,7 +148,7 @@ export async function GET(_request: NextRequest) {
 
     for (const client of bolivarClients) {
       const row = parseInt(client.id, 10);
-      const found = bolivarFolders.some(f => namesMatch(client.nome, f.name));
+      const found = clientFolders.some(f => namesMatch(client.nome, f.name));
       if (found) {
         kept.push({ nome: client.nome, row });
       } else {
@@ -137,22 +157,29 @@ export async function GET(_request: NextRequest) {
     }
 
     const extraInDrive: string[] = [];
-    for (const folder of bolivarFolders) {
+    for (const folder of clientFolders) {
       const found = bolivarClients.some(c => namesMatch(c.nome, folder.name));
       if (!found) {
         extraInDrive.push(folder.name);
       }
     }
 
+    // Sample names for debugging
+    const sampleDrive = clientFolders.slice(0, 10).map(f => f.name);
+    const sampleSheet = bolivarClients.slice(0, 10).map(c => c.nome);
+
     return NextResponse.json({
       kept,
       missing,
       extraInDrive,
-      driveFolders: bolivarFolders.map(f => f.name),
+      driveFolders: clientFolders.map(f => f.name),
       totalSpreadsheet: bolivarClients.length,
-      totalDrive: bolivarFolders.length,
+      totalDrive: clientFolders.length,
       totalItems: bolivarItems.length,
-      debug: driveDebug || null,
+      subFolders: subFolderNames,
+      sampleDrive,
+      sampleSheet,
+      debug: driveDebug || `Pasta "${folderMeta.name}": ${bolivarItems.length} itens diretos, ${bolivarFolders.length} sub-pastas, ${clientFolders.length} pastas de clientes encontradas`,
     });
   } catch (err) {
     console.error('Bolivar sync error:', err);
