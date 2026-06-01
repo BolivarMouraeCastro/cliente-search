@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
     if (!moveRes.ok) {
       const err = await moveRes.text();
       console.error('Error moving folder:', err);
-      return NextResponse.json({ error: 'Erro ao mover a pasta no Google Drive' }, { status: 500 });
+      return NextResponse.json({ error: `Erro Google Drive: ${err}` }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, newParentId: urgentesId });
