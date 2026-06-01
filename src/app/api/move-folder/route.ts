@@ -29,6 +29,96 @@ async function findFolder(accessToken: string, nameContains: string, parentId: s
   return null;
 }
 
+async function getFolderInfo(accessToken: string, folderId: string) {
+  const params = new URLSearchParams({
+    fields: 'id, name',
+    supportsAllDrives: 'true'
+  });
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${folderId}?${params}`, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  if (!res.ok) return null;
+  return await res.json();
+}
+
+async function createFolder(accessToken: string, name: string, parentId: string) {
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files?supportsAllDrives=true`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      name,
+      parents: [parentId],
+      mimeType: 'application/vnd.google-apps.folder'
+    })
+  });
+  if (!res.ok) throw new Error('Failed to create folder: ' + await res.text());
+  const data = await res.json();
+  return data.id as string;
+}
+
+async function listItems(accessToken: string, folderId: string) {
+  const params = new URLSearchParams({
+    q: `'${folderId}' in parents and trashed = false`,
+    fields: 'files(id, name, mimeType)',
+    pageSize: '1000',
+    supportsAllDrives: 'true',
+    includeItemsFromAllDrives: 'true'
+  });
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  if (!res.ok) throw new Error('Failed to list files: ' + await res.text());
+  const data = await res.json();
+  return data.files || [];
+}
+
+async function moveItem(accessToken: string, fileId: string, oldParentId: string, newParentId: string) {
+  const updateUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?addParents=${newParentId}&removeParents=${oldParentId}&supportsAllDrives=true`;
+  const res = await fetch(updateUrl, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  if (!res.ok) throw new Error('Failed to move item: ' + await res.text());
+}
+
+async function trashItem(accessToken: string, fileId: string) {
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ trashed: true })
+  });
+  if (!res.ok) throw new Error('Failed to trash folder: ' + await res.text());
+}
+
+async function migrateRecursively(accessToken: string, sourceFolderId: string, targetParentId: string, sourceFolderName: string) {
+  // 1. Create a new folder in the destination
+  const newFolderId = await createFolder(accessToken, sourceFolderName, targetParentId);
+  
+  // 2. List items in the source folder
+  const items = await listItems(accessToken, sourceFolderId);
+
+  // 3. Loop and move/migrate
+  for (const item of items) {
+    if (item.mimeType === 'application/vnd.google-apps.folder') {
+      // It's a subfolder, we must recurse because we can't move folders!
+      await migrateRecursively(accessToken, item.id, newFolderId, item.name);
+    } else {
+      // It's a file, we can safely move it directly
+      await moveItem(accessToken, item.id, sourceFolderId, newFolderId);
+    }
+  }
+
+  // 4. Trash the old folder
+  await trashItem(accessToken, sourceFolderId);
+  return newFolderId;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -41,39 +131,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Falta o ID da pasta' }, { status: 400 });
     }
 
-    // Step 1: Find Alessandra's Folder
+    // Step 1: Find destination folder paths
     const alessandraId = await findFolder(session.accessToken, 'ALESSANDRA', INICIAIS_ROOT_FOLDER_ID);
     if (!alessandraId) return NextResponse.json({ error: 'Pasta ALESSANDRA não encontrada' }, { status: 404 });
 
-    // Step 2: Find "1.INICIAIS PARA FAZER" inside Alessandra
     const iniciaisFazerId = await findFolder(session.accessToken, 'INICIAIS PARA FAZER', alessandraId);
     if (!iniciaisFazerId) return NextResponse.json({ error: 'Pasta INICIAIS PARA FAZER não encontrada' }, { status: 404 });
 
-    // Step 3: Find "CLIENTES URGENTES" inside Iniciais Para Fazer
     const urgentesId = await findFolder(session.accessToken, 'URGENTES', iniciaisFazerId);
     if (!urgentesId) return NextResponse.json({ error: 'Pasta CLIENTES URGENTES não encontrada' }, { status: 404 });
 
-    // Step 4: Move the folder by changing its parents
-    const updateUrl = `https://www.googleapis.com/drive/v3/files/${folderId}?addParents=${urgentesId}&removeParents=${BOLIVAR_FOLDER_ID}&supportsAllDrives=true`;
-    
-    const moveRes = await fetch(updateUrl, {
-      method: 'PATCH',
-      headers: { 
-        Authorization: `Bearer ${session.accessToken}`,
-        'Content-Type': 'application/json'
-      }
-    });
+    // Step 2: Get the old folder's name
+    const folderInfo = await getFolderInfo(session.accessToken, folderId);
+    if (!folderInfo) return NextResponse.json({ error: 'Pasta original não encontrada' }, { status: 404 });
+    const folderName = folderInfo.name;
 
-    if (!moveRes.ok) {
-      const err = await moveRes.text();
-      console.error('Error moving folder:', err);
-      return NextResponse.json({ error: `Erro Google Drive: ${err}` }, { status: 500 });
-    }
+    // Step 3: Start safe migration!
+    const newParentId = await migrateRecursively(session.accessToken, folderId, urgentesId, folderName);
 
-    return NextResponse.json({ success: true, newParentId: urgentesId });
+    return NextResponse.json({ success: true, newParentId });
 
   } catch (error: any) {
-    console.error('Move error:', error);
-    return NextResponse.json({ error: 'Erro interno no servidor' }, { status: 500 });
+    console.error('Migration error:', error);
+    return NextResponse.json({ error: `Erro Google Drive: ${error.message}` }, { status: 500 });
   }
 }
