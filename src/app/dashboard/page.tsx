@@ -112,8 +112,8 @@ export default function DashboardPage() {
     notInSheet: { nome: string; lawyer: string }[]; totalDrive: number;
     totalLawyers: string[];
   } | null>(null);
-  const [iniciaisLoading, setIniciaisLoading] = useState(false);
-  const [iniciaisError, setIniciaisError] = useState<string | null>(null);
+  const [iniciaisSyncLoading, setIniciaisSyncLoading] = useState(false);
+  const [iniciaisSyncError, setIniciaisSyncError] = useState<string | null>(null);
   const [iniciaisApplied, setIniciaisApplied] = useState(false);
   const [applyingIniciais, setApplyingIniciais] = useState(false);
 
@@ -771,22 +771,22 @@ export default function DashboardPage() {
           Compara as pastas dos advogados (Alessandra, Eliton, Jamille, Jessé) com a planilha
         </p>
 
-        {!iniciaisData && !iniciaisLoading && (
+        {!iniciaisData && !iniciaisSyncLoading && (
           <button
             onClick={async () => {
-              setIniciaisLoading(true); setIniciaisError(null);
+              setIniciaisSyncLoading(true); setIniciaisSyncError(null);
               try {
                 const res = await fetch('/api/iniciais-sync');
                 if (res.ok) {
                   const data = await res.json();
                   setIniciaisData(data);
-                  if (data.error) setIniciaisError(data.error);
+                  if (data.error) setIniciaisSyncError(data.error);
                 } else {
                   const e = await res.json().catch(() => ({}));
-                  setIniciaisError(e.error || 'Erro');
+                  setIniciaisSyncError(e.error || 'Erro');
                 }
-              } catch { setIniciaisError('Erro de conexão'); }
-              finally { setIniciaisLoading(false); }
+              } catch { setIniciaisSyncError('Erro de conexão'); }
+              finally { setIniciaisSyncLoading(false); }
             }}
             style={{
               background: 'linear-gradient(135deg, #8B5CF6, #7C3AED)',
@@ -800,16 +800,16 @@ export default function DashboardPage() {
           </button>
         )}
 
-        {iniciaisLoading && (
+        {iniciaisSyncLoading && (
           <div className="shimmer" style={{ width: '100%', height: '150px', borderRadius: '1rem' }} />
         )}
 
-        {iniciaisError && (
+        {iniciaisSyncError && (
           <div style={{
             background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)',
             borderRadius: '0.75rem', padding: '1rem 1.25rem', color: '#fca5a5', fontSize: '0.85rem',
           }}>
-            ⚠️ {iniciaisError}
+            ⚠️ {iniciaisSyncError}
           </div>
         )}
 
@@ -900,8 +900,8 @@ export default function DashboardPage() {
                         body: JSON.stringify({ updates }),
                       });
                       if (res.ok) setIniciaisApplied(true);
-                      else { const e = await res.json().catch(() => ({})); setIniciaisError(e.error || 'Erro'); }
-                    } catch { setIniciaisError('Erro de conexão'); }
+                      else { const e = await res.json().catch(() => ({})); setIniciaisSyncError(e.error || 'Erro'); }
+                    } catch { setIniciaisSyncError('Erro de conexão'); }
                     finally { setApplyingIniciais(false); }
                   }}
                   style={{
