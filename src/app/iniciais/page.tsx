@@ -65,41 +65,189 @@ interface LawyerData {
 }
 
 export default function IniciaisPage() {
+  // Iniciais Stats
   const [lawyers, setLawyers] = useState<LawyerData[]>([]);
   const [totalIniciais, setTotalIniciais] = useState(0);
   const [iniciaisLoading, setIniciaisLoading] = useState(true);
   const [iniciaisError, setIniciaisError] = useState<string | null>(null);
   const [expandedLawyer, setExpandedLawyer] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function fetchIniciais() {
-      setIniciaisLoading(true);
-      setIniciaisError(null);
-      try {
-        const res = await fetch('/api/iniciais');
-        if (res.ok) {
-          const data = await res.json();
-          setLawyers(data.lawyers || []);
-          setTotalIniciais(data.totalGeral || 0);
-          if (data.debug && (!data.lawyers || data.lawyers.length === 0)) {
-            setIniciaisError(data.debug);
-          }
-        } else {
-          const errData = await res.json().catch(() => ({}));
-          setIniciaisError(errData.error || 'Erro ao carregar iniciais');
-        }
-      } catch {
-        setIniciaisError('Erro de conexão');
-      } finally {
-        setIniciaisLoading(false);
+  // Search in Bolivar
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  
+  // Move Folder
+  const [movingFolderId, setMovingFolderId] = useState<string | null>(null);
+  const [moveSuccess, setMoveSuccess] = useState<string | null>(null);
+
+  const handleSearch = async () => {
+    if (!searchQuery || searchQuery.length < 3) return;
+    setIsSearching(true);
+    setSearchError(null);
+    setMoveSuccess(null);
+    try {
+      const res = await fetch(`/api/bolivar-search?q=${encodeURIComponent(searchQuery)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSearchResults(data.results || []);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setSearchError(data.error || 'Erro ao buscar');
       }
+    } catch {
+      setSearchError('Erro de conexão');
+    } finally {
+      setIsSearching(false);
     }
+  };
+
+  const handleMoveFolder = async (folderId: string) => {
+    setMovingFolderId(folderId);
+    setSearchError(null);
+    try {
+      const res = await fetch('/api/move-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderId })
+      });
+      if (res.ok) {
+        setMoveSuccess('Processo movido com sucesso para ALESSANDRA > INICIAIS PARA FAZER > CLIENTES URGENTES!');
+        // Remove from results list
+        setSearchResults(prev => prev.filter(r => r.id !== folderId));
+        // Refresh iniciais data after 2 seconds to let Drive sync
+        setTimeout(() => fetchIniciais(), 2000);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setSearchError(data.error || 'Erro ao mover a pasta');
+      }
+    } catch {
+      setSearchError('Erro de conexão ao mover a pasta');
+    } finally {
+      setMovingFolderId(null);
+    }
+  };
+
+  const fetchIniciais = async () => {
+    setIniciaisLoading(true);
+    setIniciaisError(null);
+    try {
+      const res = await fetch('/api/iniciais');
+      if (res.ok) {
+        const data = await res.json();
+        setLawyers(data.lawyers || []);
+        setTotalIniciais(data.totalGeral || 0);
+        if (data.debug && (!data.lawyers || data.lawyers.length === 0)) {
+          setIniciaisError(data.debug);
+        }
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        setIniciaisError(errData.error || 'Erro ao carregar iniciais');
+      }
+    } catch {
+      setIniciaisError('Erro de conexão');
+    } finally {
+      setIniciaisLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchIniciais();
   }, []);
 
+
   return (
     <div className="detail-page" style={{ paddingTop: '1rem' }}>
-      <div style={{ marginTop: '1rem' }}>
+      {/* ===================== BOLIVAR SEARCH ===================== */}
+      <div style={{ marginBottom: '2.5rem' }}>
+        <h2 style={{
+          fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)',
+          margin: '0 0 0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem',
+        }}>
+          🔍 Buscar Cliente no Bolivar
+        </h2>
+        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0 0 1rem' }}>
+          Pesquise clientes que estão na pasta do Bolivar e clique para enviá-los para ALESSANDRA &gt; CLIENTES URGENTES.
+        </p>
+
+        <div style={{ display: 'flex', gap: '0.5rem', maxWidth: '600px', marginBottom: '1.5rem' }}>
+          <input 
+            type="text" 
+            placeholder="Nome do cliente..." 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+            style={{
+              flex: 1, padding: '0.75rem 1rem', borderRadius: '0.5rem',
+              border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)',
+              color: 'white', fontSize: '0.9rem'
+            }}
+          />
+          <button 
+            onClick={handleSearch}
+            disabled={isSearching || searchQuery.length < 3}
+            style={{
+              background: isSearching ? '#555' : 'linear-gradient(135deg, #3b82f6, #2563eb)',
+              color: 'white', fontWeight: 700, padding: '0 1.5rem', borderRadius: '0.5rem',
+              border: 'none', cursor: isSearching ? 'wait' : 'pointer'
+            }}
+          >
+            {isSearching ? 'Buscando...' : 'Buscar'}
+          </button>
+        </div>
+
+        {searchError && (
+          <div style={{
+            background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)',
+            borderRadius: '0.5rem', padding: '0.75rem 1rem', color: '#fca5a5', fontSize: '0.85rem',
+            marginBottom: '1rem', maxWidth: '600px'
+          }}>⚠️ {searchError}</div>
+        )}
+
+        {moveSuccess && (
+          <div style={{
+            background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)',
+            borderRadius: '0.5rem', padding: '0.75rem 1rem', color: '#86efac', fontSize: '0.85rem',
+            marginBottom: '1rem', maxWidth: '600px'
+          }}>✅ {moveSuccess}</div>
+        )}
+
+        {/* Search Results */}
+        {searchResults.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: '800px' }}>
+            {searchResults.map((res) => (
+              <div key={res.id} style={{
+                background: 'rgba(14, 14, 20, 0.5)', border: '1px solid rgba(59, 130, 246, 0.2)',
+                borderRadius: '0.75rem', padding: '1rem 1.25rem',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+              }}>
+                <div>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)' }}>{res.cliente}</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', gap: '1rem', marginTop: '0.25rem' }}>
+                    {res.empresa && <span>🏢 {res.empresa}</span>}
+                    {res.prescricao && <span style={{ color: '#f59e0b' }}>⚠️ Prescrição: {res.prescricao}</span>}
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleMoveFolder(res.id)}
+                  disabled={movingFolderId === res.id}
+                  style={{
+                    background: movingFolderId === res.id ? '#555' : 'linear-gradient(135deg, #10b981, #059669)',
+                    color: 'white', fontWeight: 700, padding: '0.6rem 1rem', borderRadius: '0.5rem',
+                    border: 'none', cursor: movingFolderId === res.id ? 'wait' : 'pointer',
+                    fontSize: '0.85rem'
+                  }}
+                >
+                  {movingFolderId === res.id ? '⏳ Movendo...' : '📤 COLOCAR PARA FAZER'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '2.5rem' }}>
         <h2 style={{
           fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)',
           margin: '0 0 0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem',
