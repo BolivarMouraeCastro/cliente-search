@@ -147,14 +147,28 @@ export async function GET(_request: NextRequest) {
         const items: { name: string; id: string }[] = [];
         const directChildren = childrenOf.get(sf.id) || [];
 
-        // Detect sub-categories by numbering pattern: "1.1 R.I", "2.2 Prescrições", etc.
-        const isSubCategory = (name: string) => /^\d+[\.\-]/.test(name.trim());
+        // Detect divider/category folders (NOT clients — clients are INSIDE these)
+        // Matches: numbered (1.1, 2.2) OR known organizational names
+        const DIVIDER_KEYWORDS = [
+          'processos antigos', 'clientes urgentes', 'r.i',
+          'prescrições', 'prescricoes', 'prescriçoes',
+          'clientes do escritório', 'clientes do escritorio',
+          'clientes perguntando', 'urgente',
+        ];
+        const isDividerFolder = (name: string) => {
+          const trimmed = name.trim();
+          // Numbered: "1.1 R.I", "2. CORREÇÃO"
+          if (/^\d+[\.\-\)]/.test(trimmed)) return true;
+          // Known keywords
+          const lower = trimmed.toLowerCase();
+          return DIVIDER_KEYWORDS.some(kw => lower.includes(kw));
+        };
 
         for (const child of directChildren) {
           if (!isFolder(child)) continue; // Skip files
 
-          if (isSubCategory(child.name)) {
-            // This is a numbered sub-category — count its direct FOLDER children as clients
+          if (isDividerFolder(child.name)) {
+            // Divider folder — the REAL clients are the folders inside it
             const subItems = (childrenOf.get(child.id) || []).filter(isFolder);
             for (const sub of subItems) {
               items.push({ name: sub.name, id: sub.id });
