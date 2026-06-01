@@ -14,6 +14,8 @@ interface DriveFile {
   mimeType: string;
 }
 
+let driveDebug = '';
+
 async function listFolder(token: string, folderId: string): Promise<DriveFile[]> {
   const all: DriveFile[] = [];
   let pageToken: string | undefined;
@@ -22,6 +24,8 @@ async function listFolder(token: string, folderId: string): Promise<DriveFile[]>
       q: `'${folderId}' in parents and trashed = false`,
       fields: 'nextPageToken, files(id, name, mimeType)',
       pageSize: '1000',
+      supportsAllDrives: 'true',
+      includeItemsFromAllDrives: 'true',
     });
     if (pageToken) params.set('pageToken', pageToken);
     try {
@@ -29,11 +33,19 @@ async function listFolder(token: string, folderId: string): Promise<DriveFile[]>
         headers: { Authorization: `Bearer ${token}` },
         signal: AbortSignal.timeout(8000),
       });
-      if (!res.ok) return all;
+      if (!res.ok) {
+        const errText = await res.text();
+        driveDebug = `Drive API ${res.status}: ${errText}`;
+        console.error('Drive error:', driveDebug);
+        return all;
+      }
       const data = await res.json();
       all.push(...(data.files || []));
       pageToken = data.nextPageToken;
-    } catch { return all; }
+    } catch (e) {
+      driveDebug = `Fetch error: ${e instanceof Error ? e.message : String(e)}`;
+      return all;
+    }
   } while (pageToken);
   return all;
 }
@@ -54,9 +66,7 @@ function namesMatch(sheetName: string, driveName: string): boolean {
   const a = normalize(sheetName);
   const b = normalize(driveName);
   if (!a || !b) return false;
-  // Direct contains
   if (a.includes(b) || b.includes(a)) return true;
-  // First + last name match
   const partsA = a.split(' ');
   const partsB = b.split(' ');
   if (partsA.length >= 2 && partsB.length >= 2) {
@@ -74,23 +84,36 @@ export async function GET(_request: NextRequest) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
     }
     const token = session.accessToken;
+    driveDebug = '';
 
-    // Step 1: Read BOLIVAR Drive folder (just folders = clients)
+    // Step 1: Read BOLIVAR Drive folder — include ALL items (not just folders)
     const bolivarItems = await listFolder(token, BOLIVAR_FOLDER_ID);
     const bolivarFolders = bolivarItems.filter(isFolder);
+
+    // If empty, return debug info
+    if (bolivarItems.length === 0) {
+      return NextResponse.json({
+        kept: [],
+        missing: [],
+        extraInDrive: [],
+        driveFolders: [],
+        totalSpreadsheet: 0,
+        totalDrive: 0,
+        debug: driveDebug || `Pasta ${BOLIVAR_FOLDER_ID} retornou 0 itens. A conta logada pode não ter acesso. Compartilhe a pasta com a conta do Google que você usa para logar no app.`,
+      });
+    }
 
     // Step 2: Read spreadsheet
     const clients = await getClients(token, SPREADSHEET_ID);
     const bolivarClients = clients.filter(c => normalize(c.status) === 'bolivar');
 
-    // Step 3: Compare — who is in spreadsheet but NOT in Drive?
+    // Step 3: Compare
     const kept: { nome: string; row: number }[] = [];
     const missing: { nome: string; row: number }[] = [];
 
     for (const client of bolivarClients) {
       const row = parseInt(client.id, 10);
       const found = bolivarFolders.some(f => namesMatch(client.nome, f.name));
-
       if (found) {
         kept.push({ nome: client.nome, row });
       } else {
@@ -98,7 +121,6 @@ export async function GET(_request: NextRequest) {
       }
     }
 
-    // Also find folders in Drive that are NOT in the spreadsheet
     const extraInDrive: string[] = [];
     for (const folder of bolivarFolders) {
       const found = bolivarClients.some(c => namesMatch(c.nome, folder.name));
@@ -114,6 +136,8 @@ export async function GET(_request: NextRequest) {
       driveFolders: bolivarFolders.map(f => f.name),
       totalSpreadsheet: bolivarClients.length,
       totalDrive: bolivarFolders.length,
+      totalItems: bolivarItems.length,
+      debug: driveDebug || null,
     });
   } catch (err) {
     console.error('Bolivar sync error:', err);

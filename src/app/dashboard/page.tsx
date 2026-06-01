@@ -589,7 +589,11 @@ export default function DashboardPage() {
               setSyncLoading(true); setSyncError(null);
               try {
                 const res = await fetch('/api/bolivar-sync');
-                if (res.ok) setSyncData(await res.json());
+                if (res.ok) {
+                  const data = await res.json();
+                  setSyncData(data);
+                  if (data.debug) setSyncError(data.debug);
+                }
                 else { const e = await res.json().catch(() => ({})); setSyncError(e.error || 'Erro'); }
               } catch { setSyncError('Erro de conexão'); }
               finally { setSyncLoading(false); }
