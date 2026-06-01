@@ -75,25 +75,30 @@ async function listItems(accessToken: string, folderId: string) {
   return data.files || [];
 }
 
-async function moveItem(accessToken: string, fileId: string, oldParentId: string, newParentId: string) {
-  const updateUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?addParents=${newParentId}&removeParents=${oldParentId}&supportsAllDrives=true`;
-  const res = await fetch(updateUrl, {
-    method: 'PATCH',
-    headers: { Authorization: `Bearer ${accessToken}` }
+async function copyItem(accessToken: string, fileId: string, newParentId: string) {
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/copy?supportsAllDrives=true`, {
+    method: 'POST',
+    headers: { 
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      parents: [newParentId]
+    })
   });
-  if (!res.ok) throw new Error('Failed to move item: ' + await res.text());
+  if (!res.ok) throw new Error('Failed to copy item: ' + await res.text());
 }
 
-async function trashItem(accessToken: string, fileId: string) {
-  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true`, {
+async function renameFolder(accessToken: string, folderId: string, oldName: string) {
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${folderId}?supportsAllDrives=true`, {
     method: 'PATCH',
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ trashed: true })
+    body: JSON.stringify({ name: `[MOVIDO] ${oldName}` })
   });
-  if (!res.ok) throw new Error('Failed to trash folder: ' + await res.text());
+  if (!res.ok) throw new Error('Failed to rename folder: ' + await res.text());
 }
 
 async function migrateRecursively(accessToken: string, sourceFolderId: string, targetParentId: string, sourceFolderName: string) {
@@ -103,19 +108,19 @@ async function migrateRecursively(accessToken: string, sourceFolderId: string, t
   // 2. List items in the source folder
   const items = await listItems(accessToken, sourceFolderId);
 
-  // 3. Loop and move/migrate
+  // 3. Loop and copy
   for (const item of items) {
     if (item.mimeType === 'application/vnd.google-apps.folder') {
-      // It's a subfolder, we must recurse because we can't move folders!
+      // Recurse subfolders
       await migrateRecursively(accessToken, item.id, newFolderId, item.name);
     } else {
-      // It's a file, we can safely move it directly
-      await moveItem(accessToken, item.id, sourceFolderId, newFolderId);
+      // Copy file
+      await copyItem(accessToken, item.id, newFolderId);
     }
   }
 
-  // 4. Trash the old folder
-  await trashItem(accessToken, sourceFolderId);
+  // 4. Rename the old folder to mark as transferred
+  await renameFolder(accessToken, sourceFolderId, sourceFolderName);
   return newFolderId;
 }
 

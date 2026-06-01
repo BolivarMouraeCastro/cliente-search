@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
 
     // Escape single quotes for Google Drive query
     const safeQuery = query.replace(/'/g, "\\'");
-    const driveQuery = `'${BOLIVAR_FOLDER_ID}' in parents and name contains '${safeQuery}' and trashed = false and mimeType = 'application/vnd.google-apps.folder'`;
+    const driveQuery = `'${BOLIVAR_FOLDER_ID}' in parents and name contains '${safeQuery}' and not name contains '[MOVIDO]' and trashed = false and mimeType = 'application/vnd.google-apps.folder'`;
 
     const params = new URLSearchParams({
       q: driveQuery,

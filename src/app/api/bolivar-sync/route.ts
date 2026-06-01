@@ -21,7 +21,7 @@ async function listFolder(token: string, folderId: string): Promise<DriveFile[]>
   let pageToken: string | undefined;
   do {
     const params = new URLSearchParams({
-      q: `'${folderId}' in parents and trashed = false`,
+      q: `'${folderId}' in parents and not name contains '[MOVIDO]' and trashed = false`,
       fields: 'nextPageToken, files(id, name, mimeType)',
       pageSize: '1000',
       supportsAllDrives: 'true',
