@@ -105,6 +105,18 @@ export default function DashboardPage() {
   const [syncApplied, setSyncApplied] = useState(false);
   const [applyingSync, setApplyingSync] = useState(false);
 
+  // Iniciais Sync (FAZER INICIAL)
+  interface IniciaisItem { nome: string; lawyer: string; row: number; currentStatus: string }
+  const [iniciaisData, setIniciaisData] = useState<{
+    needsUpdate: IniciaisItem[]; alreadyCorrect: { nome: string; row: number }[];
+    notInSheet: { nome: string; lawyer: string }[]; totalDrive: number;
+    totalLawyers: string[];
+  } | null>(null);
+  const [iniciaisLoading, setIniciaisLoading] = useState(false);
+  const [iniciaisError, setIniciaisError] = useState<string | null>(null);
+  const [iniciaisApplied, setIniciaisApplied] = useState(false);
+  const [applyingIniciais, setApplyingIniciais] = useState(false);
+
   // Fetch dashboard
   useEffect(() => {
     async function fetchDashboard() {
@@ -736,6 +748,186 @@ export default function DashboardPage() {
             )}
 
             {syncApplied && (
+              <div style={{
+                background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)',
+                borderRadius: '0.75rem', padding: '1rem', color: '#86efac', fontSize: '0.85rem',
+              }}>
+                ✅ Planilha atualizada! Recarregue o Dashboard para ver os novos números.
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ====================== INICIAIS SYNC ========================= */}
+      <div style={{ marginTop: '2.5rem' }}>
+        <h2 style={{
+          fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)',
+          margin: '0 0 0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem',
+        }}>
+          📋 Sincronização FAZER INICIAL
+        </h2>
+        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0 0 1rem' }}>
+          Compara as pastas dos advogados (Alessandra, Eliton, Jamille, Jessé) com a planilha
+        </p>
+
+        {!iniciaisData && !iniciaisLoading && (
+          <button
+            onClick={async () => {
+              setIniciaisLoading(true); setIniciaisError(null);
+              try {
+                const res = await fetch('/api/iniciais-sync');
+                if (res.ok) {
+                  const data = await res.json();
+                  setIniciaisData(data);
+                  if (data.error) setIniciaisError(data.error);
+                } else {
+                  const e = await res.json().catch(() => ({}));
+                  setIniciaisError(e.error || 'Erro');
+                }
+              } catch { setIniciaisError('Erro de conexão'); }
+              finally { setIniciaisLoading(false); }
+            }}
+            style={{
+              background: 'linear-gradient(135deg, #8B5CF6, #7C3AED)',
+              color: '#fff', fontWeight: 700, fontSize: '0.9rem',
+              padding: '0.75rem 1.5rem', borderRadius: '0.75rem',
+              border: 'none', cursor: 'pointer',
+              boxShadow: '0 4px 16px rgba(139, 92, 246, 0.3)',
+            }}
+          >
+            🔍 Analisar Diferenças (FAZER INICIAL)
+          </button>
+        )}
+
+        {iniciaisLoading && (
+          <div className="shimmer" style={{ width: '100%', height: '150px', borderRadius: '1rem' }} />
+        )}
+
+        {iniciaisError && (
+          <div style={{
+            background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)',
+            borderRadius: '0.75rem', padding: '1rem 1.25rem', color: '#fca5a5', fontSize: '0.85rem',
+          }}>
+            ⚠️ {iniciaisError}
+          </div>
+        )}
+
+        {iniciaisData && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {/* Summary Cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.75rem' }}>
+              <div style={{
+                background: 'rgba(14, 14, 20, 0.5)', backdropFilter: 'blur(30px)',
+                border: '1px solid rgba(34, 197, 94, 0.2)', borderRadius: '0.75rem',
+                padding: '1rem', textAlign: 'center',
+              }}>
+                <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#22c55e' }}>{iniciaisData.alreadyCorrect.length}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>✅ Já estão FAZER INICIAL</div>
+              </div>
+              <div style={{
+                background: 'rgba(14, 14, 20, 0.5)', backdropFilter: 'blur(30px)',
+                border: '1px solid rgba(139, 92, 246, 0.2)', borderRadius: '0.75rem',
+                padding: '1rem', textAlign: 'center',
+              }}>
+                <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#8B5CF6' }}>{iniciaisData.needsUpdate.length}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>📝 Precisam atualizar</div>
+              </div>
+              {iniciaisData.notInSheet.length > 0 && (
+                <div style={{
+                  background: 'rgba(14, 14, 20, 0.5)', backdropFilter: 'blur(30px)',
+                  border: '1px solid rgba(245, 158, 11, 0.2)', borderRadius: '0.75rem',
+                  padding: '1rem', textAlign: 'center',
+                }}>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#f59e0b' }}>{iniciaisData.notInSheet.length}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>⚠️ Não encontrados na planilha</div>
+                </div>
+              )}
+            </div>
+
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              Drive: {iniciaisData.totalDrive} processos com advogados ({iniciaisData.totalLawyers.join(', ')})
+            </div>
+
+            {/* Needs update list */}
+            {iniciaisData.needsUpdate.length > 0 && (
+              <div style={{
+                background: 'rgba(14, 14, 20, 0.4)', borderRadius: '0.75rem',
+                border: '1px solid rgba(139, 92, 246, 0.15)', padding: '1rem',
+                maxHeight: '300px', overflowY: 'auto',
+              }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#8B5CF6', marginBottom: '0.5rem' }}>
+                  📝 Serão atualizados para FAZER INICIAL (status atual diferente):
+                </div>
+                {iniciaisData.needsUpdate.map((d, i) => (
+                  <div key={i} style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', padding: '0.25rem 0' }}>
+                    • {d.nome} <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>({d.lawyer} | atual: {d.currentStatus} | linha {d.row})</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Not in sheet */}
+            {iniciaisData.notInSheet.length > 0 && (
+              <div style={{
+                background: 'rgba(14, 14, 20, 0.4)', borderRadius: '0.75rem',
+                border: '1px solid rgba(245, 158, 11, 0.15)', padding: '1rem',
+                maxHeight: '200px', overflowY: 'auto',
+              }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#f59e0b', marginBottom: '0.5rem' }}>
+                  ⚠️ No Drive mas não encontrados na planilha:
+                </div>
+                {iniciaisData.notInSheet.map((d, i) => (
+                  <div key={i} style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', padding: '0.25rem 0' }}>
+                    • {d.nome} <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>({d.lawyer})</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Apply button */}
+            {!iniciaisApplied && iniciaisData.needsUpdate.length > 0 && (
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+                <button
+                  disabled={applyingIniciais}
+                  onClick={async () => {
+                    setApplyingIniciais(true);
+                    try {
+                      const updates = iniciaisData.needsUpdate.map(d => ({ row: d.row }));
+                      const res = await fetch('/api/iniciais-sync', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ updates }),
+                      });
+                      if (res.ok) setIniciaisApplied(true);
+                      else { const e = await res.json().catch(() => ({})); setIniciaisError(e.error || 'Erro'); }
+                    } catch { setIniciaisError('Erro de conexão'); }
+                    finally { setApplyingIniciais(false); }
+                  }}
+                  style={{
+                    background: applyingIniciais ? '#555' : 'linear-gradient(135deg, #8B5CF6, #7C3AED)',
+                    color: 'white', fontWeight: 700, fontSize: '0.85rem',
+                    padding: '0.6rem 1.25rem', borderRadius: '0.6rem',
+                    border: 'none', cursor: applyingIniciais ? 'wait' : 'pointer',
+                  }}
+                >
+                  {applyingIniciais ? '⏳ Aplicando...' : `✅ Marcar ${iniciaisData.needsUpdate.length} como FAZER INICIAL`}
+                </button>
+                <button
+                  onClick={() => { setIniciaisData(null); setIniciaisApplied(false); }}
+                  style={{
+                    background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)',
+                    fontWeight: 600, fontSize: '0.85rem',
+                    padding: '0.6rem 1.25rem', borderRadius: '0.6rem',
+                    border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer',
+                  }}
+                >
+                  ❌ Cancelar
+                </button>
+              </div>
+            )}
+
+            {iniciaisApplied && (
               <div style={{
                 background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)',
                 borderRadius: '0.75rem', padding: '1rem', color: '#86efac', fontSize: '0.85rem',
