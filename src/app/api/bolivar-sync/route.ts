@@ -86,7 +86,22 @@ export async function GET(_request: NextRequest) {
     const token = session.accessToken;
     driveDebug = '';
 
-    // Step 1: Read BOLIVAR Drive folder — include ALL items (not just folders)
+    // Step 0: Verify folder is accessible
+    const metaRes = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${BOLIVAR_FOLDER_ID}?fields=id,name,mimeType&supportsAllDrives=true`,
+      { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5000) }
+    );
+    if (!metaRes.ok) {
+      const errText = await metaRes.text();
+      return NextResponse.json({
+        kept: [], missing: [], extraInDrive: [], driveFolders: [],
+        totalSpreadsheet: 0, totalDrive: 0,
+        debug: `Não foi possível acessar a pasta (${metaRes.status}): ${errText}. ID: ${BOLIVAR_FOLDER_ID}`,
+      });
+    }
+    const folderMeta = await metaRes.json();
+
+    // Step 1: Read BOLIVAR Drive folder
     const bolivarItems = await listFolder(token, BOLIVAR_FOLDER_ID);
     const bolivarFolders = bolivarItems.filter(isFolder);
 
@@ -99,7 +114,7 @@ export async function GET(_request: NextRequest) {
         driveFolders: [],
         totalSpreadsheet: 0,
         totalDrive: 0,
-        debug: driveDebug || `Pasta ${BOLIVAR_FOLDER_ID} retornou 0 itens. A conta logada pode não ter acesso. Compartilhe a pasta com a conta do Google que você usa para logar no app.`,
+        debug: driveDebug || `Pasta "${folderMeta.name}" (${BOLIVAR_FOLDER_ID}) acessada com sucesso mas retornou 0 itens. Verifique se os processos estão DENTRO dessa pasta.`,
       });
     }
 
