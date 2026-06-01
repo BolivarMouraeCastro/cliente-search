@@ -94,6 +94,16 @@ export default function DashboardPage() {
   const [iniciaisError, setIniciaisError] = useState<string | null>(null);
   const [expandedLawyer, setExpandedLawyer] = useState<string | null>(null);
 
+  // Bolivar Sync
+  interface SyncItem { nome: string; row: number; reciboFile?: string; lawyer?: string }
+  const [syncData, setSyncData] = useState<{
+    kept: SyncItem[]; distributed: SyncItem[]; withLawyer: SyncItem[];
+    unknown: SyncItem[]; totalSpreadsheet: number; totalDrive: number;
+  } | null>(null);
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncApplied, setSyncApplied] = useState(false);
+  const [applyingSync, setApplyingSync] = useState(false);
 
   // Fetch dashboard
   useEffect(() => {
@@ -557,6 +567,218 @@ export default function DashboardPage() {
                 </div>
               );
             })}
+          </div>
+        )}
+      </div>
+
+      {/* ====================== BOLIVAR SYNC ========================= */}
+      <div style={{ marginTop: '2.5rem' }}>
+        <h2 style={{
+          fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)',
+          margin: '0 0 0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem',
+        }}>
+          🔄 Sincronização Bolivar
+        </h2>
+        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0 0 1rem' }}>
+          Compara a pasta do Drive com a planilha e detecta automaticamente o novo status
+        </p>
+
+        {/* Sync Button */}
+        {!syncData && !syncLoading && (
+          <button
+            onClick={async () => {
+              setSyncLoading(true);
+              setSyncError(null);
+              try {
+                const res = await fetch('/api/bolivar-sync');
+                if (res.ok) {
+                  const data = await res.json();
+                  setSyncData(data);
+                } else {
+                  const err = await res.json().catch(() => ({}));
+                  setSyncError(err.error || 'Erro ao sincronizar');
+                }
+              } catch { setSyncError('Erro de conexão'); }
+              finally { setSyncLoading(false); }
+            }}
+            style={{
+              background: 'linear-gradient(135deg, #D4AF37, #C5A059)',
+              color: '#000', fontWeight: 700, fontSize: '0.9rem',
+              padding: '0.75rem 1.5rem', borderRadius: '0.75rem',
+              border: 'none', cursor: 'pointer',
+              boxShadow: '0 4px 16px rgba(212, 175, 55, 0.3)',
+            }}
+          >
+            🔍 Analisar Diferenças (Bolivar)
+          </button>
+        )}
+
+        {syncLoading && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1rem' }}>
+            <div className="shimmer" style={{ width: '100%', height: '150px', borderRadius: '1rem' }} />
+          </div>
+        )}
+
+        {syncError && (
+          <div style={{
+            background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)',
+            borderRadius: '0.75rem', padding: '1rem 1.25rem', color: '#fca5a5', fontSize: '0.85rem',
+          }}>
+            ⚠️ {syncError}
+          </div>
+        )}
+
+        {/* Sync Report */}
+        {syncData && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {/* Summary Cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.75rem' }}>
+              <div style={{
+                background: 'rgba(14, 14, 20, 0.5)', backdropFilter: 'blur(30px)',
+                border: '1px solid rgba(34, 197, 94, 0.2)', borderRadius: '0.75rem',
+                padding: '1rem', textAlign: 'center',
+              }}>
+                <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#22c55e' }}>{syncData.kept.length}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>✅ Mantêm BOLIVAR</div>
+              </div>
+              <div style={{
+                background: 'rgba(14, 14, 20, 0.5)', backdropFilter: 'blur(30px)',
+                border: '1px solid rgba(59, 130, 246, 0.2)', borderRadius: '0.75rem',
+                padding: '1rem', textAlign: 'center',
+              }}>
+                <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#3b82f6' }}>{syncData.distributed.length}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>📝 → DISTRIBUÍDO</div>
+              </div>
+              <div style={{
+                background: 'rgba(14, 14, 20, 0.5)', backdropFilter: 'blur(30px)',
+                border: '1px solid rgba(245, 158, 11, 0.2)', borderRadius: '0.75rem',
+                padding: '1rem', textAlign: 'center',
+              }}>
+                <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#f59e0b' }}>{syncData.withLawyer.length}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>📝 → FAZER INICIAL</div>
+              </div>
+              <div style={{
+                background: 'rgba(14, 14, 20, 0.5)', backdropFilter: 'blur(30px)',
+                border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '0.75rem',
+                padding: '1rem', textAlign: 'center',
+              }}>
+                <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#ef4444' }}>{syncData.unknown.length}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>⚠️ Não Identificado</div>
+              </div>
+            </div>
+
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              Planilha: {syncData.totalSpreadsheet} com status BOLIVAR | Drive: {syncData.totalDrive} pastas
+            </div>
+
+            {/* Distributed list */}
+            {syncData.distributed.length > 0 && (
+              <div style={{
+                background: 'rgba(14, 14, 20, 0.4)', borderRadius: '0.75rem',
+                border: '1px solid rgba(59, 130, 246, 0.15)', padding: '1rem',
+              }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#3b82f6', marginBottom: '0.5rem' }}>
+                  📝 Serão atualizados para DISTRIBUÍDO (RECIBO encontrado):
+                </div>
+                {syncData.distributed.map((d, i) => (
+                  <div key={i} style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', padding: '0.25rem 0' }}>
+                    • {d.nome} <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>({d.reciboFile})</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* With Lawyer list */}
+            {syncData.withLawyer.length > 0 && (
+              <div style={{
+                background: 'rgba(14, 14, 20, 0.4)', borderRadius: '0.75rem',
+                border: '1px solid rgba(245, 158, 11, 0.15)', padding: '1rem',
+              }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#f59e0b', marginBottom: '0.5rem' }}>
+                  📝 Serão atualizados para FAZER INICIAL (encontrado na pasta do advogado):
+                </div>
+                {syncData.withLawyer.map((d, i) => (
+                  <div key={i} style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', padding: '0.25rem 0' }}>
+                    • {d.nome} <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>(pasta: {d.lawyer})</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Unknown list */}
+            {syncData.unknown.length > 0 && (
+              <div style={{
+                background: 'rgba(14, 14, 20, 0.4)', borderRadius: '0.75rem',
+                border: '1px solid rgba(239, 68, 68, 0.15)', padding: '1rem',
+              }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', marginBottom: '0.5rem' }}>
+                  ⚠️ Não identificados (revisão manual):
+                </div>
+                {syncData.unknown.map((d, i) => (
+                  <div key={i} style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', padding: '0.25rem 0' }}>
+                    • {d.nome}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Apply button */}
+            {!syncApplied && (syncData.distributed.length > 0 || syncData.withLawyer.length > 0) && (
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+                <button
+                  disabled={applyingSync}
+                  onClick={async () => {
+                    setApplyingSync(true);
+                    try {
+                      const updates = [
+                        ...syncData.distributed.map(d => ({ row: d.row, newStatus: 'DISTRIBUIDO' })),
+                        ...syncData.withLawyer.map(d => ({ row: d.row, newStatus: 'FAZER INICIAL' })),
+                      ];
+                      const res = await fetch('/api/bolivar-sync', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ updates }),
+                      });
+                      if (res.ok) {
+                        setSyncApplied(true);
+                      } else {
+                        const err = await res.json().catch(() => ({}));
+                        setSyncError(err.error || 'Erro ao aplicar');
+                      }
+                    } catch { setSyncError('Erro de conexão'); }
+                    finally { setApplyingSync(false); }
+                  }}
+                  style={{
+                    background: applyingSync ? '#555' : 'linear-gradient(135deg, #22c55e, #16a34a)',
+                    color: 'white', fontWeight: 700, fontSize: '0.85rem',
+                    padding: '0.6rem 1.25rem', borderRadius: '0.6rem',
+                    border: 'none', cursor: applyingSync ? 'wait' : 'pointer',
+                  }}
+                >
+                  {applyingSync ? '⏳ Aplicando...' : `✅ Aplicar ${syncData.distributed.length + syncData.withLawyer.length} Alterações na Planilha`}
+                </button>
+                <button
+                  onClick={() => { setSyncData(null); setSyncApplied(false); }}
+                  style={{
+                    background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)',
+                    fontWeight: 600, fontSize: '0.85rem',
+                    padding: '0.6rem 1.25rem', borderRadius: '0.6rem',
+                    border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer',
+                  }}
+                >
+                  ❌ Cancelar
+                </button>
+              </div>
+            )}
+
+            {syncApplied && (
+              <div style={{
+                background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)',
+                borderRadius: '0.75rem', padding: '1rem', color: '#86efac', fontSize: '0.85rem',
+              }}>
+                ✅ Planilha atualizada com sucesso! Recarregue o Dashboard para ver os novos números.
+              </div>
+            )}
           </div>
         )}
       </div>
