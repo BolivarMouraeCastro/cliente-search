@@ -44,11 +44,11 @@ export async function POST(req: NextRequest) {
     if (!alessandraId) return NextResponse.json({ error: 'Pasta ALESSANDRA não encontrada' }, { status: 404 });
 
     // Step 2: Find "1.INICIAIS PARA FAZER" inside Alessandra
-    const iniciaisFazerId = await findFolder(session.accessToken, '1.INICIAIS PARA FAZER', alessandraId);
+    const iniciaisFazerId = await findFolder(session.accessToken, 'INICIAIS PARA FAZER', alessandraId);
     if (!iniciaisFazerId) return NextResponse.json({ error: 'Pasta INICIAIS PARA FAZER não encontrada' }, { status: 404 });
 
     // Step 3: Find "CLIENTES URGENTES" inside Iniciais Para Fazer
-    const urgentesId = await findFolder(session.accessToken, 'CLIENTES URGENTES', iniciaisFazerId);
+    const urgentesId = await findFolder(session.accessToken, 'URGENTES', iniciaisFazerId);
     if (!urgentesId) return NextResponse.json({ error: 'Pasta CLIENTES URGENTES não encontrada' }, { status: 404 });
 
     // Step 4: Move the folder by changing its parents
