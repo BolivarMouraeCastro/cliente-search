@@ -95,10 +95,10 @@ export default function DashboardPage() {
   const [expandedLawyer, setExpandedLawyer] = useState<string | null>(null);
 
   // Bolivar Sync
-  interface SyncItem { nome: string; row: number; reciboFile?: string; lawyer?: string }
+  interface SyncItem { nome: string; row: number }
   const [syncData, setSyncData] = useState<{
-    kept: SyncItem[]; distributed: SyncItem[]; withLawyer: SyncItem[];
-    unknown: SyncItem[]; totalSpreadsheet: number; totalDrive: number;
+    kept: SyncItem[]; missing: SyncItem[];
+    extraInDrive: string[]; totalSpreadsheet: number; totalDrive: number;
   } | null>(null);
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -580,24 +580,17 @@ export default function DashboardPage() {
           🔄 Sincronização Bolivar
         </h2>
         <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0 0 1rem' }}>
-          Compara a pasta do Drive com a planilha e detecta automaticamente o novo status
+          Compara a pasta do Drive com a planilha — identifica quem saiu do Bolivar
         </p>
 
-        {/* Sync Button */}
         {!syncData && !syncLoading && (
           <button
             onClick={async () => {
-              setSyncLoading(true);
-              setSyncError(null);
+              setSyncLoading(true); setSyncError(null);
               try {
                 const res = await fetch('/api/bolivar-sync');
-                if (res.ok) {
-                  const data = await res.json();
-                  setSyncData(data);
-                } else {
-                  const err = await res.json().catch(() => ({}));
-                  setSyncError(err.error || 'Erro ao sincronizar');
-                }
+                if (res.ok) setSyncData(await res.json());
+                else { const e = await res.json().catch(() => ({})); setSyncError(e.error || 'Erro'); }
               } catch { setSyncError('Erro de conexão'); }
               finally { setSyncLoading(false); }
             }}
@@ -614,9 +607,7 @@ export default function DashboardPage() {
         )}
 
         {syncLoading && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1rem' }}>
-            <div className="shimmer" style={{ width: '100%', height: '150px', borderRadius: '1rem' }} />
-          </div>
+          <div className="shimmer" style={{ width: '100%', height: '150px', borderRadius: '1rem' }} />
         )}
 
         {syncError && (
@@ -628,10 +619,9 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Sync Report */}
         {syncData && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {/* Summary Cards */}
+            {/* Summary */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.75rem' }}>
               <div style={{
                 background: 'rgba(14, 14, 20, 0.5)', backdropFilter: 'blur(30px)',
@@ -639,112 +629,82 @@ export default function DashboardPage() {
                 padding: '1rem', textAlign: 'center',
               }}>
                 <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#22c55e' }}>{syncData.kept.length}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>✅ Mantêm BOLIVAR</div>
-              </div>
-              <div style={{
-                background: 'rgba(14, 14, 20, 0.5)', backdropFilter: 'blur(30px)',
-                border: '1px solid rgba(59, 130, 246, 0.2)', borderRadius: '0.75rem',
-                padding: '1rem', textAlign: 'center',
-              }}>
-                <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#3b82f6' }}>{syncData.distributed.length}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>📝 → DISTRIBUÍDO</div>
-              </div>
-              <div style={{
-                background: 'rgba(14, 14, 20, 0.5)', backdropFilter: 'blur(30px)',
-                border: '1px solid rgba(245, 158, 11, 0.2)', borderRadius: '0.75rem',
-                padding: '1rem', textAlign: 'center',
-              }}>
-                <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#f59e0b' }}>{syncData.withLawyer.length}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>📝 → FAZER INICIAL</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>✅ Confirmados no Drive</div>
               </div>
               <div style={{
                 background: 'rgba(14, 14, 20, 0.5)', backdropFilter: 'blur(30px)',
                 border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '0.75rem',
                 padding: '1rem', textAlign: 'center',
               }}>
-                <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#ef4444' }}>{syncData.unknown.length}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>⚠️ Não Identificado</div>
+                <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#ef4444' }}>{syncData.missing.length}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>❌ Não encontrados no Drive</div>
               </div>
+              {syncData.extraInDrive.length > 0 && (
+                <div style={{
+                  background: 'rgba(14, 14, 20, 0.5)', backdropFilter: 'blur(30px)',
+                  border: '1px solid rgba(245, 158, 11, 0.2)', borderRadius: '0.75rem',
+                  padding: '1rem', textAlign: 'center',
+                }}>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#f59e0b' }}>{syncData.extraInDrive.length}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>⚠️ No Drive mas não na planilha</div>
+                </div>
+              )}
             </div>
 
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
               Planilha: {syncData.totalSpreadsheet} com status BOLIVAR | Drive: {syncData.totalDrive} pastas
             </div>
 
-            {/* Distributed list */}
-            {syncData.distributed.length > 0 && (
-              <div style={{
-                background: 'rgba(14, 14, 20, 0.4)', borderRadius: '0.75rem',
-                border: '1px solid rgba(59, 130, 246, 0.15)', padding: '1rem',
-              }}>
-                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#3b82f6', marginBottom: '0.5rem' }}>
-                  📝 Serão atualizados para DISTRIBUÍDO (RECIBO encontrado):
-                </div>
-                {syncData.distributed.map((d, i) => (
-                  <div key={i} style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', padding: '0.25rem 0' }}>
-                    • {d.nome} <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>({d.reciboFile})</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* With Lawyer list */}
-            {syncData.withLawyer.length > 0 && (
-              <div style={{
-                background: 'rgba(14, 14, 20, 0.4)', borderRadius: '0.75rem',
-                border: '1px solid rgba(245, 158, 11, 0.15)', padding: '1rem',
-              }}>
-                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#f59e0b', marginBottom: '0.5rem' }}>
-                  📝 Serão atualizados para FAZER INICIAL (encontrado na pasta do advogado):
-                </div>
-                {syncData.withLawyer.map((d, i) => (
-                  <div key={i} style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', padding: '0.25rem 0' }}>
-                    • {d.nome} <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>(pasta: {d.lawyer})</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Unknown list */}
-            {syncData.unknown.length > 0 && (
+            {/* Missing list */}
+            {syncData.missing.length > 0 && (
               <div style={{
                 background: 'rgba(14, 14, 20, 0.4)', borderRadius: '0.75rem',
                 border: '1px solid rgba(239, 68, 68, 0.15)', padding: '1rem',
               }}>
                 <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', marginBottom: '0.5rem' }}>
-                  ⚠️ Não identificados (revisão manual):
+                  ❌ Na planilha como BOLIVAR mas NÃO estão mais na pasta do Drive:
                 </div>
-                {syncData.unknown.map((d, i) => (
+                {syncData.missing.map((d, i) => (
                   <div key={i} style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', padding: '0.25rem 0' }}>
-                    • {d.nome}
+                    • {d.nome} <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>(linha {d.row})</span>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Apply button */}
-            {!syncApplied && (syncData.distributed.length > 0 || syncData.withLawyer.length > 0) && (
+            {/* Extra in Drive */}
+            {syncData.extraInDrive.length > 0 && (
+              <div style={{
+                background: 'rgba(14, 14, 20, 0.4)', borderRadius: '0.75rem',
+                border: '1px solid rgba(245, 158, 11, 0.15)', padding: '1rem',
+              }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#f59e0b', marginBottom: '0.5rem' }}>
+                  ⚠️ No Drive mas sem registro na planilha:
+                </div>
+                {syncData.extraInDrive.map((name, i) => (
+                  <div key={i} style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', padding: '0.25rem 0' }}>
+                    • {name}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Apply: update missing ones to DISTRIBUIDO */}
+            {!syncApplied && syncData.missing.length > 0 && (
               <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
                 <button
                   disabled={applyingSync}
                   onClick={async () => {
                     setApplyingSync(true);
                     try {
-                      const updates = [
-                        ...syncData.distributed.map(d => ({ row: d.row, newStatus: 'DISTRIBUIDO' })),
-                        ...syncData.withLawyer.map(d => ({ row: d.row, newStatus: 'FAZER INICIAL' })),
-                      ];
+                      const updates = syncData.missing.map(d => ({ row: d.row, newStatus: 'DISTRIBUIDO' }));
                       const res = await fetch('/api/bolivar-sync', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ updates }),
                       });
-                      if (res.ok) {
-                        setSyncApplied(true);
-                      } else {
-                        const err = await res.json().catch(() => ({}));
-                        setSyncError(err.error || 'Erro ao aplicar');
-                      }
+                      if (res.ok) setSyncApplied(true);
+                      else { const e = await res.json().catch(() => ({})); setSyncError(e.error || 'Erro'); }
                     } catch { setSyncError('Erro de conexão'); }
                     finally { setApplyingSync(false); }
                   }}
@@ -755,7 +715,7 @@ export default function DashboardPage() {
                     border: 'none', cursor: applyingSync ? 'wait' : 'pointer',
                   }}
                 >
-                  {applyingSync ? '⏳ Aplicando...' : `✅ Aplicar ${syncData.distributed.length + syncData.withLawyer.length} Alterações na Planilha`}
+                  {applyingSync ? '⏳ Aplicando...' : `✅ Marcar ${syncData.missing.length} como DISTRIBUÍDO`}
                 </button>
                 <button
                   onClick={() => { setSyncData(null); setSyncApplied(false); }}
@@ -776,7 +736,7 @@ export default function DashboardPage() {
                 background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)',
                 borderRadius: '0.75rem', padding: '1rem', color: '#86efac', fontSize: '0.85rem',
               }}>
-                ✅ Planilha atualizada com sucesso! Recarregue o Dashboard para ver os novos números.
+                ✅ Planilha atualizada! Recarregue o Dashboard para ver os novos números.
               </div>
             )}
           </div>
