@@ -114,6 +114,10 @@ export default function DashboardPage() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
 
+  // Chart calculations
+  const maxCount = Math.max(...statusData.map((s) => s.count), 1);
+  const top10 = statusData.slice(0, 10);
+
   return (
     <div className="detail-page" style={{ paddingTop: '1rem' }}>
       {/* ========================== DASHBOARD ========================== */}
