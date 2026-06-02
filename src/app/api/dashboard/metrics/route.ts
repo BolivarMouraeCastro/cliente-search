@@ -54,6 +54,26 @@ export async function GET(req: NextRequest) {
       fetchDriveItems(distribuidosQuery)
     ]);
 
+    // Resolve parent folder names for the "distribuidos" items
+    const parentNameCache = new Map<string, string>();
+    for (const item of distribuidos.items) {
+      if (item.parents && item.parents.length > 0) {
+        const parentId = item.parents[0];
+        if (!parentNameCache.has(parentId)) {
+          const res = await fetch(`https://www.googleapis.com/drive/v3/files/${parentId}?fields=name&supportsAllDrives=true`, {
+            headers: { Authorization: `Bearer ${session.accessToken}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            parentNameCache.set(parentId, data.name || 'Pasta Desconhecida');
+          } else {
+            parentNameCache.set(parentId, 'Pasta Desconhecida');
+          }
+        }
+        item.name = parentNameCache.get(parentId) || item.name;
+      }
+    }
+
     return NextResponse.json({
       novosClientes,
       distribuidos
