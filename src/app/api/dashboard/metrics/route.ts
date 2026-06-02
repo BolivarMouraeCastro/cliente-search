@@ -22,11 +22,12 @@ export async function GET(req: NextRequest) {
     // Query 2: Processos Distribuídos (Files containing "RECIBO" created this month globally)
     const distribuidosQuery = `name contains 'RECIBO' and createdTime >= '${startOfMonth}' and trashed = false and mimeType != 'application/vnd.google-apps.folder'`;
 
-    const fetchDriveCount = async (query: string) => {
+    const fetchDriveItems = async (query: string) => {
       const params = new URLSearchParams({
         q: query,
-        fields: 'files(id)', // Only need IDs to count
+        fields: 'files(id, name, createdTime, parents)',
         pageSize: '1000',
+        orderBy: 'createdTime desc',
         supportsAllDrives: 'true',
         includeItemsFromAllDrives: 'true'
       });
@@ -38,16 +39,19 @@ export async function GET(req: NextRequest) {
       
       if (!res.ok) {
         console.error('Drive query failed:', await res.text());
-        return 0;
+        return { count: 0, items: [] };
       }
       
       const data = await res.json();
-      return (data.files || []).length;
+      return {
+        count: (data.files || []).length,
+        items: data.files || []
+      };
     };
 
     const [novosClientes, distribuidos] = await Promise.all([
-      fetchDriveCount(novosClientesQuery),
-      fetchDriveCount(distribuidosQuery)
+      fetchDriveItems(novosClientesQuery),
+      fetchDriveItems(distribuidosQuery)
     ]);
 
     return NextResponse.json({

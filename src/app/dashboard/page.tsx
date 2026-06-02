@@ -16,13 +16,15 @@ interface StatusData {
 
 export default function DashboardPage() {
   // Dashboard
-  const [totalClients, setTotalClients] = useState(0);
-  const [statusData, setStatusData] = useState<StatusData[]>([]);
-  const [dashLoading, setDashLoading] = useState(true);
-  
   // Metrics
-  const [metricsData, setMetricsData] = useState({ novosClientes: 0, distribuidos: 0 });
+  const [metricsData, setMetricsData] = useState<any>({ 
+    novosClientes: { count: 0, items: [] }, 
+    distribuidos: { count: 0, items: [] } 
+  });
   const [metricsLoading, setMetricsLoading] = useState(true);
+  
+  // Modals
+  const [selectedMetric, setSelectedMetric] = useState<'novosClientes' | 'distribuidos' | null>(null);
 
   // (Manual sync states removed - using Auto-Sync)
 
@@ -52,8 +54,8 @@ export default function DashboardPage() {
         if (res.ok) {
           const data = await res.json();
           setMetricsData({
-            novosClientes: data.novosClientes || 0,
-            distribuidos: data.distribuidos || 0
+            novosClientes: data.novosClientes || { count: 0, items: [] },
+            distribuidos: data.distribuidos || { count: 0, items: [] }
           });
         }
       } catch { /* ignore */ }
@@ -178,57 +180,42 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Stats Cards */}
+          {/* Stats Cards - New Metrics */}
           <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
-            <div className="stat-card" style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: '1rem', padding: '1.25rem', display: 'flex', flexDirection: 'column' }}>
-              <div className="stat-card-label" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Novos Clientes (Mês)</div>
+            <div 
+              className="stat-card" 
+              onClick={() => !metricsLoading && setSelectedMetric('novosClientes')}
+              style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: '1rem', padding: '1.25rem', display: 'flex', flexDirection: 'column', cursor: 'pointer', transition: 'transform 0.2s' }}
+              onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+              onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+            >
+              <div className="stat-card-label" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>
+                Novos Clientes (Mês)
+                <span style={{ fontSize: '0.7rem', color: '#f59e0b', background: 'rgba(245, 158, 11, 0.1)', padding: '2px 6px', borderRadius: '10px' }}>Ver Lista</span>
+              </div>
               <div className="stat-card-value" style={{ fontSize: '1.8rem', fontWeight: 800, color: '#f59e0b' }}>
-                {metricsLoading ? '—' : metricsData.novosClientes}
+                {metricsLoading ? '—' : metricsData.novosClientes.count}
               </div>
             </div>
-            <div className="stat-card" style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: '1rem', padding: '1.25rem', display: 'flex', flexDirection: 'column' }}>
-              <div className="stat-card-label" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Distribuídos (Mês)</div>
+            
+            <div 
+              className="stat-card" 
+              onClick={() => !metricsLoading && setSelectedMetric('distribuidos')}
+              style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: '1rem', padding: '1.25rem', display: 'flex', flexDirection: 'column', cursor: 'pointer', transition: 'transform 0.2s' }}
+              onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+              onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+            >
+              <div className="stat-card-label" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>
+                Distribuídos (Mês)
+                <span style={{ fontSize: '0.7rem', color: '#3b82f6', background: 'rgba(59, 130, 246, 0.1)', padding: '2px 6px', borderRadius: '10px' }}>Ver Lista</span>
+              </div>
               <div className="stat-card-value" style={{ fontSize: '1.8rem', fontWeight: 800, color: '#3b82f6' }}>
-                {metricsLoading ? '—' : metricsData.distribuidos}
+                {metricsLoading ? '—' : metricsData.distribuidos.count}
               </div>
             </div>
           </div>
           
-          <div className="stats-grid">
-            <div className="stat-card">
-              <div className="stat-card-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                  <circle cx="9" cy="7" r="4" />
-                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                </svg>
-              </div>
-              <div className="stat-card-label">Total de Clientes</div>
-              <div className="stat-card-value blue">{dashLoading ? '—' : totalClients}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-card-icon" style={{ background: 'rgba(16, 185, 129, 0.1)', color: 'var(--success)' }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-                </svg>
-              </div>
-              <div className="stat-card-label">Status Diferentes</div>
-              <div className="stat-card-value green">{dashLoading ? '—' : statusData.length}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-card-icon" style={{ background: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent-blue-light)' }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                  <polyline points="22 4 12 14.01 9 11.01" />
-                </svg>
-              </div>
-              <div className="stat-card-label">Distribuídos</div>
-              <div className="stat-card-value blue">
-                {dashLoading ? '—' : (statusData.find((s) => s.status.includes('DISTRIBU'))?.count || 0)}
-              </div>
-            </div>
-          </div>
+
 
           {/* Charts */}
           {!dashLoading && statusData.length > 0 && (
