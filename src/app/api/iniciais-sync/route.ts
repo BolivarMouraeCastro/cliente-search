@@ -202,7 +202,7 @@ export async function POST(request: NextRequest) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          valueInputOption: 'RAW',
+          valueInputOption: 'USER_ENTERED',
           data: batchData,
         }),
       }

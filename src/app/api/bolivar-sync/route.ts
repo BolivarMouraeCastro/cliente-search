@@ -118,11 +118,12 @@ export async function GET(_request: NextRequest) {
         const children = await listFolder(token, folder.id);
         const childFolders = children.filter(isFolder);
         
+        // ALWAYS keep the parent folder, because it might be the client folder itself (e.g. Lemilson)
+        allClientFolders.push(folder);
+
         if (childFolders.length > 0) {
           subFolderNames.push(folder.name);
           allClientFolders.push(...childFolders);
-        } else {
-          allClientFolders.push(folder);
         }
       }));
     }
@@ -221,7 +222,7 @@ export async function POST(request: NextRequest) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          valueInputOption: 'RAW',
+          valueInputOption: 'USER_ENTERED',
           data: batchData,
         }),
       }
