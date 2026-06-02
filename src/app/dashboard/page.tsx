@@ -145,8 +145,13 @@ export default function DashboardPage() {
 
 
   // Chart calculations
+  const top10 = statusData
+    .filter(s => {
+      const upper = s.status.toUpperCase();
+      return upper.includes('BOLIVAR') || upper.includes('PREJUIZO') || upper.includes('PREJUÍZO') || upper.includes('FAZER INICIAL');
+    })
+    .slice(0, 10);
   const maxCount = Math.max(...statusData.map((s) => s.count), 1);
-  const top10 = statusData.slice(0, 10);
   
   // Goals Calculations
   const endOfYear = new Date(new Date().getFullYear(), 11, 31).getTime();
@@ -293,13 +298,13 @@ export default function DashboardPage() {
           {/* Charts */}
           {!dashLoading && statusData.length > 0 && (
             <div style={{
-              display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.2fr)',
-              gap: '1.5rem', marginTop: '1.5rem',
+              display: 'flex', justifyContent: 'center',
+              marginTop: '1.5rem',
             }}>
               {/* Donut Chart */}
               <div style={{
                 background: 'var(--card-bg)', border: '1px solid var(--card-border)',
-                borderRadius: '1rem', padding: '1.5rem',
+                borderRadius: '1rem', padding: '1.5rem', width: '100%', maxWidth: '500px'
               }}>
                 <h3 style={{
                   fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)',
@@ -360,57 +365,6 @@ export default function DashboardPage() {
                       <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{p.count}</span>
                     </div>
                   ))}
-                  {statusData.length > 10 && (
-                    <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                      + {statusData.length - 10} outros status
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Bar Chart */}
-              <div style={{
-                background: 'var(--card-bg)', border: '1px solid var(--card-border)',
-                borderRadius: '1rem', padding: '1.5rem',
-              }}>
-                <h3 style={{
-                  fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)',
-                  margin: '0 0 1.25rem', textTransform: 'uppercase', letterSpacing: '0.05em',
-                }}>
-                  Top 10 Status
-                </h3>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                  {top10.map((p, idx) => (
-                    <div key={p.status}>
-                      <div style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        marginBottom: '0.2rem',
-                      }}>
-                        <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
-                          {p.status}
-                        </span>
-                        <span style={{
-                          fontSize: '0.75rem', fontWeight: 800,
-                          color: BAR_COLORS[idx % BAR_COLORS.length],
-                        }}>
-                          {p.count}
-                        </span>
-                      </div>
-                      <div style={{
-                        background: 'rgba(255,255,255,0.04)', borderRadius: '999px',
-                        height: '6px', overflow: 'hidden',
-                      }}>
-                        <div style={{
-                          height: '100%', borderRadius: '999px',
-                          background: `linear-gradient(90deg, ${BAR_COLORS[idx % BAR_COLORS.length]}88, ${BAR_COLORS[idx % BAR_COLORS.length]})`,
-                          width: `${(p.count / maxCount) * 100}%`,
-                          transition: 'width 0.8s ease',
-                        }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
               </div>
             </div>
           )}
