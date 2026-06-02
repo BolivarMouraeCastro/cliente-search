@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
+import { getClients } from '@/lib/sheets';
 
 const BOLIVAR_FOLDER_ID = '10qkRpTzO4hwiR_QIFt_KlCT1Rw7KRKJh';
+const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID ?? '';
 
 export async function GET(req: NextRequest) {
   try {
@@ -23,10 +25,7 @@ export async function GET(req: NextRequest) {
     startOfWeekDate.setHours(0, 0, 0, 0);
     const startOfWeek = startOfWeekDate.toISOString();
 
-    // Query 1: Novos Clientes (All folders created in Bolivar this year)
-    const novosClientesQuery = `'${BOLIVAR_FOLDER_ID}' in parents and mimeType = 'application/vnd.google-apps.folder' and createdTime >= '${startOfYear}' and trashed = false`;
-    
-    // Query 2: Processos Distribuídos (Files containing "RECIBO" created this year globally)
+    // Query: Processos Distribuídos (Files containing "RECIBO" created this year globally)
     const distribuidosQuery = `name contains 'RECIBO' and createdTime >= '${startOfYear}' and trashed = false and mimeType != 'application/vnd.google-apps.folder'`;
 
     const fetchDriveItems = async (query: string) => {
@@ -67,9 +66,9 @@ export async function GET(req: NextRequest) {
       };
     };
 
-    const [novosClientes, distribuidos] = await Promise.all([
-      fetchDriveItems(novosClientesQuery),
-      fetchDriveItems(distribuidosQuery)
+    const [distribuidos, allClients] = await Promise.all([
+      fetchDriveItems(distribuidosQuery),
+      getClients(session.accessToken, SPREADSHEET_ID)
     ]);
 
     // Resolve parent folder names for the "distribuidos" items
@@ -103,12 +102,29 @@ export async function GET(req: NextRequest) {
     const distribuidosMes = validDistribuidos.filter((item: any) => item.createdTime >= startOfMonth);
     const distribuidosSemana = validDistribuidos.filter((item: any) => item.createdTime >= startOfWeek);
     
-    // Filter "novosClientes" 
-    const validNovosClientes = novosClientes.items.filter((item: any) => {
-      const lowerName = item.name.toLowerCase();
-      return !EXCLUDED_FOLDERS.some(excluded => lowerName.includes(excluded));
-    });
-    const novosClientesMes = validNovosClientes.filter((item: any) => item.createdTime >= startOfMonth);
+    // Filter "novosClientes" from Spreadsheet
+    const currentYearStr = now.getFullYear().toString();
+    const currentMonthStr = String(now.getMonth() + 1).padStart(2, '0');
+    
+    const formatClientToItem = (c: any) => {
+      // Create a fake ISO string for the UI sorting/display based on DD/MM/YYYY
+      const parts = c.entrada.split('/');
+      let isoDate = new Date().toISOString();
+      if (parts.length === 3) {
+        isoDate = `${parts[2]}-${parts[1]}-${parts[0]}T12:00:00.000Z`;
+      }
+      return {
+        id: c.id || Math.random().toString(),
+        name: c.nome || c.empresa || 'Cliente S/N',
+        createdTime: isoDate
+      };
+    };
+
+    const novosClientesAnoItems = allClients.filter(c => c.entrada.endsWith(`/${currentYearStr}`));
+    const novosClientesMesItems = novosClientesAnoItems.filter(c => c.entrada.includes(`/${currentMonthStr}/`));
+
+    const validNovosClientes = novosClientesAnoItems.map(formatClientToItem);
+    const novosClientesMes = novosClientesMesItems.map(formatClientToItem);
 
     return NextResponse.json({
       novosClientesMes: { count: novosClientesMes.length, items: novosClientesMes },
