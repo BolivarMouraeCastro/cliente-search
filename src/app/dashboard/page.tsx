@@ -19,6 +19,10 @@ export default function DashboardPage() {
   const [totalClients, setTotalClients] = useState(0);
   const [statusData, setStatusData] = useState<StatusData[]>([]);
   const [dashLoading, setDashLoading] = useState(true);
+  
+  // Metrics
+  const [metricsData, setMetricsData] = useState({ novosClientes: 0, distribuidos: 0 });
+  const [metricsLoading, setMetricsLoading] = useState(true);
 
   // (Manual sync states removed - using Auto-Sync)
 
@@ -36,9 +40,27 @@ export default function DashboardPage() {
     finally { setDashLoading(false); }
   };
 
-  // Fetch dashboard on mount
+  // Fetch dashboard and metrics on mount
   useEffect(() => {
     fetchDashboardData();
+    
+    // Fetch metrics independently
+    const fetchMetrics = async () => {
+      setMetricsLoading(true);
+      try {
+        const res = await fetch('/api/dashboard/metrics');
+        if (res.ok) {
+          const data = await res.json();
+          setMetricsData({
+            novosClientes: data.novosClientes || 0,
+            distribuidos: data.distribuidos || 0
+          });
+        }
+      } catch { /* ignore */ }
+      finally { setMetricsLoading(false); }
+    };
+    
+    fetchMetrics();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-Sync States
@@ -157,6 +179,21 @@ export default function DashboardPage() {
           )}
 
           {/* Stats Cards */}
+          <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div className="stat-card" style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: '1rem', padding: '1.25rem', display: 'flex', flexDirection: 'column' }}>
+              <div className="stat-card-label" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Novos Clientes (Mês)</div>
+              <div className="stat-card-value" style={{ fontSize: '1.8rem', fontWeight: 800, color: '#f59e0b' }}>
+                {metricsLoading ? '—' : metricsData.novosClientes}
+              </div>
+            </div>
+            <div className="stat-card" style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: '1rem', padding: '1.25rem', display: 'flex', flexDirection: 'column' }}>
+              <div className="stat-card-label" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Distribuídos (Mês)</div>
+              <div className="stat-card-value" style={{ fontSize: '1.8rem', fontWeight: 800, color: '#3b82f6' }}>
+                {metricsLoading ? '—' : metricsData.distribuidos}
+              </div>
+            </div>
+          </div>
+          
           <div className="stats-grid">
             <div className="stat-card">
               <div className="stat-card-icon">

@@ -1,0 +1,62 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth-options';
+
+const BOLIVAR_FOLDER_ID = '10qkRpTzO4hwiR_QIFt_KlCT1Rw7KRKJh';
+
+export async function GET(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.accessToken) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    }
+
+    // Determine the start of the current month
+    const now = new Date();
+    // UTC string for the first day of the current month
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+    // Query 1: Novos Clientes (Folders created in Bolivar this month)
+    const novosClientesQuery = `'${BOLIVAR_FOLDER_ID}' in parents and mimeType = 'application/vnd.google-apps.folder' and createdTime >= '${startOfMonth}' and trashed = false`;
+    
+    // Query 2: Processos Distribuídos (Files containing "RECIBO" created this month globally)
+    const distribuidosQuery = `name contains 'RECIBO' and createdTime >= '${startOfMonth}' and trashed = false and mimeType != 'application/vnd.google-apps.folder'`;
+
+    const fetchDriveCount = async (query: string) => {
+      const params = new URLSearchParams({
+        q: query,
+        fields: 'files(id)', // Only need IDs to count
+        pageSize: '1000',
+        supportsAllDrives: 'true',
+        includeItemsFromAllDrives: 'true'
+      });
+      
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+        signal: AbortSignal.timeout(8000)
+      });
+      
+      if (!res.ok) {
+        console.error('Drive query failed:', await res.text());
+        return 0;
+      }
+      
+      const data = await res.json();
+      return (data.files || []).length;
+    };
+
+    const [novosClientes, distribuidos] = await Promise.all([
+      fetchDriveCount(novosClientesQuery),
+      fetchDriveCount(distribuidosQuery)
+    ]);
+
+    return NextResponse.json({
+      novosClientes,
+      distribuidos
+    });
+
+  } catch (error: any) {
+    console.error('Metrics error:', error);
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
+  }
+}

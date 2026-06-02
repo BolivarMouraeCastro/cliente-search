@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
+import { getLixeiraIds } from '@/lib/lixeira';
 
 const BOLIVAR_FOLDER_ID = '10qkRpTzO4hwiR_QIFt_KlCT1Rw7KRKJh';
 
@@ -64,18 +65,23 @@ export async function GET(req: NextRequest) {
 
     const data = await res.json();
     const files = data.files || [];
+    
+    // Virtual Trash filtering
+    const lixeiraIds = await getLixeiraIds(session.accessToken);
 
-    const results = files.map((f: any) => {
-      const parsed = parseInicialName(f.name);
-      return {
-        id: f.id,
-        name: f.name,
-        createdTime: f.createdTime,
-        cliente: parsed.cliente,
-        prescricao: parsed.prescricao,
-        empresa: parsed.empresa
-      };
-    });
+    const results = files
+      .filter((f: any) => !lixeiraIds.has(f.id))
+      .map((f: any) => {
+        const parsed = parseInicialName(f.name);
+        return {
+          id: f.id,
+          name: f.name,
+          createdTime: f.createdTime,
+          cliente: parsed.cliente,
+          prescricao: parsed.prescricao,
+          empresa: parsed.empresa
+        };
+      });
 
     return NextResponse.json({ results });
   } catch (error: any) {

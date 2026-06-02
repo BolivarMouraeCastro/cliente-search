@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
+import { addToLixeira } from '@/lib/lixeira';
 
 const INICIAIS_ROOT_FOLDER_ID = '1AFf7qFK2cYNPDmOJuAqVFfiqK2pmMBuZ';
 const BOLIVAR_FOLDER_ID = '10qkRpTzO4hwiR_QIFt_KlCT1Rw7KRKJh';
@@ -119,12 +120,14 @@ async function migrateRecursively(accessToken: string, sourceFolderId: string, t
     }
   }
 
-  // 4. Rename the old folder to mark as transferred
+  // 4. Mark as transferred in the Virtual Trash
   try {
+    await addToLixeira(accessToken, sourceFolderId, sourceFolderName);
+    // Optional: Still try to rename, but ignore if it fails
     await renameFolder(accessToken, sourceFolderId, sourceFolderName);
   } catch (err) {
     console.warn('Could not rename folder due to permissions:', err);
-    // Continue even if rename fails, since copies were successful.
+    // Continue even if rename fails, since copies and lixeira were successful.
   }
   return newFolderId;
 }
