@@ -107,22 +107,24 @@ export async function GET(_request: NextRequest) {
     const bolivarFiles = bolivarItems.filter(f => !isFolder(f));
 
     // Also check inside sub-folders (2 levels deep)
+    // Check inside sub-folders (2 levels deep) using concurrent batches to prevent Vercel timeouts
     const allClientFolders: DriveFile[] = [];
     const subFolderNames: string[] = [];
-
-    for (const folder of bolivarFolders) {
-      // Check if this is a sub-folder containing client folders
-      const children = await listFolder(token, folder.id);
-      const childFolders = children.filter(isFolder);
-
-      if (childFolders.length > 0) {
-        // This is a grouping folder — clients are inside
-        subFolderNames.push(folder.name);
-        allClientFolders.push(...childFolders);
-      } else {
-        // This IS a client folder directly
-        allClientFolders.push(folder);
-      }
+    
+    const BATCH_SIZE = 15;
+    for (let i = 0; i < bolivarFolders.length; i += BATCH_SIZE) {
+      const batch = bolivarFolders.slice(i, i + BATCH_SIZE);
+      await Promise.all(batch.map(async (folder) => {
+        const children = await listFolder(token, folder.id);
+        const childFolders = children.filter(isFolder);
+        
+        if (childFolders.length > 0) {
+          subFolderNames.push(folder.name);
+          allClientFolders.push(...childFolders);
+        } else {
+          allClientFolders.push(folder);
+        }
+      }));
     }
 
     // Combine: direct client folders + nested ones

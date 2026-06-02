@@ -109,11 +109,11 @@ export async function GET(_request: NextRequest) {
       const lawyerChildren = await listChildren(token, lawyer.id);
       const statusFolders = lawyerChildren.filter(f => isFolder(f) && isStatusFolder(f.name));
 
-      for (const sf of statusFolders) {
+      await Promise.all(statusFolders.map(async (sf) => {
         const sfChildren = await listChildren(token, sf.id);
         const clientFolders = sfChildren.filter(isFolder);
 
-        for (const cf of clientFolders) {
+        await Promise.all(clientFolders.map(async (cf) => {
           if (isDividerFolder(cf.name)) {
             // It's a divider — real clients are inside
             const innerChildren = await listChildren(token, cf.id);
@@ -123,8 +123,8 @@ export async function GET(_request: NextRequest) {
           } else {
             allClients.push({ nome: cf.name, lawyer: lawyer.name });
           }
-        }
-      }
+        }));
+      }));
     }
 
     // Step 3: Read spreadsheet

@@ -71,22 +71,35 @@ export async function GET(req: NextRequest) {
       getClients(session.accessToken, SPREADSHEET_ID)
     ]);
 
-    // Resolve parent folder names for the "distribuidos" items
+    // Resolve parent folder names for the "distribuidos" items in parallel!
+    const uniqueParentIds = Array.from(new Set(
+      distribuidos.items
+        .map((item: any) => item.parents && item.parents.length > 0 ? item.parents[0] : null)
+        .filter(Boolean)
+    )) as string[];
+
     const parentNameCache = new Map<string, string>();
+    
+    await Promise.all(uniqueParentIds.map(async (parentId) => {
+      try {
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${parentId}?fields=name&supportsAllDrives=true`, {
+          headers: { Authorization: `Bearer ${session.accessToken}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          parentNameCache.set(parentId, data.name || 'Pasta Desconhecida');
+        } else {
+          parentNameCache.set(parentId, 'Pasta Desconhecida');
+        }
+      } catch (e) {
+        parentNameCache.set(parentId, 'Pasta Desconhecida');
+      }
+    }));
+
+    // Apply names
     for (const item of distribuidos.items) {
       if (item.parents && item.parents.length > 0) {
         const parentId = item.parents[0];
-        if (!parentNameCache.has(parentId)) {
-          const res = await fetch(`https://www.googleapis.com/drive/v3/files/${parentId}?fields=name&supportsAllDrives=true`, {
-            headers: { Authorization: `Bearer ${session.accessToken}` }
-          });
-          if (res.ok) {
-            const data = await res.json();
-            parentNameCache.set(parentId, data.name || 'Pasta Desconhecida');
-          } else {
-            parentNameCache.set(parentId, 'Pasta Desconhecida');
-          }
-        }
         item.name = parentNameCache.get(parentId) || item.name;
       }
     }
