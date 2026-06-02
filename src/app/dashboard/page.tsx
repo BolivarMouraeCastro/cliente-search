@@ -359,6 +359,51 @@ export default function DashboardPage() {
         </div>
 
       {/* Petições Iniciais removido para rota /iniciais */}
+      
+      {/* Metrics Detail Modal */}
+      {selectedMetric && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0, 0, 0, 0.7)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 9999, padding: '1rem'
+        }} onClick={() => setSelectedMetric(null)}>
+          <div style={{
+            background: 'var(--card-bg)', border: '1px solid var(--card-border)',
+            borderRadius: '1rem', padding: '2rem', width: '100%', maxWidth: '600px',
+            maxHeight: '80vh', overflowY: 'auto', position: 'relative'
+          }} onClick={e => e.stopPropagation()}>
+            <button 
+              onClick={() => setSelectedMetric(null)}
+              style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem' }}
+            >
+              ✕
+            </button>
+            <h2 style={{ margin: '0 0 1.5rem', color: 'var(--text-primary)', fontSize: '1.25rem', fontWeight: 800 }}>
+              {selectedMetric === 'novosClientes' ? 'Novos Clientes neste Mês' : 'Processos Distribuídos neste Mês'}
+            </h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {metricsData[selectedMetric]?.items.map((item: any) => (
+                <div key={item.id} style={{
+                  padding: '1rem', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--card-border)',
+                  borderRadius: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                }}>
+                  <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{item.name}</div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                    {new Date(item.createdTime).toLocaleDateString('pt-BR')}
+                  </div>
+                </div>
+              ))}
+              {metricsData[selectedMetric]?.items.length === 0 && (
+                <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem 0' }}>
+                  Nenhum registro encontrado neste mês.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      
     </div>
   );
 }
