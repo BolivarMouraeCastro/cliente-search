@@ -16,6 +16,10 @@ interface StatusData {
 
 export default function DashboardPage() {
   // Dashboard
+  const [totalClients, setTotalClients] = useState(0);
+  const [statusData, setStatusData] = useState<StatusData[]>([]);
+  const [dashLoading, setDashLoading] = useState(true);
+
   // Metrics
   const [metricsData, setMetricsData] = useState<any>({ 
     novosClientes: { count: 0, items: [] }, 
