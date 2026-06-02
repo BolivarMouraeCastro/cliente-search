@@ -78,31 +78,52 @@ export async function GET(req: NextRequest) {
         .filter(Boolean)
     )) as string[];
 
-    const parentNameCache = new Map<string, string>();
+    const parentNameCache = new Map<string, { name: string, grandparent: string | null }>();
     
     await Promise.all(uniqueParentIds.map(async (parentId) => {
       try {
-        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${parentId}?fields=name&supportsAllDrives=true`, {
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${parentId}?fields=name,parents&supportsAllDrives=true`, {
           headers: { Authorization: `Bearer ${session.accessToken}` }
         });
         if (res.ok) {
           const data = await res.json();
-          parentNameCache.set(parentId, data.name || 'Pasta Desconhecida');
+          parentNameCache.set(parentId, {
+            name: data.name || 'Pasta Desconhecida',
+            grandparent: data.parents && data.parents.length > 0 ? data.parents[0] : null
+          });
         } else {
-          parentNameCache.set(parentId, 'Pasta Desconhecida');
+          parentNameCache.set(parentId, { name: 'Pasta Desconhecida', grandparent: null });
         }
       } catch (e) {
-        parentNameCache.set(parentId, 'Pasta Desconhecida');
+        parentNameCache.set(parentId, { name: 'Pasta Desconhecida', grandparent: null });
       }
     }));
 
-    // Apply names
+    const VALID_DISTRIBUTED_PARENT_IDS = [
+      '16HzOQdcORS4vwPaaVDSEh7nZEVOOMhkE',
+      '1DfJ7CZIHw4kEfGM7ooVdW1nH-YeEgvEx',
+      '1yyO-0H6-DJc6p4mx_ez3JhRJTRb-HoYD',
+      '1ByXb7PttqXCrlkINlDSN23SRkG5lw4Mv',
+      '1204Yh3nKmJY80xY4jG5imJSjMoBcjn2q'
+    ];
+
+    const strictlyDistributedItems = [];
+
+    // Apply names and filter by strict parent hierarchy
     for (const item of distribuidos.items) {
       if (item.parents && item.parents.length > 0) {
         const parentId = item.parents[0];
-        item.name = parentNameCache.get(parentId) || item.name;
+        const cacheEntry = parentNameCache.get(parentId);
+        if (cacheEntry) {
+          item.name = cacheEntry.name;
+          if (cacheEntry.grandparent && VALID_DISTRIBUTED_PARENT_IDS.includes(cacheEntry.grandparent)) {
+            strictlyDistributedItems.push(item);
+          }
+        }
       }
     }
+    
+    distribuidos.items = strictlyDistributedItems;
 
     const EXCLUDED_FOLDERS = ['nao jogar', 'não jogar', 'nao mexer', 'não mexer', 'nova pasta', 'new folder', 'protocolo ok'];
 
