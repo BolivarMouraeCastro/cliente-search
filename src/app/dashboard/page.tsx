@@ -365,6 +365,7 @@ export default function DashboardPage() {
                       <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{p.count}</span>
                     </div>
                   ))}
+                </div>
               </div>
             </div>
           )}
