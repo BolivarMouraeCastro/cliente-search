@@ -11,41 +11,59 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    // Determine the start of the current month
+    // Date boundaries
     const now = new Date();
-    // UTC string for the first day of the current month
+    const startOfYear = new Date(now.getFullYear(), 0, 1).toISOString();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    
+    // Monday as start of week
+    const currentDay = now.getDay();
+    const distanceToMonday = currentDay === 0 ? 6 : currentDay - 1; // 0 is Sunday
+    const startOfWeekDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - distanceToMonday);
+    startOfWeekDate.setHours(0, 0, 0, 0);
+    const startOfWeek = startOfWeekDate.toISOString();
 
-    // Query 1: Novos Clientes (Folders created in Bolivar this month)
+    // Query 1: Novos Clientes (All folders created in Bolivar this year - we will filter month locally to save API calls, but we only really need month)
     const novosClientesQuery = `'${BOLIVAR_FOLDER_ID}' in parents and mimeType = 'application/vnd.google-apps.folder' and createdTime >= '${startOfMonth}' and trashed = false`;
     
-    // Query 2: Processos Distribuídos (Files containing "RECIBO" created this month globally)
-    const distribuidosQuery = `name contains 'RECIBO' and createdTime >= '${startOfMonth}' and trashed = false and mimeType != 'application/vnd.google-apps.folder'`;
+    // Query 2: Processos Distribuídos (Files containing "RECIBO" created this year globally)
+    const distribuidosQuery = `name contains 'RECIBO' and createdTime >= '${startOfYear}' and trashed = false and mimeType != 'application/vnd.google-apps.folder'`;
 
     const fetchDriveItems = async (query: string) => {
-      const params = new URLSearchParams({
-        q: query,
-        fields: 'files(id, name, createdTime, parents)',
-        pageSize: '1000',
-        orderBy: 'createdTime desc',
-        supportsAllDrives: 'true',
-        includeItemsFromAllDrives: 'true'
-      });
-      
-      const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
-        headers: { Authorization: `Bearer ${session.accessToken}` },
-        signal: AbortSignal.timeout(8000)
-      });
-      
-      if (!res.ok) {
-        console.error('Drive query failed:', await res.text());
-        return { count: 0, items: [] };
-      }
-      
-      const data = await res.json();
+      let allItems: any[] = [];
+      let pageToken: string | undefined = undefined;
+
+      do {
+        const params = new URLSearchParams({
+          q: query,
+          fields: 'nextPageToken, files(id, name, createdTime, parents)',
+          pageSize: '1000',
+          orderBy: 'createdTime desc',
+          supportsAllDrives: 'true',
+          includeItemsFromAllDrives: 'true'
+        });
+        if (pageToken) params.append('pageToken', pageToken);
+        
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
+          headers: { Authorization: `Bearer ${session.accessToken}` },
+          signal: AbortSignal.timeout(15000)
+        });
+        
+        if (!res.ok) {
+          console.error('Drive query failed:', await res.text());
+          break;
+        }
+        
+        const data = await res.json();
+        if (data.files) {
+          allItems = allItems.concat(data.files);
+        }
+        pageToken = data.nextPageToken;
+      } while (pageToken);
+
       return {
-        count: (data.files || []).length,
-        items: data.files || []
+        count: allItems.length,
+        items: allItems
       };
     };
 
@@ -74,9 +92,16 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Filter "distribuidos" into Week and Year
+    const distribuidosSemana = distribuidos.items.filter((item: any) => item.createdTime >= startOfWeek);
+    
     return NextResponse.json({
-      novosClientes,
-      distribuidos
+      novosClientesMes: novosClientes,
+      distribuidosAno: distribuidos,
+      distribuidosSemana: {
+        count: distribuidosSemana.length,
+        items: distribuidosSemana
+      }
     });
 
   } catch (error: any) {
