@@ -92,7 +92,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const EXCLUDED_FOLDERS = ['nao jogar', 'não jogar', 'nao mexer', 'não mexer', 'nova pasta', 'protocolo ok'];
+    const EXCLUDED_FOLDERS = ['nao jogar', 'não jogar', 'nao mexer', 'não mexer', 'nova pasta', 'new folder', 'protocolo ok'];
 
     // Filter "distribuidos" 
     const validDistribuidos = distribuidos.items.filter((item: any) => {
