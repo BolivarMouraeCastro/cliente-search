@@ -92,12 +92,18 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Filter "distribuidos" into Month and Week
-    const distribuidosMes = distribuidos.items.filter((item: any) => item.createdTime >= startOfMonth);
-    const distribuidosSemana = distribuidos.items.filter((item: any) => item.createdTime >= startOfWeek);
+    const EXCLUDED_FOLDERS = ['nao jogar', 'não jogar', 'nao mexer', 'não mexer', 'nova pasta', 'protocolo ok'];
+
+    // Filter "distribuidos" 
+    const validDistribuidos = distribuidos.items.filter((item: any) => {
+      const lowerName = item.name.toLowerCase();
+      return !EXCLUDED_FOLDERS.some(excluded => lowerName.includes(excluded));
+    });
+
+    const distribuidosMes = validDistribuidos.filter((item: any) => item.createdTime >= startOfMonth);
+    const distribuidosSemana = validDistribuidos.filter((item: any) => item.createdTime >= startOfWeek);
     
     // Filter "novosClientes" 
-    const EXCLUDED_FOLDERS = ['nao jogar', 'não jogar', 'nao mexer', 'não mexer', 'nova pasta', 'protocolo ok'];
     const validNovosClientes = novosClientes.items.filter((item: any) => {
       const lowerName = item.name.toLowerCase();
       return !EXCLUDED_FOLDERS.some(excluded => lowerName.includes(excluded));
@@ -107,7 +113,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       novosClientesMes: { count: novosClientesMes.length, items: novosClientesMes },
       novosClientesAno: { count: validNovosClientes.length, items: validNovosClientes },
-      distribuidosAno: distribuidos,
+      distribuidosAno: { count: validDistribuidos.length, items: validDistribuidos },
       distribuidosMes: { count: distribuidosMes.length, items: distribuidosMes },
       distribuidosSemana: { count: distribuidosSemana.length, items: distribuidosSemana }
     });
