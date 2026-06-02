@@ -23,13 +23,15 @@ export default function DashboardPage() {
   // Metrics
   const [metricsData, setMetricsData] = useState<any>({ 
     novosClientesMes: { count: 0, items: [] }, 
+    novosClientesAno: { count: 0, items: [] },
     distribuidosAno: { count: 0, items: [] },
+    distribuidosMes: { count: 0, items: [] },
     distribuidosSemana: { count: 0, items: [] } 
   });
   const [metricsLoading, setMetricsLoading] = useState(true);
   
   // Modals
-  const [selectedMetric, setSelectedMetric] = useState<'novosClientesMes' | 'distribuidosAno' | 'distribuidosSemana' | null>(null);
+  const [selectedMetric, setSelectedMetric] = useState<'novosClientesMes' | 'novosClientesAno' | 'distribuidosAno' | 'distribuidosMes' | 'distribuidosSemana' | null>(null);
 
   // (Manual sync states removed - using Auto-Sync)
 
@@ -60,7 +62,9 @@ export default function DashboardPage() {
           const data = await res.json();
           setMetricsData({
             novosClientesMes: data.novosClientesMes || { count: 0, items: [] },
+            novosClientesAno: data.novosClientesAno || { count: 0, items: [] },
             distribuidosAno: data.distribuidosAno || { count: 0, items: [] },
+            distribuidosMes: data.distribuidosMes || { count: 0, items: [] },
             distribuidosSemana: data.distribuidosSemana || { count: 0, items: [] }
           });
         }
@@ -154,17 +158,25 @@ export default function DashboardPage() {
   const maxCount = Math.max(...statusData.map((s) => s.count), 1);
   
   // Goals Calculations
-  const endOfYear = new Date(new Date().getFullYear(), 11, 31).getTime();
-  const weeksLeft = Math.max(1, Math.ceil((endOfYear - new Date().getTime()) / (1000 * 60 * 60 * 24 * 7)));
+  const now = new Date();
+  const endOfYear = new Date(now.getFullYear(), 11, 31).getTime();
+  const weeksLeft = Math.max(1, Math.ceil((endOfYear - now.getTime()) / (1000 * 60 * 60 * 24 * 7)));
+  const monthsLeft = Math.max(1, 12 - now.getMonth());
   
   const novosClientesGoal = 200;
+  const novosClientesAnoGoal = 2400; // 200 * 12
   const distribuidosAnoGoal = 2000;
   
   const distribuidosAnoCount = metricsData.distribuidosAno?.count || 0;
+  const distribuidosMesCount = metricsData.distribuidosMes?.count || 0;
   const distribuidosSemanaCount = metricsData.distribuidosSemana?.count || 0;
-  const novosClientesMesCount = metricsData.novosClientesMes?.count || 0;
   
-  const distribuidosSemanaGoal = Math.max(1, Math.ceil((distribuidosAnoGoal - distribuidosAnoCount) / weeksLeft));
+  const novosClientesMesCount = metricsData.novosClientesMes?.count || 0;
+  const novosClientesAnoCount = metricsData.novosClientesAno?.count || 0;
+  
+  const distribuidosFaltantesAno = Math.max(0, distribuidosAnoGoal - distribuidosAnoCount);
+  const distribuidosMesGoal = Math.max(1, Math.ceil(distribuidosFaltantesAno / monthsLeft));
+  const distribuidosSemanaGoal = Math.max(1, Math.ceil(distribuidosFaltantesAno / weeksLeft));
   
   const getDonutProps = (count: number, goal: number, color: string) => {
     const cx = 80, cy = 80, r = 60;
@@ -174,9 +186,12 @@ export default function DashboardPage() {
     return { cx, cy, r, circumference, dashLen, color };
   };
 
-  const donut1 = getDonutProps(novosClientesMesCount, novosClientesGoal, '#f59e0b');
-  const donut2 = getDonutProps(distribuidosAnoCount, distribuidosAnoGoal, '#8b5cf6');
-  const donut3 = getDonutProps(distribuidosSemanaCount, distribuidosSemanaGoal, '#3b82f6');
+  const donutNovosMes = getDonutProps(novosClientesMesCount, novosClientesGoal, '#f59e0b');
+  const donutNovosAno = getDonutProps(novosClientesAnoCount, novosClientesAnoGoal, '#ef4444');
+  
+  const donutDistSemana = getDonutProps(distribuidosSemanaCount, distribuidosSemanaGoal, '#3b82f6');
+  const donutDistMes = getDonutProps(distribuidosMesCount, distribuidosMesGoal, '#10b981');
+  const donutDistAno = getDonutProps(distribuidosAnoCount, distribuidosAnoGoal, '#8b5cf6');
 
   return (
     <div className="detail-page" style={{ paddingTop: '1rem' }}>
@@ -216,10 +231,11 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Stats Cards - New Metrics */}
-          <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+          {/* Stats Cards - Entradas (Bolivar) */}
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '1rem' }}>📥 Entradas (Bolivar)</h3>
+          <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
             
-            {/* Chart 1: Novos Clientes (Mês) */}
+            {/* Chart: Novos Clientes (Mês) */}
             <div 
               className="stat-card" 
               onClick={() => !metricsLoading && setSelectedMetric('novosClientesMes')}
@@ -229,8 +245,8 @@ export default function DashboardPage() {
             >
               <div style={{ position: 'relative', width: '100px', height: '100px' }}>
                 <svg width="100" height="100" viewBox="0 0 160 160">
-                  <circle cx={donut1.cx} cy={donut1.cy} r={donut1.r} fill="none" stroke="rgba(245, 158, 11, 0.15)" strokeWidth="18" />
-                  <circle cx={donut1.cx} cy={donut1.cy} r={donut1.r} fill="none" stroke={donut1.color} strokeWidth="18" strokeDasharray={`${donut1.dashLen} ${donut1.circumference - donut1.dashLen}`} strokeDashoffset={0} strokeLinecap="round" transform={`rotate(-90 ${donut1.cx} ${donut1.cy})`} style={{ transition: 'all 0.8s ease' }} />
+                  <circle cx={donutNovosMes.cx} cy={donutNovosMes.cy} r={donutNovosMes.r} fill="none" stroke="rgba(245, 158, 11, 0.15)" strokeWidth="18" />
+                  <circle cx={donutNovosMes.cx} cy={donutNovosMes.cy} r={donutNovosMes.r} fill="none" stroke={donutNovosMes.color} strokeWidth="18" strokeDasharray={`${donutNovosMes.dashLen} ${donutNovosMes.circumference - donutNovosMes.dashLen}`} strokeDashoffset={0} strokeLinecap="round" transform={`rotate(-90 ${donutNovosMes.cx} ${donutNovosMes.cy})`} style={{ transition: 'all 0.8s ease' }} />
                 </svg>
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
                   <span style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-primary)' }}>{metricsLoading ? '—' : novosClientesMesCount}</span>
@@ -239,35 +255,41 @@ export default function DashboardPage() {
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.2rem' }}>Novos Clientes (Mês)</div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Meta: {novosClientesGoal}</div>
-                <div style={{ fontSize: '0.7rem', color: donut1.color, background: 'rgba(245, 158, 11, 0.1)', padding: '2px 8px', borderRadius: '10px', display: 'inline-block', marginTop: '0.5rem' }}>Ver Lista</div>
+                <div style={{ fontSize: '0.7rem', color: donutNovosMes.color, background: 'rgba(245, 158, 11, 0.1)', padding: '2px 8px', borderRadius: '10px', display: 'inline-block', marginTop: '0.5rem' }}>Ver Lista</div>
               </div>
             </div>
             
-            {/* Chart 2: Distribuição Anual */}
+            {/* Chart: Entrada Anual */}
             <div 
               className="stat-card" 
-              onClick={() => !metricsLoading && setSelectedMetric('distribuidosAno')}
+              onClick={() => !metricsLoading && setSelectedMetric('novosClientesAno')}
               style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: '1rem', padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '1.5rem', cursor: 'pointer', transition: 'transform 0.2s' }}
               onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
               onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
             >
               <div style={{ position: 'relative', width: '100px', height: '100px' }}>
                 <svg width="100" height="100" viewBox="0 0 160 160">
-                  <circle cx={donut2.cx} cy={donut2.cy} r={donut2.r} fill="none" stroke="rgba(139, 92, 246, 0.15)" strokeWidth="18" />
-                  <circle cx={donut2.cx} cy={donut2.cy} r={donut2.r} fill="none" stroke={donut2.color} strokeWidth="18" strokeDasharray={`${donut2.dashLen} ${donut2.circumference - donut2.dashLen}`} strokeDashoffset={0} strokeLinecap="round" transform={`rotate(-90 ${donut2.cx} ${donut2.cy})`} style={{ transition: 'all 0.8s ease' }} />
+                  <circle cx={donutNovosAno.cx} cy={donutNovosAno.cy} r={donutNovosAno.r} fill="none" stroke="rgba(239, 68, 68, 0.15)" strokeWidth="18" />
+                  <circle cx={donutNovosAno.cx} cy={donutNovosAno.cy} r={donutNovosAno.r} fill="none" stroke={donutNovosAno.color} strokeWidth="18" strokeDasharray={`${donutNovosAno.dashLen} ${donutNovosAno.circumference - donutNovosAno.dashLen}`} strokeDashoffset={0} strokeLinecap="round" transform={`rotate(-90 ${donutNovosAno.cx} ${donutNovosAno.cy})`} style={{ transition: 'all 0.8s ease' }} />
                 </svg>
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
-                  <span style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-primary)' }}>{metricsLoading ? '—' : distribuidosAnoCount}</span>
+                  <span style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-primary)' }}>{metricsLoading ? '—' : novosClientesAnoCount}</span>
                 </div>
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.2rem' }}>Distribuição Anual</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Faltam: {Math.max(0, distribuidosAnoGoal - distribuidosAnoCount)}</div>
-                <div style={{ fontSize: '0.7rem', color: donut2.color, background: 'rgba(139, 92, 246, 0.1)', padding: '2px 8px', borderRadius: '10px', display: 'inline-block', marginTop: '0.5rem' }}>Ver Lista</div>
+                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.2rem' }}>Entrada Anual</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Meta: {novosClientesAnoGoal}</div>
+                <div style={{ fontSize: '0.7rem', color: donutNovosAno.color, background: 'rgba(239, 68, 68, 0.1)', padding: '2px 8px', borderRadius: '10px', display: 'inline-block', marginTop: '0.5rem' }}>Ver Lista</div>
               </div>
             </div>
 
-            {/* Chart 3: Distribuição Semanal */}
+          </div>
+
+          {/* Stats Cards - Distribuições (Recibos) */}
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '1rem' }}>📤 Distribuições (Recibos)</h3>
+          <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+            
+            {/* Chart: Distribuição Semanal */}
             <div 
               className="stat-card" 
               onClick={() => !metricsLoading && setSelectedMetric('distribuidosSemana')}
@@ -277,8 +299,8 @@ export default function DashboardPage() {
             >
               <div style={{ position: 'relative', width: '100px', height: '100px' }}>
                 <svg width="100" height="100" viewBox="0 0 160 160">
-                  <circle cx={donut3.cx} cy={donut3.cy} r={donut3.r} fill="none" stroke="rgba(59, 130, 246, 0.15)" strokeWidth="18" />
-                  <circle cx={donut3.cx} cy={donut3.cy} r={donut3.r} fill="none" stroke={donut3.color} strokeWidth="18" strokeDasharray={`${donut3.dashLen} ${donut3.circumference - donut3.dashLen}`} strokeDashoffset={0} strokeLinecap="round" transform={`rotate(-90 ${donut3.cx} ${donut3.cy})`} style={{ transition: 'all 0.8s ease' }} />
+                  <circle cx={donutDistSemana.cx} cy={donutDistSemana.cy} r={donutDistSemana.r} fill="none" stroke="rgba(59, 130, 246, 0.15)" strokeWidth="18" />
+                  <circle cx={donutDistSemana.cx} cy={donutDistSemana.cy} r={donutDistSemana.r} fill="none" stroke={donutDistSemana.color} strokeWidth="18" strokeDasharray={`${donutDistSemana.dashLen} ${donutDistSemana.circumference - donutDistSemana.dashLen}`} strokeDashoffset={0} strokeLinecap="round" transform={`rotate(-90 ${donutDistSemana.cx} ${donutDistSemana.cy})`} style={{ transition: 'all 0.8s ease' }} />
                 </svg>
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
                   <span style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-primary)' }}>{metricsLoading ? '—' : distribuidosSemanaCount}</span>
@@ -287,7 +309,55 @@ export default function DashboardPage() {
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.2rem' }}>Distribuição Semanal</div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Alvo Dinâmico: {distribuidosSemanaGoal}</div>
-                <div style={{ fontSize: '0.7rem', color: donut3.color, background: 'rgba(59, 130, 246, 0.1)', padding: '2px 8px', borderRadius: '10px', display: 'inline-block', marginTop: '0.5rem' }}>Ver Lista</div>
+                <div style={{ fontSize: '0.7rem', color: donutDistSemana.color, background: 'rgba(59, 130, 246, 0.1)', padding: '2px 8px', borderRadius: '10px', display: 'inline-block', marginTop: '0.5rem' }}>Ver Lista</div>
+              </div>
+            </div>
+
+            {/* Chart: Distribuição Mensal */}
+            <div 
+              className="stat-card" 
+              onClick={() => !metricsLoading && setSelectedMetric('distribuidosMes')}
+              style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: '1rem', padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '1.5rem', cursor: 'pointer', transition: 'transform 0.2s' }}
+              onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+              onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+            >
+              <div style={{ position: 'relative', width: '100px', height: '100px' }}>
+                <svg width="100" height="100" viewBox="0 0 160 160">
+                  <circle cx={donutDistMes.cx} cy={donutDistMes.cy} r={donutDistMes.r} fill="none" stroke="rgba(16, 185, 129, 0.15)" strokeWidth="18" />
+                  <circle cx={donutDistMes.cx} cy={donutDistMes.cy} r={donutDistMes.r} fill="none" stroke={donutDistMes.color} strokeWidth="18" strokeDasharray={`${donutDistMes.dashLen} ${donutDistMes.circumference - donutDistMes.dashLen}`} strokeDashoffset={0} strokeLinecap="round" transform={`rotate(-90 ${donutDistMes.cx} ${donutDistMes.cy})`} style={{ transition: 'all 0.8s ease' }} />
+                </svg>
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
+                  <span style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-primary)' }}>{metricsLoading ? '—' : distribuidosMesCount}</span>
+                </div>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.2rem' }}>Distribuição Mensal</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Alvo Dinâmico: {distribuidosMesGoal}</div>
+                <div style={{ fontSize: '0.7rem', color: donutDistMes.color, background: 'rgba(16, 185, 129, 0.1)', padding: '2px 8px', borderRadius: '10px', display: 'inline-block', marginTop: '0.5rem' }}>Ver Lista</div>
+              </div>
+            </div>
+
+            {/* Chart: Distribuição Anual */}
+            <div 
+              className="stat-card" 
+              onClick={() => !metricsLoading && setSelectedMetric('distribuidosAno')}
+              style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: '1rem', padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '1.5rem', cursor: 'pointer', transition: 'transform 0.2s' }}
+              onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+              onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+            >
+              <div style={{ position: 'relative', width: '100px', height: '100px' }}>
+                <svg width="100" height="100" viewBox="0 0 160 160">
+                  <circle cx={donutDistAno.cx} cy={donutDistAno.cy} r={donutDistAno.r} fill="none" stroke="rgba(139, 92, 246, 0.15)" strokeWidth="18" />
+                  <circle cx={donutDistAno.cx} cy={donutDistAno.cy} r={donutDistAno.r} fill="none" stroke={donutDistAno.color} strokeWidth="18" strokeDasharray={`${donutDistAno.dashLen} ${donutDistAno.circumference - donutDistAno.dashLen}`} strokeDashoffset={0} strokeLinecap="round" transform={`rotate(-90 ${donutDistAno.cx} ${donutDistAno.cy})`} style={{ transition: 'all 0.8s ease' }} />
+                </svg>
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
+                  <span style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-primary)' }}>{metricsLoading ? '—' : distribuidosAnoCount}</span>
+                </div>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.2rem' }}>Distribuição Anual</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Faltam: {distribuidosFaltantesAno}</div>
+                <div style={{ fontSize: '0.7rem', color: donutDistAno.color, background: 'rgba(139, 92, 246, 0.1)', padding: '2px 8px', borderRadius: '10px', display: 'inline-block', marginTop: '0.5rem' }}>Ver Lista</div>
               </div>
             </div>
 
@@ -405,7 +475,9 @@ export default function DashboardPage() {
             </button>
             <h2 style={{ margin: '0 0 1.5rem', color: 'var(--text-primary)', fontSize: '1.25rem', fontWeight: 800 }}>
               {selectedMetric === 'novosClientesMes' && 'Novos Clientes (Mês)'}
+              {selectedMetric === 'novosClientesAno' && 'Entrada Anual'}
               {selectedMetric === 'distribuidosAno' && 'Processos Distribuídos (Ano)'}
+              {selectedMetric === 'distribuidosMes' && 'Processos Distribuídos (Mês)'}
               {selectedMetric === 'distribuidosSemana' && 'Processos Distribuídos (Semana)'}
             </h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>

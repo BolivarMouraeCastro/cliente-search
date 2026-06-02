@@ -23,8 +23,8 @@ export async function GET(req: NextRequest) {
     startOfWeekDate.setHours(0, 0, 0, 0);
     const startOfWeek = startOfWeekDate.toISOString();
 
-    // Query 1: Novos Clientes (All folders created in Bolivar this year - we will filter month locally to save API calls, but we only really need month)
-    const novosClientesQuery = `'${BOLIVAR_FOLDER_ID}' in parents and mimeType = 'application/vnd.google-apps.folder' and createdTime >= '${startOfMonth}' and trashed = false`;
+    // Query 1: Novos Clientes (All folders created in Bolivar this year)
+    const novosClientesQuery = `'${BOLIVAR_FOLDER_ID}' in parents and mimeType = 'application/vnd.google-apps.folder' and createdTime >= '${startOfYear}' and trashed = false`;
     
     // Query 2: Processos Distribuídos (Files containing "RECIBO" created this year globally)
     const distribuidosQuery = `name contains 'RECIBO' and createdTime >= '${startOfYear}' and trashed = false and mimeType != 'application/vnd.google-apps.folder'`;
@@ -92,16 +92,24 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Filter "distribuidos" into Week and Year
+    // Filter "distribuidos" into Month and Week
+    const distribuidosMes = distribuidos.items.filter((item: any) => item.createdTime >= startOfMonth);
     const distribuidosSemana = distribuidos.items.filter((item: any) => item.createdTime >= startOfWeek);
     
+    // Filter "novosClientes" 
+    const EXCLUDED_FOLDERS = ['nao jogar', 'não jogar', 'nao mexer', 'não mexer', 'nova pasta', 'protocolo ok'];
+    const validNovosClientes = novosClientes.items.filter((item: any) => {
+      const lowerName = item.name.toLowerCase();
+      return !EXCLUDED_FOLDERS.some(excluded => lowerName.includes(excluded));
+    });
+    const novosClientesMes = validNovosClientes.filter((item: any) => item.createdTime >= startOfMonth);
+
     return NextResponse.json({
-      novosClientesMes: novosClientes,
+      novosClientesMes: { count: novosClientesMes.length, items: novosClientesMes },
+      novosClientesAno: { count: validNovosClientes.length, items: validNovosClientes },
       distribuidosAno: distribuidos,
-      distribuidosSemana: {
-        count: distribuidosSemana.length,
-        items: distribuidosSemana
-      }
+      distribuidosMes: { count: distribuidosMes.length, items: distribuidosMes },
+      distribuidosSemana: { count: distribuidosSemana.length, items: distribuidosSemana }
     });
 
   } catch (error: any) {
