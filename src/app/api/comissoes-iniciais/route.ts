@@ -3,34 +3,18 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 
 const INICIAIS_ROOT_FOLDER_ID = '1AFf7qFK2cYNPDmOJuAqVFfiqK2pmMBuZ';
+const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID ?? '';
+const SHEET_NAME = 'COMISSOES_INICIAIS';
 const ADVOGADOS_INICIAIS = ['ELITON', 'ALESSANDRA', 'JESSÉ', 'JAMILLE'];
 
 interface DriveItem {
   id: string;
   name: string;
   mimeType: string;
-  createdTime?: string;
+  modifiedTime?: string;
 }
 
 const isFolder = (item: DriveItem) => item.mimeType === 'application/vnd.google-apps.folder';
-
-async function findFolder(token: string, nameContains: string, parentId: string): Promise<string | null> {
-  const safeName = nameContains.replace(/'/g, "\\'");
-  const params = new URLSearchParams({
-    q: `'${parentId}' in parents and name contains '${safeName}' and trashed = false and mimeType = 'application/vnd.google-apps.folder'`,
-    fields: 'files(id, name)',
-    pageSize: '1',
-    supportsAllDrives: 'true',
-    includeItemsFromAllDrives: 'true',
-  });
-  const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
-    headers: { Authorization: `Bearer ${token}` },
-    signal: AbortSignal.timeout(8000),
-  });
-  if (!res.ok) return null;
-  const data = await res.json();
-  return data.files?.[0]?.id || null;
-}
 
 async function listChildren(token: string, folderId: string, fields = 'id, name, mimeType'): Promise<DriveItem[]> {
   const all: DriveItem[] = [];
@@ -56,14 +40,74 @@ async function listChildren(token: string, folderId: string, fields = 'id, name,
   return all;
 }
 
-// Extract empresa from folder name if present (e.g., "JOÃO SILVA X EMPRESA LTDA")
 function extractClienteEmpresa(folderName: string): { cliente: string; empresa: string } {
-  // Common patterns: "CLIENTE X EMPRESA" or "CLIENTE x EMPRESA"
-  const xMatch = folderName.match(/^(.+?)\s+[xX]\s+(.+)$/);
-  if (xMatch) {
-    return { cliente: xMatch[1].trim(), empresa: xMatch[2].trim() };
+  const clean = folderName.replace(/\(não mexer\)/gi, '').replace(/\(nao mexer\)/gi, '').replace(/^liberar\s+\w+\s+/i, '').trim();
+  const xMatch = clean.match(/^(.+?)\s+[xX]\s+(.+)$/);
+  if (xMatch) return { cliente: xMatch[1].trim(), empresa: xMatch[2].trim() };
+  return { cliente: clean, empresa: '' };
+}
+
+// ========== SHEETS HELPERS ==========
+
+async function ensureSheet(token: string): Promise<boolean> {
+  // Check if sheet tab exists
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}?fields=sheets.properties.title`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!res.ok) return false;
+  const data = await res.json();
+  const exists = data.sheets?.some((s: any) => s.properties?.title === SHEET_NAME);
+
+  if (!exists) {
+    // Create the sheet tab
+    const createRes = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}:batchUpdate`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requests: [{ addSheet: { properties: { title: SHEET_NAME } } }]
+        }),
+      }
+    );
+    if (!createRes.ok) return false;
+
+    // Add header row
+    await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_NAME}!A1:F1?valueInputOption=RAW`,
+      {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          values: [['ADVOGADO', 'CLIENTE', 'EMPRESA', 'DATA', 'FOLDER_ID', 'MES_ANO']]
+        }),
+      }
+    );
   }
-  return { cliente: folderName.trim(), empresa: '' };
+  return true;
+}
+
+async function getSheetData(token: string): Promise<string[][]> {
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_NAME}!A:F`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.values || [];
+}
+
+async function appendRows(token: string, rows: string[][]): Promise<void> {
+  if (rows.length === 0) return;
+  await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_NAME}!A:F:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: rows }),
+    }
+  );
 }
 
 export async function GET(req: NextRequest) {
@@ -77,74 +121,80 @@ export async function GET(req: NextRequest) {
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
+    const mesAnoAtual = `${String(currentMonth + 1).padStart(2, '0')}/${currentYear}`;
+    const dataHoje = `${String(now.getDate()).padStart(2, '0')}/${String(currentMonth + 1).padStart(2, '0')}/${currentYear}`;
 
-    // Process each lawyer in parallel
-    const results = await Promise.all(ADVOGADOS_INICIAIS.map(async (advNome) => {
-      // Find the lawyer's folder
-      const advFolderId = await findFolder(token, advNome, INICIAIS_ROOT_FOLDER_ID);
-      if (!advFolderId) {
-        return { nome: advNome, total: 0, mesAtual: 0, clientes: [] as { cliente: string; empresa: string; data: string }[] };
-      }
+    // Ensure sheet exists
+    await ensureSheet(token);
 
-      // Find CORREÇÃO folder inside - list all subfolders and match
-      const advChildren = await listChildren(token, advFolderId);
+    // Get existing records from sheet
+    const sheetData = await getSheetData(token);
+    const existingFolderIds = new Set(sheetData.slice(1).map(row => row[4] || ''));
+
+    // Scan CORREÇÃO folders for NEW items and register them
+    const newRows: string[][] = [];
+
+    await Promise.all(ADVOGADOS_INICIAIS.map(async (advNome) => {
+      // Find lawyer folder
+      const rootChildren = await listChildren(token, INICIAIS_ROOT_FOLDER_ID);
+      const advFolder = rootChildren.find(c => isFolder(c) && c.name.toUpperCase().includes(advNome));
+      if (!advFolder) return;
+
+      // Find CORREÇÃO
+      const advChildren = await listChildren(token, advFolder.id);
       const correcaoFolder = advChildren.find(c => {
         if (!isFolder(c)) return false;
         const n = c.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
-        return n.includes('CORRECAO') || n.includes('CORREÇÃO') || n.includes('CORRE');
+        return n.includes('CORRECAO') || n.includes('CORRE');
       });
-      if (!correcaoFolder) {
-        return { nome: advNome, total: 0, mesAtual: 0, clientes: [] as { cliente: string; empresa: string; data: string }[] };
-      }
+      if (!correcaoFolder) return;
 
-      // List all items in CORREÇÃO (both folders and files = client processes)
+      // List items in CORREÇÃO
       const items = await listChildren(token, correcaoFolder.id, 'id, name, mimeType, modifiedTime');
-      // Count folders as processes, but also count files if there are no folders
       const processFolders = items.filter(isFolder);
       const processItems = processFolders.length > 0 ? processFolders : items;
 
-      // Count total and this month's items
-      let mesAtual = 0;
-      const clientes: { cliente: string; empresa: string; data: string }[] = [];
-
       for (const item of processItems) {
-        const modified = (item as any).modifiedTime ? new Date((item as any).modifiedTime) : null;
-        const isThisMonth = modified && modified.getMonth() === currentMonth && modified.getFullYear() === currentYear;
-        
-        if (isThisMonth) {
-          mesAtual++;
-        }
+        // Skip if already registered
+        if (existingFolderIds.has(item.id)) continue;
 
         const { cliente, empresa } = extractClienteEmpresa(item.name.replace(/\.(docx?|pdf|odt|rtf)$/i, ''));
-        clientes.push({
-          cliente,
-          empresa,
-          data: modified ? `${String(modified.getDate()).padStart(2, '0')}/${String(modified.getMonth() + 1).padStart(2, '0')}/${modified.getFullYear()}` : 'N/A',
-        });
+        newRows.push([advNome, cliente, empresa, dataHoje, item.id, mesAnoAtual]);
+        existingFolderIds.add(item.id); // prevent duplicates within this run
       }
+    }));
 
-      // Sort by most recent first
-      clientes.sort((a, b) => {
-        const [da, ma, ya] = a.data.split('/').map(Number);
-        const [db, mb, yb] = b.data.split('/').map(Number);
-        return (yb * 10000 + mb * 100 + db) - (ya * 10000 + ma * 100 + da);
-      });
+    // Append new records to sheet
+    if (newRows.length > 0) {
+      await appendRows(token, newRows);
+    }
+
+    // Re-read sheet for accurate counts (including just-added rows)
+    const finalData = newRows.length > 0 ? await getSheetData(token) : sheetData;
+    const rows = finalData.slice(1); // skip header
+
+    // Build response per lawyer
+    const advogados = ADVOGADOS_INICIAIS.map(advNome => {
+      const advRows = rows.filter(r => (r[0] || '').toUpperCase() === advNome);
+      const mesRows = advRows.filter(r => (r[5] || '') === mesAnoAtual);
 
       return {
         nome: advNome,
-        total: processItems.length,
-        mesAtual,
-        clientes,
+        total: advRows.length,
+        mesAtual: mesRows.length,
+        clientes: advRows
+          .map(r => ({ cliente: r[1] || '', empresa: r[2] || '', data: r[3] || '' }))
+          .reverse(), // most recent first
       };
-    }));
+    });
 
     const mesNomes = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
     return NextResponse.json({
-      advogados: results,
+      advogados,
       mesAtual: mesNomes[currentMonth],
-      totalGeral: results.reduce((s, r) => s + r.total, 0),
-      totalMes: results.reduce((s, r) => s + r.mesAtual, 0),
+      totalGeral: advogados.reduce((s, a) => s + a.total, 0),
+      totalMes: advogados.reduce((s, a) => s + a.mesAtual, 0),
     });
 
   } catch (err) {
