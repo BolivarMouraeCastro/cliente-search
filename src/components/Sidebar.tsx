@@ -1,14 +1,18 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useSession, signIn, signOut } from 'next-auth/react';
 import Link from 'next/link';
 
 export default function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState(false);
 
   // Close sidebar on route change (mobile)
   useEffect(() => {
@@ -94,6 +98,34 @@ export default function Sidebar() {
     },
   ];
 
+  const COMISSOES_SENHA = '1234';
+
+  const handleComissoesClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    // Check if already authenticated this session
+    if (typeof window !== 'undefined' && sessionStorage.getItem('comissoes_auth') === 'true') {
+      router.push('/comissoes');
+      return;
+    }
+    setShowPasswordModal(true);
+    setPasswordInput('');
+    setPasswordError(false);
+  };
+
+  const handlePasswordSubmit = () => {
+    if (passwordInput === COMISSOES_SENHA) {
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('comissoes_auth', 'true');
+      }
+      setShowPasswordModal(false);
+      setPasswordInput('');
+      setPasswordError(false);
+      router.push('/comissoes');
+    } else {
+      setPasswordError(true);
+    }
+  };
+
   return (
     <>
       {/* Mobile toggle */}
@@ -174,16 +206,36 @@ export default function Sidebar() {
         </div>
 
         <nav className="sidebar-nav">
-          {navLinks.map((link, i) => (
-            <Link
-              key={i}
-              href={link.href}
-              className={`sidebar-link ${pathname === link.href ? 'active' : ''}`}
-            >
-              {link.icon}
-              <span className="sidebar-link-text">{link.label}</span>
-            </Link>
-          ))}
+          {navLinks.map((link, i) => {
+            if (link.href === '/comissoes') {
+              return (
+                <a
+                  key={i}
+                  href="/comissoes"
+                  onClick={handleComissoesClick}
+                  className={`sidebar-link ${pathname === link.href ? 'active' : ''}`}
+                  style={{ cursor: 'pointer' }}
+                >
+                  {link.icon}
+                  <span className="sidebar-link-text">{link.label}</span>
+                  <svg style={{ width: '14px', height: '14px', marginLeft: 'auto', opacity: 0.4 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                </a>
+              );
+            }
+            return (
+              <Link
+                key={i}
+                href={link.href}
+                className={`sidebar-link ${pathname === link.href ? 'active' : ''}`}
+              >
+                {link.icon}
+                <span className="sidebar-link-text">{link.label}</span>
+              </Link>
+            );
+          })}
         </nav>
 
         <div className="sidebar-footer">
@@ -227,6 +279,70 @@ export default function Sidebar() {
           )}
         </div>
       </aside>
+
+      {/* Password Modal for Comissões */}
+      {showPasswordModal && (
+        <div
+          onClick={() => setShowPasswordModal(false)}
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0, 0, 0, 0.7)', backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 10000,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'rgba(20, 20, 30, 0.95)', border: '1px solid rgba(212, 175, 55, 0.2)',
+              borderRadius: '1rem', padding: '2rem', width: '320px',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
+            }}
+          >
+            <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+              <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🔒</div>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+                Área Restrita
+              </h3>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.25rem 0 0' }}>
+                Digite a senha para acessar Comissões
+              </p>
+            </div>
+            <input
+              type="password"
+              value={passwordInput}
+              onChange={(e) => { setPasswordInput(e.target.value); setPasswordError(false); }}
+              onKeyDown={(e) => e.key === 'Enter' && handlePasswordSubmit()}
+              placeholder="Senha"
+              autoFocus
+              style={{
+                width: '100%', padding: '0.75rem 1rem',
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: `1px solid ${passwordError ? 'rgba(239, 68, 68, 0.5)' : 'rgba(255, 255, 255, 0.1)'}`,
+                borderRadius: '0.5rem', color: 'white', fontSize: '1rem',
+                outline: 'none', textAlign: 'center', letterSpacing: '0.3em',
+                boxSizing: 'border-box',
+              }}
+            />
+            {passwordError && (
+              <div style={{ color: '#ef4444', fontSize: '0.75rem', textAlign: 'center', marginTop: '0.5rem' }}>
+                Senha incorreta
+              </div>
+            )}
+            <button
+              onClick={handlePasswordSubmit}
+              style={{
+                width: '100%', padding: '0.75rem', marginTop: '1rem',
+                background: 'linear-gradient(135deg, #d4af37, #aa8035)',
+                border: 'none', borderRadius: '0.5rem', color: 'white',
+                fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer',
+              }}
+            >
+              Entrar
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
