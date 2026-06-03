@@ -8,9 +8,6 @@ interface PrescricaoClient {
   demissao: string;
   prescricaoDate: string;
   driveFolderId: string | null;
-  driveFolderName: string | null;
-  source: 'planilha' | 'ambos';
-  confirmado: boolean;
   diasRestantes: number;
 }
 
@@ -332,24 +329,23 @@ export default function PrescricoesPage() {
                       }}>
                         {getUrgencyLabel(client.diasRestantes)}
                       </span>
-                      {client.confirmado && (
+                      {client.driveFolderId ? (
                         <span style={{
                           fontSize: '0.6rem', padding: '0.15rem 0.4rem',
                           borderRadius: '0.25rem', color: '#86efac',
                           background: 'rgba(34, 197, 94, 0.15)',
                           border: '1px solid rgba(34, 197, 94, 0.2)',
                         }}>
-                          ✅ Confirmado
+                          📂 No Drive
                         </span>
-                      )}
-                      {!client.driveFolderId && (
+                      ) : (
                         <span style={{
                           fontSize: '0.6rem', padding: '0.15rem 0.4rem',
                           borderRadius: '0.25rem', color: '#fbbf24',
                           background: 'rgba(251, 191, 36, 0.15)',
                           border: '1px solid rgba(251, 191, 36, 0.2)',
                         }}>
-                          ⚠️ Sem pasta no Drive
+                          ⚠️ Sem pasta
                         </span>
                       )}
                     </div>

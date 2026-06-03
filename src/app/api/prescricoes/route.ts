@@ -13,27 +13,18 @@ interface DriveFolder {
   name: string;
 }
 
-// Extract date from folder name. Supports: DD.MM.YYYY, DD/MM/YYYY, DD-MM-YYYY
-function extractDateFromName(name: string): Date | null {
-  const dateRegex = /(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})/;
-  const match = name.match(dateRegex);
-  if (!match) return null;
-  const day = parseInt(match[1], 10);
-  const month = parseInt(match[2], 10);
-  const year = parseInt(match[3], 10);
-  if (month < 1 || month > 12 || day < 1 || day > 31 || year < 2020) return null;
-  return new Date(year, month - 1, day);
-}
-
+// Parse DD/MM/YYYY string to Date
 function parseBRDate(dateStr: string): Date | null {
   if (!dateStr || dateStr.trim() === '') return null;
-  const parts = dateStr.split('/');
+  // Clean the string
+  const cleaned = dateStr.trim();
+  const parts = cleaned.split('/');
   if (parts.length !== 3) return null;
   const day = parseInt(parts[0], 10);
   const month = parseInt(parts[1], 10);
   const year = parseInt(parts[2], 10);
   if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
-  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  if (month < 1 || month > 12 || day < 1 || day > 31 || year < 2000) return null;
   return new Date(year, month - 1, day);
 }
 
@@ -49,14 +40,6 @@ function normalize(name: string): string {
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function extractClientName(folderName: string): string {
-  return folderName
-    .replace(/\d{1,2}[.\/-]\d{1,2}[.\/-]\d{4}/, '')
-    .replace(/\[MOVIDO\]/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -115,22 +98,23 @@ export async function GET(req: NextRequest) {
 
     const now = new Date();
 
+    // Buscar planilha e pastas do Drive em paralelo
     const [driveFolders, allClients] = await Promise.all([
       listBolivarFolders(session.accessToken),
       getClients(session.accessToken, SPREADSHEET_ID)
     ]);
 
+    // Filtrar pastas excluídas
     const validFolders = driveFolders.filter(f => {
       const lowerName = f.name.toLowerCase();
       return !EXCLUDED_FOLDERS.some(ex => lowerName.includes(ex));
     });
 
     // =================================================================
-    // FONTE DA VERDADE: Planilha ENTRADA DE PROCESSO (coluna demissão)
-    // Prescrição bienal = demissão + 2 anos
-    // A data no nome da pasta do Drive serve APENAS para CONFIRMAR.
-    // Se a data da pasta não bate com demissão+2a, ignoramos a data
-    // da pasta (provavelmente é de outra empresa / carteira de trabalho).
+    // FONTE ÚNICA: Planilha ENTRADA DE PROCESSO
+    // Lógica: demissão + 2 anos = prescrição bienal
+    // O Drive NÃO é usado para calcular datas.
+    // O Drive só é usado para encontrar o ID da pasta (botão de mover).
     // =================================================================
 
     const prescricaoList: {
@@ -139,39 +123,28 @@ export async function GET(req: NextRequest) {
       demissao: string;
       prescricaoDate: Date;
       driveFolderId: string | null;
-      driveFolderName: string | null;
-      confirmado: boolean;
     }[] = [];
 
     for (const client of allClients) {
+      // Somente clientes com status "BOLIVAR"
       const status = normalize(client.status);
       if (status !== 'bolivar') continue;
 
+      // Pegar data de demissão da planilha
       const demissaoDate = parseBRDate(client.demissao);
       if (!demissaoDate) continue;
 
       // Prescrição bienal = demissão + 2 anos
       const prescDate = new Date(demissaoDate.getFullYear() + 2, demissaoDate.getMonth(), demissaoDate.getDate());
-      if (prescDate <= now) continue; // Já prescreveu
+      
+      // Só mostrar se ainda não prescreveu
+      if (prescDate <= now) continue;
 
-      // Procurar pasta correspondente no Drive
-      let matchingFolder: DriveFolder | null = null;
-      let confirmado = false;
-
+      // Encontrar pasta correspondente no Drive (apenas para o botão de mover)
+      let matchingFolderId: string | null = null;
       for (const folder of validFolders) {
-        const folderClientName = extractClientName(folder.name);
-        if (namesMatch(client.nome, folderClientName) || namesMatch(client.nome, folder.name)) {
-          matchingFolder = folder;
-
-          // Verificar se a data da pasta bate com demissão + 2 anos
-          const folderDate = extractDateFromName(folder.name);
-          if (folderDate) {
-            const diffDays = Math.abs(folderDate.getTime() - prescDate.getTime()) / (1000 * 60 * 60 * 24);
-            if (diffDays <= 30) {
-              confirmado = true; // Data da pasta confirma o cálculo da planilha
-            }
-            // Se NÃO bate, ignoramos a data da pasta (é de outra empresa)
-          }
+        if (namesMatch(client.nome, folder.name)) {
+          matchingFolderId = folder.id;
           break;
         }
       }
@@ -181,9 +154,7 @@ export async function GET(req: NextRequest) {
         empresa: client.empresa || '',
         demissao: client.demissao,
         prescricaoDate: prescDate,
-        driveFolderId: matchingFolder?.id || null,
-        driveFolderName: matchingFolder?.name || null,
-        confirmado,
+        driveFolderId: matchingFolderId,
       });
     }
 
@@ -217,9 +188,6 @@ export async function GET(req: NextRequest) {
               demissao: c.demissao,
               prescricaoDate: formatDateBR(c.prescricaoDate),
               driveFolderId: c.driveFolderId,
-              driveFolderName: c.driveFolderName,
-              source: (c.driveFolderId ? 'ambos' : 'planilha') as 'ambos' | 'planilha',
-              confirmado: c.confirmado,
               diasRestantes: Math.ceil((c.prescricaoDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)),
             })),
         };
@@ -227,7 +195,6 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       months: sortedMonths,
-      totalFolders: validFolders.length,
       totalPrescricoes: prescricaoList.length,
     });
 
