@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
+import { getClients } from '@/lib/sheets';
 
 const INICIAIS_ROOT_FOLDER_ID = '1AFf7qFK2cYNPDmOJuAqVFfiqK2pmMBuZ';
 const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID ?? '';
@@ -40,11 +41,44 @@ async function listChildren(token: string, folderId: string, fields = 'id, name,
   return all;
 }
 
-function extractClienteEmpresa(folderName: string): { cliente: string; empresa: string } {
-  const clean = folderName.replace(/\(não mexer\)/gi, '').replace(/\(nao mexer\)/gi, '').replace(/^liberar\s+\w+\s+/i, '').trim();
-  const xMatch = clean.match(/^(.+?)\s+[xX]\s+(.+)$/);
-  if (xMatch) return { cliente: xMatch[1].trim(), empresa: xMatch[2].trim() };
-  return { cliente: clean, empresa: '' };
+function extractCliente(folderName: string): string {
+  // Clean folder name: remove "(não mexer)", "Liberar Eliton", dates like "28-09-2027", etc.
+  let clean = folderName
+    .replace(/\(não mexer\)/gi, '')
+    .replace(/\(nao mexer\)/gi, '')
+    .replace(/^liberar\s+\w+\s+/i, '')
+    .replace(/\s*-\s*\d{2}[.-]\d{2}[.-]\d{4}\s*/g, '') // remove dates like 28-09-2027
+    .replace(/\.(docx?|pdf|odt|rtf)$/i, '')
+    .trim();
+  // Remove " X EMPRESA" part if present (we'll get empresa from spreadsheet)
+  const xMatch = clean.match(/^(.+?)\s+[xX]\s+.+$/);
+  if (xMatch) clean = xMatch[1].trim();
+  return clean;
+}
+
+function normalize(name: string): string {
+  return name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function findEmpresaInSheet(clienteName: string, allClients: { nome: string; empresa: string }[]): string {
+  const normCliente = normalize(clienteName);
+  if (!normCliente) return '';
+  
+  // Try exact match first
+  for (const c of allClients) {
+    if (normalize(c.nome) === normCliente) return c.empresa;
+  }
+  // Try partial match (first + last name)
+  const parts = normCliente.split(' ');
+  if (parts.length >= 2) {
+    const first = parts[0];
+    const last = parts[parts.length - 1];
+    for (const c of allClients) {
+      const cn = normalize(c.nome);
+      if (cn.startsWith(first) && cn.endsWith(last)) return c.empresa;
+    }
+  }
+  return '';
 }
 
 // ========== SHEETS HELPERS ==========
@@ -131,6 +165,10 @@ export async function GET(req: NextRequest) {
     const sheetData = await getSheetData(token);
     const existingFolderIds = new Set(sheetData.slice(1).map(row => row[4] || ''));
 
+    // Load spreadsheet clients for empresa lookup
+    const allClients = await getClients(token, SPREADSHEET_ID);
+    const clientLookup = allClients.map(c => ({ nome: c.nome, empresa: c.empresa }));
+
     // Scan CORREÇÃO folders for NEW items and register them
     const newRows: string[][] = [];
 
@@ -158,9 +196,10 @@ export async function GET(req: NextRequest) {
         // Skip if already registered
         if (existingFolderIds.has(item.id)) continue;
 
-        const { cliente, empresa } = extractClienteEmpresa(item.name.replace(/\.(docx?|pdf|odt|rtf)$/i, ''));
+        const cliente = extractCliente(item.name);
+        const empresa = findEmpresaInSheet(cliente, clientLookup);
         newRows.push([advNome, cliente, empresa, dataHoje, item.id, mesAnoAtual]);
-        existingFolderIds.add(item.id); // prevent duplicates within this run
+        existingFolderIds.add(item.id);
       }
     }));
 
