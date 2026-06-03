@@ -98,7 +98,7 @@ export default function Sidebar() {
     },
   ];
 
-  const COMISSOES_SENHA = '1234';
+  const COMISSOES_SENHA = '5610';
 
   const handleComissoesClick = (e: React.MouseEvent) => {
     e.preventDefault();
