@@ -26,13 +26,28 @@ const DONUT_COLORS = [
   '#6366f1', '#14b8a6', '#a855f7', '#f59e0b', '#22c55e',
 ];
 
-function DonutChart({ data, size = 160, label }: { data: { name: string; value: number; color: string }[]; size?: number; label: string }) {
+function DonutChart({ data, size = 140, label }: { data: { name: string; value: number; color: string }[]; size?: number; label: string }) {
   const total = data.reduce((s, d) => s + d.value, 0);
-  if (total === 0) return null;
-
   const r = size / 2;
-  const strokeWidth = 28;
+  const strokeWidth = 24;
   const innerR = r - strokeWidth;
+
+  if (total === 0) {
+    // Empty state: gray ring with 0
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+          <circle cx={r} cy={r} r={innerR} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={strokeWidth} />
+          <text x={r} y={r - 4} textAnchor="middle" fill="rgba(255,255,255,0.3)" fontSize="1.5rem" fontWeight="800">0</text>
+          <text x={r} y={r + 12} textAnchor="middle" fill="rgba(255,255,255,0.2)" fontSize="0.55rem" fontWeight="600">PEÇAS</text>
+        </svg>
+        <div style={{ marginTop: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)', textAlign: 'center' }}>
+          {label}
+        </div>
+      </div>
+    );
+  }
+
   let cumulative = 0;
 
   return (
@@ -58,14 +73,14 @@ function DonutChart({ data, size = 160, label }: { data: { name: string; value: 
             />
           );
         })}
-        <text x={r} y={r - 6} textAnchor="middle" fill="white" fontSize="1.5rem" fontWeight="800">
+        <text x={r} y={r - 4} textAnchor="middle" fill="white" fontSize="1.5rem" fontWeight="800">
           {total}
         </text>
-        <text x={r} y={r + 14} textAnchor="middle" fill="rgba(255,255,255,0.5)" fontSize="0.6rem" fontWeight="600">
+        <text x={r} y={r + 12} textAnchor="middle" fill="rgba(255,255,255,0.5)" fontSize="0.55rem" fontWeight="600">
           PEÇAS
         </text>
       </svg>
-      <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)', textAlign: 'center' }}>
+      <div style={{ marginTop: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)', textAlign: 'center' }}>
         {label}
       </div>
     </div>
@@ -244,6 +259,11 @@ export default function ComissoesPage() {
               <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '1rem' }}>
                 📋 Detalhamento — {selectedData.nome} ({selectedData.total} peças)
               </h3>
+              {selectedData.total === 0 ? (
+                <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '1.5rem', fontSize: '0.85rem' }}>
+                  Nenhuma peça registrada ainda. A contagem começa a partir de 08/06/2026.
+                </div>
+              ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 {selectedData.tipos.map((tipo, ti) => (
                   <div key={tipo.nome}>
@@ -302,6 +322,7 @@ export default function ComissoesPage() {
                   </div>
                 ))}
               </div>
+              )}
             </div>
           )}
 
