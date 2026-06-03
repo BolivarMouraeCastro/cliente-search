@@ -178,6 +178,10 @@ export async function POST(req: NextRequest) {
 
   } catch (error: any) {
     console.error('Migration error:', error);
-    return NextResponse.json({ error: `Erro Google Drive: ${error.message}` }, { status: 500 });
+    let errorMessage = error.message;
+    if (errorMessage.includes('insufficientParentPermissions') || errorMessage.includes('Insufficient permissions')) {
+      errorMessage = 'Seu email não tem permissão de EDIÇÃO (Editor) na pasta de destino no Google Drive. Peça para o dono da pasta compartilhar com você como Editor.';
+    }
+    return NextResponse.json({ error: `Erro Google Drive: ${errorMessage}` }, { status: 500 });
   }
 }
