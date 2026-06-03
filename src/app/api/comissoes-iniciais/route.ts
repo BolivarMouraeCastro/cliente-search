@@ -86,31 +86,36 @@ export async function GET(req: NextRequest) {
         return { nome: advNome, total: 0, mesAtual: 0, clientes: [] as { cliente: string; empresa: string; data: string }[] };
       }
 
-      // Find CORREÇÃO folder inside
-      const correcaoId = await findFolder(token, 'CORREÇÃO', advFolderId);
-      // Also try without accent
-      const correcaoId2 = correcaoId || await findFolder(token, 'CORRECAO', advFolderId);
-      if (!correcaoId2) {
+      // Find CORREÇÃO folder inside - list all subfolders and match
+      const advChildren = await listChildren(token, advFolderId);
+      const correcaoFolder = advChildren.find(c => {
+        if (!isFolder(c)) return false;
+        const n = c.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+        return n.includes('CORRECAO') || n.includes('CORREÇÃO') || n.includes('CORRE');
+      });
+      if (!correcaoFolder) {
         return { nome: advNome, total: 0, mesAtual: 0, clientes: [] as { cliente: string; empresa: string; data: string }[] };
       }
 
-      // List all items in CORREÇÃO (folders = client processes)
-      const items = await listChildren(token, correcaoId2, 'id, name, mimeType, createdTime');
-      const folders = items.filter(isFolder);
+      // List all items in CORREÇÃO (both folders and files = client processes)
+      const items = await listChildren(token, correcaoFolder.id, 'id, name, mimeType, createdTime');
+      // Count folders as processes, but also count files if there are no folders
+      const processFolders = items.filter(isFolder);
+      const processItems = processFolders.length > 0 ? processFolders : items;
 
       // Count total and this month's items
       let mesAtual = 0;
       const clientes: { cliente: string; empresa: string; data: string }[] = [];
 
-      for (const folder of folders) {
-        const created = folder.createdTime ? new Date(folder.createdTime) : null;
+      for (const item of processItems) {
+        const created = item.createdTime ? new Date(item.createdTime) : null;
         const isThisMonth = created && created.getMonth() === currentMonth && created.getFullYear() === currentYear;
         
         if (isThisMonth) {
           mesAtual++;
         }
 
-        const { cliente, empresa } = extractClienteEmpresa(folder.name);
+        const { cliente, empresa } = extractClienteEmpresa(item.name.replace(/\.(docx?|pdf|odt|rtf)$/i, ''));
         clientes.push({
           cliente,
           empresa,
@@ -127,7 +132,7 @@ export async function GET(req: NextRequest) {
 
       return {
         nome: advNome,
-        total: folders.length,
+        total: processItems.length,
         mesAtual,
         clientes,
       };
