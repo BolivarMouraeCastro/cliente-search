@@ -103,17 +103,20 @@ export default function IniciaisPage() {
     }
   };
 
-  const handleMoveFolder = async (folderId: string) => {
+  const handleMoveFolder = async (folderId: string, destinationType: 'URGENTE' | 'PERGUNTANDO') => {
     setMovingFolderId(folderId);
     setSearchError(null);
     try {
       const res = await fetch('/api/move-folder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folderId })
+        body: JSON.stringify({ folderId, destinationType })
       });
       if (res.ok) {
-        setMoveSuccess('Processo movido com sucesso para ALESSANDRA > INICIAIS PARA FAZER > CLIENTES URGENTES!');
+        const destinationText = destinationType === 'URGENTE' 
+          ? 'ALESSANDRA > INICIAIS PARA FAZER > CLIENTES URGENTES' 
+          : 'ELITON > INICIAIS PARA FAZER';
+        setMoveSuccess(`Processo movido com sucesso para ${destinationText}!`);
         // Remove from results list
         setSearchResults(prev => prev.filter(r => r.id !== folderId));
         // Refresh iniciais data after 2 seconds to let Drive sync
@@ -229,18 +232,32 @@ export default function IniciaisPage() {
                     {res.prescricao && <span style={{ color: '#f59e0b' }}>⚠️ Prescrição: {res.prescricao}</span>}
                   </div>
                 </div>
-                <button
-                  onClick={() => handleMoveFolder(res.id)}
-                  disabled={movingFolderId === res.id}
-                  style={{
-                    background: movingFolderId === res.id ? '#555' : 'linear-gradient(135deg, #10b981, #059669)',
-                    color: 'white', fontWeight: 700, padding: '0.6rem 1rem', borderRadius: '0.5rem',
-                    border: 'none', cursor: movingFolderId === res.id ? 'wait' : 'pointer',
-                    fontSize: '0.85rem'
-                  }}
-                >
-                  {movingFolderId === res.id ? '⏳ Movendo...' : '📤 COLOCAR PARA FAZER'}
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem', flexDirection: 'column' }}>
+                  <button
+                    onClick={() => handleMoveFolder(res.id, 'URGENTE')}
+                    disabled={movingFolderId === res.id}
+                    style={{
+                      background: movingFolderId === res.id ? '#555' : 'linear-gradient(135deg, #10b981, #059669)',
+                      color: 'white', fontWeight: 700, padding: '0.6rem 1rem', borderRadius: '0.5rem',
+                      border: 'none', cursor: movingFolderId === res.id ? 'wait' : 'pointer',
+                      fontSize: '0.85rem', width: '100%'
+                    }}
+                  >
+                    {movingFolderId === res.id ? '⏳ Movendo...' : '📤 CLIENTE URGENTE'}
+                  </button>
+                  <button
+                    onClick={() => handleMoveFolder(res.id, 'PERGUNTANDO')}
+                    disabled={movingFolderId === res.id}
+                    style={{
+                      background: movingFolderId === res.id ? '#555' : 'linear-gradient(135deg, #f59e0b, #d97706)',
+                      color: 'white', fontWeight: 700, padding: '0.6rem 1rem', borderRadius: '0.5rem',
+                      border: 'none', cursor: movingFolderId === res.id ? 'wait' : 'pointer',
+                      fontSize: '0.85rem', width: '100%'
+                    }}
+                  >
+                    {movingFolderId === res.id ? '⏳ Movendo...' : '❓ CLIENTE PERGUNTANDO'}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
