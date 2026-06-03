@@ -168,6 +168,11 @@ export async function GET(req: NextRequest) {
     }
 
     // 2. Process Spreadsheet clients (demissao + 2 years = prescricao bienal)
+    // The spreadsheet is used to:
+    //   a) Enrich Drive entries with empresa info
+    //   b) Add clients that DON'T have dates in their folder name but DO have demissao in the sheet
+    // IMPORTANT: The folder name date is the SOURCE OF TRUTH — it was calculated by the lawyer
+    //            for the correct employer. The spreadsheet demissao may refer to a different employer.
     for (const client of allClients) {
       // Only consider clients with status "BOLIVAR" (still pending)
       const status = normalize(client.status);
@@ -183,15 +188,15 @@ export async function GET(req: NextRequest) {
       const key = normalize(client.nome);
 
       if (prescricaoMap.has(key)) {
-        // Already from Drive, enrich with spreadsheet data
+        // Already from Drive — only enrich with empresa, do NOT touch prescricaoDate!
         const existing = prescricaoMap.get(key)!;
         existing.empresa = client.empresa || existing.empresa;
-        existing.demissao = client.demissao || existing.demissao;
+        // Keep demissao from Drive calculation (prescDate - 2 years) since it matches the correct employer
         existing.source = 'ambos';
-        // Use spreadsheet prescricao date as it's more reliable
-        existing.prescricaoDate = prescDate;
+        // DO NOT overwrite prescricaoDate — the folder name is the lawyer's calculation
       } else {
-        // Try to find a matching drive folder by name
+        // Client not found via folder name date. Try to find a matching drive folder anyway
+        // (some folders might not have dates in their names but still exist in Bolivar)
         let matchingFolder: DriveFolder | null = null;
         for (const folder of validFolders) {
           const folderClientName = extractClientName(folder.name);
