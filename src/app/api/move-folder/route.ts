@@ -162,6 +162,12 @@ export async function POST(req: NextRequest) {
       if (!iniciaisFazerId) return NextResponse.json({ error: 'Pasta INICIAIS PARA FAZER não encontrada' }, { status: 404 });
       const perguntandoId = await findFolder(session.accessToken, 'PERGUNTANDO', iniciaisFazerId);
       targetParentId = perguntandoId || iniciaisFazerId; // Fallback para INICIAIS PARA FAZER se CLIENTES PERGUNTANDO não existir
+    } else if (destinationType === 'ELITON_INICIAIS') {
+      const advId = await findFolder(session.accessToken, 'ELITON', INICIAIS_ROOT_FOLDER_ID);
+      if (!advId) return NextResponse.json({ error: 'Pasta ELITON não encontrada' }, { status: 404 });
+      const iniciaisFazerId = await findFolder(session.accessToken, 'INICIAIS PARA FAZER', advId);
+      if (!iniciaisFazerId) return NextResponse.json({ error: 'Pasta INICIAIS PARA FAZER não encontrada dentro de ELITON' }, { status: 404 });
+      targetParentId = iniciaisFazerId;
     } else {
       return NextResponse.json({ error: 'Tipo de destino inválido' }, { status: 400 });
     }
