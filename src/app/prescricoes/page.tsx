@@ -9,7 +9,8 @@ interface PrescricaoClient {
   prescricaoDate: string;
   driveFolderId: string | null;
   driveFolderName: string | null;
-  source: 'drive' | 'planilha' | 'ambos';
+  source: 'planilha' | 'ambos';
+  confirmado: boolean;
   diasRestantes: number;
 }
 
@@ -331,14 +332,26 @@ export default function PrescricoesPage() {
                       }}>
                         {getUrgencyLabel(client.diasRestantes)}
                       </span>
-                      <span style={{
-                        fontSize: '0.6rem', padding: '0.15rem 0.4rem',
-                        borderRadius: '0.25rem', color: '#93c5fd',
-                        background: 'rgba(59, 130, 246, 0.15)',
-                        border: '1px solid rgba(59, 130, 246, 0.2)',
-                      }}>
-                        {client.source === 'ambos' ? '📂+📊' : client.source === 'drive' ? '📂 Drive' : '📊 Planilha'}
-                      </span>
+                      {client.confirmado && (
+                        <span style={{
+                          fontSize: '0.6rem', padding: '0.15rem 0.4rem',
+                          borderRadius: '0.25rem', color: '#86efac',
+                          background: 'rgba(34, 197, 94, 0.15)',
+                          border: '1px solid rgba(34, 197, 94, 0.2)',
+                        }}>
+                          ✅ Confirmado
+                        </span>
+                      )}
+                      {!client.driveFolderId && (
+                        <span style={{
+                          fontSize: '0.6rem', padding: '0.15rem 0.4rem',
+                          borderRadius: '0.25rem', color: '#fbbf24',
+                          background: 'rgba(251, 191, 36, 0.15)',
+                          border: '1px solid rgba(251, 191, 36, 0.2)',
+                        }}>
+                          ⚠️ Sem pasta no Drive
+                        </span>
+                      )}
                     </div>
                     <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.2rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
                       {client.empresa && <span>🏢 {client.empresa}</span>}

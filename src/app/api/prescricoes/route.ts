@@ -15,21 +15,16 @@ interface DriveFolder {
 
 // Extract date from folder name. Supports: DD.MM.YYYY, DD/MM/YYYY, DD-MM-YYYY
 function extractDateFromName(name: string): Date | null {
-  // Match patterns like 19.09.2027, 19/09/2027, 19-09-2027
   const dateRegex = /(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})/;
   const match = name.match(dateRegex);
   if (!match) return null;
-
   const day = parseInt(match[1], 10);
   const month = parseInt(match[2], 10);
   const year = parseInt(match[3], 10);
-
   if (month < 1 || month > 12 || day < 1 || day > 31 || year < 2020) return null;
-
   return new Date(year, month - 1, day);
 }
 
-// Parse DD/MM/YYYY string to Date
 function parseBRDate(dateStr: string): Date | null {
   if (!dateStr || dateStr.trim() === '') return null;
   const parts = dateStr.split('/');
@@ -49,7 +44,6 @@ function formatDateBR(date: Date): string {
   return `${d}/${m}/${y}`;
 }
 
-// Normalize name for comparison
 function normalize(name: string): string {
   return name
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -59,9 +53,7 @@ function normalize(name: string): string {
     .trim();
 }
 
-// Remove date from folder name to get client name
 function extractClientName(folderName: string): string {
-  // Remove the date part and clean up
   return folderName
     .replace(/\d{1,2}[.\/-]\d{1,2}[.\/-]\d{4}/, '')
     .replace(/\[MOVIDO\]/gi, '')
@@ -123,116 +115,89 @@ export async function GET(req: NextRequest) {
 
     const now = new Date();
 
-    // Fetch both sources in parallel
     const [driveFolders, allClients] = await Promise.all([
       listBolivarFolders(session.accessToken),
       getClients(session.accessToken, SPREADSHEET_ID)
     ]);
 
-    // Filter out excluded folders
     const validFolders = driveFolders.filter(f => {
       const lowerName = f.name.toLowerCase();
       return !EXCLUDED_FOLDERS.some(ex => lowerName.includes(ex));
     });
 
-    // Track all prescriptions by a unique key (normalized name)
-    const prescricaoMap = new Map<string, {
+    // =================================================================
+    // FONTE DA VERDADE: Planilha ENTRADA DE PROCESSO (coluna demissão)
+    // Prescrição bienal = demissão + 2 anos
+    // A data no nome da pasta do Drive serve APENAS para CONFIRMAR.
+    // Se a data da pasta não bate com demissão+2a, ignoramos a data
+    // da pasta (provavelmente é de outra empresa / carteira de trabalho).
+    // =================================================================
+
+    const prescricaoList: {
       nome: string;
       empresa: string;
       demissao: string;
       prescricaoDate: Date;
       driveFolderId: string | null;
       driveFolderName: string | null;
-      source: 'drive' | 'planilha' | 'ambos';
-    }>();
+      confirmado: boolean;
+    }[] = [];
 
-    // 1. Process Drive folders (date in folder name IS the prescricao date)
-    for (const folder of validFolders) {
-      const prescDate = extractDateFromName(folder.name);
-      if (!prescDate) continue;
-      if (prescDate <= now) continue; // Already prescribed, skip
-
-      const clientName = extractClientName(folder.name);
-      if (!clientName) continue;
-
-      const key = normalize(clientName);
-      prescricaoMap.set(key, {
-        nome: clientName,
-        empresa: '',
-        demissao: formatDateBR(new Date(prescDate.getFullYear() - 2, prescDate.getMonth(), prescDate.getDate())),
-        prescricaoDate: prescDate,
-        driveFolderId: folder.id,
-        driveFolderName: folder.name,
-        source: 'drive',
-      });
-    }
-
-    // 2. Process Spreadsheet clients (demissao + 2 years = prescricao bienal)
-    // The spreadsheet is used to:
-    //   a) Enrich Drive entries with empresa info
-    //   b) Add clients that DON'T have dates in their folder name but DO have demissao in the sheet
-    // IMPORTANT: The folder name date is the SOURCE OF TRUTH — it was calculated by the lawyer
-    //            for the correct employer. The spreadsheet demissao may refer to a different employer.
     for (const client of allClients) {
-      // Only consider clients with status "BOLIVAR" (still pending)
       const status = normalize(client.status);
       if (status !== 'bolivar') continue;
 
       const demissaoDate = parseBRDate(client.demissao);
       if (!demissaoDate) continue;
 
-      // Prescricao bienal = demissao + 2 years
+      // Prescrição bienal = demissão + 2 anos
       const prescDate = new Date(demissaoDate.getFullYear() + 2, demissaoDate.getMonth(), demissaoDate.getDate());
-      if (prescDate <= now) continue; // Already prescribed
+      if (prescDate <= now) continue; // Já prescreveu
 
-      const key = normalize(client.nome);
+      // Procurar pasta correspondente no Drive
+      let matchingFolder: DriveFolder | null = null;
+      let confirmado = false;
 
-      if (prescricaoMap.has(key)) {
-        // Already from Drive — only enrich with empresa, do NOT touch prescricaoDate!
-        const existing = prescricaoMap.get(key)!;
-        existing.empresa = client.empresa || existing.empresa;
-        // Keep demissao from Drive calculation (prescDate - 2 years) since it matches the correct employer
-        existing.source = 'ambos';
-        // DO NOT overwrite prescricaoDate — the folder name is the lawyer's calculation
-      } else {
-        // Client not found via folder name date. Try to find a matching drive folder anyway
-        // (some folders might not have dates in their names but still exist in Bolivar)
-        let matchingFolder: DriveFolder | null = null;
-        for (const folder of validFolders) {
-          const folderClientName = extractClientName(folder.name);
-          if (namesMatch(client.nome, folderClientName) || namesMatch(client.nome, folder.name)) {
-            matchingFolder = folder;
-            break;
+      for (const folder of validFolders) {
+        const folderClientName = extractClientName(folder.name);
+        if (namesMatch(client.nome, folderClientName) || namesMatch(client.nome, folder.name)) {
+          matchingFolder = folder;
+
+          // Verificar se a data da pasta bate com demissão + 2 anos
+          const folderDate = extractDateFromName(folder.name);
+          if (folderDate) {
+            const diffDays = Math.abs(folderDate.getTime() - prescDate.getTime()) / (1000 * 60 * 60 * 24);
+            if (diffDays <= 30) {
+              confirmado = true; // Data da pasta confirma o cálculo da planilha
+            }
+            // Se NÃO bate, ignoramos a data da pasta (é de outra empresa)
           }
+          break;
         }
-
-        prescricaoMap.set(key, {
-          nome: client.nome,
-          empresa: client.empresa || '',
-          demissao: client.demissao,
-          prescricaoDate: prescDate,
-          driveFolderId: matchingFolder?.id || null,
-          driveFolderName: matchingFolder?.name || null,
-          source: matchingFolder ? 'ambos' : 'planilha',
-        });
       }
+
+      prescricaoList.push({
+        nome: client.nome,
+        empresa: client.empresa || '',
+        demissao: client.demissao,
+        prescricaoDate: prescDate,
+        driveFolderId: matchingFolder?.id || null,
+        driveFolderName: matchingFolder?.name || null,
+        confirmado,
+      });
     }
 
-    // 3. Group by month
-    const monthsMap = new Map<string, typeof prescricaoMap extends Map<any, infer V> ? V[] : never>();
-
-    for (const [, entry] of prescricaoMap) {
+    // Agrupar por mês
+    const monthsMap = new Map<string, typeof prescricaoList>();
+    for (const entry of prescricaoList) {
       const m = String(entry.prescricaoDate.getMonth() + 1).padStart(2, '0');
       const y = entry.prescricaoDate.getFullYear();
       const monthKey = `${m}/${y}`;
-
-      if (!monthsMap.has(monthKey)) {
-        monthsMap.set(monthKey, []);
-      }
+      if (!monthsMap.has(monthKey)) monthsMap.set(monthKey, []);
       monthsMap.get(monthKey)!.push(entry);
     }
 
-    // 4. Sort months chronologically and format response
+    // Ordenar meses cronologicamente
     const sortedMonths = Array.from(monthsMap.entries())
       .sort(([a], [b]) => {
         const [mA, yA] = a.split('/').map(Number);
@@ -253,7 +218,8 @@ export async function GET(req: NextRequest) {
               prescricaoDate: formatDateBR(c.prescricaoDate),
               driveFolderId: c.driveFolderId,
               driveFolderName: c.driveFolderName,
-              source: c.source,
+              source: (c.driveFolderId ? 'ambos' : 'planilha') as 'ambos' | 'planilha',
+              confirmado: c.confirmado,
               diasRestantes: Math.ceil((c.prescricaoDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)),
             })),
         };
@@ -262,7 +228,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       months: sortedMonths,
       totalFolders: validFolders.length,
-      totalWithDate: prescricaoMap.size,
+      totalPrescricoes: prescricaoList.length,
     });
 
   } catch (err) {
