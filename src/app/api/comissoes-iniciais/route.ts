@@ -98,7 +98,7 @@ export async function GET(req: NextRequest) {
       }
 
       // List all items in CORREÇÃO (both folders and files = client processes)
-      const items = await listChildren(token, correcaoFolder.id, 'id, name, mimeType, createdTime');
+      const items = await listChildren(token, correcaoFolder.id, 'id, name, mimeType, modifiedTime');
       // Count folders as processes, but also count files if there are no folders
       const processFolders = items.filter(isFolder);
       const processItems = processFolders.length > 0 ? processFolders : items;
@@ -108,8 +108,8 @@ export async function GET(req: NextRequest) {
       const clientes: { cliente: string; empresa: string; data: string }[] = [];
 
       for (const item of processItems) {
-        const created = item.createdTime ? new Date(item.createdTime) : null;
-        const isThisMonth = created && created.getMonth() === currentMonth && created.getFullYear() === currentYear;
+        const modified = (item as any).modifiedTime ? new Date((item as any).modifiedTime) : null;
+        const isThisMonth = modified && modified.getMonth() === currentMonth && modified.getFullYear() === currentYear;
         
         if (isThisMonth) {
           mesAtual++;
@@ -119,7 +119,7 @@ export async function GET(req: NextRequest) {
         clientes.push({
           cliente,
           empresa,
-          data: created ? `${String(created.getDate()).padStart(2, '0')}/${String(created.getMonth() + 1).padStart(2, '0')}/${created.getFullYear()}` : 'N/A',
+          data: modified ? `${String(modified.getDate()).padStart(2, '0')}/${String(modified.getMonth() + 1).padStart(2, '0')}/${modified.getFullYear()}` : 'N/A',
         });
       }
 
