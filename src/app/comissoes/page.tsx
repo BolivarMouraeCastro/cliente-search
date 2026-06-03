@@ -97,6 +97,13 @@ export default function ComissoesPage() {
   const [selectedAdvogado, setSelectedAdvogado] = useState<string | null>(null);
   const [expandedTipo, setExpandedTipo] = useState<string | null>(null);
 
+  // Iniciais state
+  interface IniciaisAdv { nome: string; total: number; mesAtual: number; clientes: { cliente: string; empresa: string; data: string }[] }
+  const [iniciaisAdvs, setIniciaisAdvs] = useState<IniciaisAdv[]>([]);
+  const [iniciaisMes, setIniciaisMes] = useState('');
+  const [iniciaisLoading, setIniciaisLoading] = useState(true);
+  const [expandedIniciais, setExpandedIniciais] = useState<string | null>(null);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -121,6 +128,12 @@ export default function ComissoesPage() {
 
   useEffect(() => {
     fetchData();
+    // Fetch iniciais
+    fetch('/api/comissoes-iniciais')
+      .then(r => r.json())
+      .then(d => { setIniciaisAdvs(d.advogados || []); setIniciaisMes(d.mesAtual || ''); })
+      .catch(() => {})
+      .finally(() => setIniciaisLoading(false));
   }, [fetchData]);
 
   const selectedData = advogados.find(a => a.nome === selectedAdvogado);
@@ -139,6 +152,82 @@ export default function ComissoesPage() {
           Acompanhe as peças processuais protocoladas por cada advogado. Dados extraídos da pasta PROTOCOLO PJE.
         </p>
       </div>
+
+      {/* ==================== PETIÇÃO INICIAL ==================== */}
+      <div style={{ marginBottom: '2.5rem' }}>
+        <h2 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          📝 Petição Inicial {iniciaisMes && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500 }}>— {iniciaisMes}</span>}
+        </h2>
+
+        {iniciaisLoading ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
+            {[1,2,3,4].map(i => <div key={i} className="shimmer" style={{ height: '120px', borderRadius: '0.75rem' }} />)}
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
+            {iniciaisAdvs.map((adv) => (
+              <div key={adv.nome} style={{
+                background: 'rgba(14, 14, 20, 0.5)', border: `1px solid ${expandedIniciais === adv.nome ? 'rgba(212, 175, 55, 0.3)' : 'rgba(255, 255, 255, 0.06)'}`,
+                borderRadius: '0.75rem', overflow: 'hidden', cursor: 'pointer', transition: 'border-color 0.3s',
+              }}>
+                <div
+                  onClick={() => setExpandedIniciais(expandedIniciais === adv.nome ? null : adv.nome)}
+                  style={{ padding: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                >
+                  <div>
+                    <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)' }}>{adv.nome}</div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                      {adv.total} total • {adv.mesAtual} este mês
+                    </div>
+                  </div>
+                  <div style={{
+                    width: '50px', height: '50px', borderRadius: '50%',
+                    background: adv.mesAtual > 0
+                      ? 'linear-gradient(135deg, rgba(212, 175, 55, 0.2), rgba(212, 175, 55, 0.05))'
+                      : 'rgba(255,255,255,0.03)',
+                    border: `2px solid ${adv.mesAtual > 0 ? 'rgba(212, 175, 55, 0.4)' : 'rgba(255,255,255,0.08)'}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '1.2rem', fontWeight: 800,
+                    color: adv.mesAtual > 0 ? '#d4af37' : 'rgba(255,255,255,0.2)',
+                  }}>
+                    {adv.mesAtual}
+                  </div>
+                </div>
+
+                {expandedIniciais === adv.nome && (
+                  <div style={{ padding: '0 1rem 1rem', maxHeight: '250px', overflowY: 'auto' }}>
+                    {adv.clientes.length === 0 ? (
+                      <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem', textAlign: 'center', padding: '0.5rem' }}>
+                        Nenhuma inicial na CORREÇÃO
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                        {adv.clientes.map((c, ci) => (
+                          <div key={ci} style={{
+                            padding: '0.5rem 0.6rem', background: 'rgba(0,0,0,0.2)',
+                            borderRadius: '0.35rem', borderLeft: '2px solid rgba(212, 175, 55, 0.3)',
+                          }}>
+                            <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                              {c.cliente}
+                            </div>
+                            <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'flex', gap: '0.75rem', marginTop: '0.1rem' }}>
+                              {c.empresa && <span>🏢 {c.empresa}</span>}
+                              <span>📅 {c.data}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ==================== DIVIDER ==================== */}
+      <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)', margin: '0 0 2rem' }} />
 
       {/* Summary Cards */}
       {!loading && !error && (
