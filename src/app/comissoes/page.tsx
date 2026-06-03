@@ -138,6 +138,21 @@ export default function ComissoesPage() {
 
   const selectedData = advogados.find(a => a.nome === selectedAdvogado);
 
+  const downloadIniciaisCSV = () => {
+    const header = 'ADVOGADO;CLIENTE;EMPRESA;DATA\n';
+    const rows = iniciaisAdvs.flatMap(adv =>
+      adv.clientes.map(c => `${adv.nome};${c.cliente};${c.empresa};${c.data}`)
+    );
+    const csv = header + rows.join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `peticoes_iniciais_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="detail-page" style={{ paddingTop: '1rem' }}>
       {/* Header */}
@@ -155,9 +170,25 @@ export default function ComissoesPage() {
 
       {/* ==================== PETIÇÃO INICIAL ==================== */}
       <div style={{ marginBottom: '2.5rem' }}>
-        <h2 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          📝 Petição Inicial {iniciaisMes && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500 }}>— {iniciaisMes}</span>}
-        </h2>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+          <h2 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+            📝 Petição Inicial {iniciaisMes && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500 }}>— {iniciaisMes}</span>}
+          </h2>
+          {!iniciaisLoading && iniciaisAdvs.some(a => a.total > 0) && (
+            <button
+              onClick={downloadIniciaisCSV}
+              style={{
+                padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer',
+                background: 'linear-gradient(135deg, rgba(212, 175, 55, 0.15), rgba(212, 175, 55, 0.05))',
+                border: '1px solid rgba(212, 175, 55, 0.3)', color: '#d4af37',
+                fontWeight: 600, fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.4rem',
+                transition: 'all 0.2s',
+              }}
+            >
+              ⬇️ Baixar Relatório
+            </button>
+          )}
+        </div>
 
         {iniciaisLoading ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
