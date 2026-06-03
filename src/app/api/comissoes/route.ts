@@ -4,6 +4,12 @@ import { authOptions } from '@/lib/auth-options';
 
 const PRAZOS_FOLDER_ID = '1waNdg9ME46yj2USnNNk4uTpqPOo8qgS8';
 
+// Data de início: só contar a partir desta pasta
+const DATA_INICIO = new Date(2026, 5, 8); // 08/06/2026 (mês é 0-indexed)
+
+// Advogados fixos
+const ADVOGADOS_FIXOS = ['ROBSON', 'ALESSANDRA', 'DENIS', 'JESSÉ', 'NYCOLLE', 'ANA', 'ERICA'];
+
 interface DriveItem {
   id: string;
   name: string;
@@ -12,7 +18,6 @@ interface DriveItem {
 
 const isFolder = (item: DriveItem) => item.mimeType === 'application/vnd.google-apps.folder';
 
-// Known filing type abbreviations in Brazilian labor law (claimant side)
 const TIPO_MAP: Record<string, string> = {
   'AIRR': 'Agravo de Instrumento em Recurso de Revista',
   'AI': 'Agravo de Instrumento',
@@ -47,24 +52,52 @@ const TIPO_MAP: Record<string, string> = {
   'HABILITACAO': 'Habilitação',
 };
 
-// Sort keys by length (longest first) for greedy matching
 const TIPO_KEYS = Object.keys(TIPO_MAP).sort((a, b) => b.length - a.length);
 
+function parseFolderDate(folderName: string): Date | null {
+  // Parse DD.MM.YYYY folder name
+  const match = folderName.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (!match) return null;
+  const day = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10);
+  const year = parseInt(match[3], 10);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return new Date(year, month - 1, day);
+}
+
 function parseFileName(fileName: string): { advogado: string | null; tipo: string; tipoAbrev: string; cliente: string } {
-  // Remove file extension
   let name = fileName.replace(/\.(docx?|pdf|odt|rtf)$/i, '').trim();
 
-  // Check if lawyer name is present: "LAWYER corrigir TYPE_CLIENT"
+  // Check for lawyer name: "LAWYER corrigir TYPE_CLIENT" or "LAWYER_TYPE_CLIENT"
   let advogado: string | null = null;
+  
+  // Pattern 1: "NOME corrigir ..."
   const corrigirIdx = name.toLowerCase().indexOf(' corrigir ');
   if (corrigirIdx > 0) {
-    advogado = name.substring(0, corrigirIdx).trim();
-    name = name.substring(corrigirIdx + ' corrigir '.length).trim();
+    const possibleName = name.substring(0, corrigirIdx).trim().toUpperCase();
+    if (ADVOGADOS_FIXOS.includes(possibleName)) {
+      advogado = possibleName;
+      name = name.substring(corrigirIdx + ' corrigir '.length).trim();
+    }
+  }
+  
+  // Pattern 2: starts with "NOME_..." or "NOME ..."  
+  if (!advogado) {
+    for (const adv of ADVOGADOS_FIXOS) {
+      if (name.toUpperCase().startsWith(adv + '_') || name.toUpperCase().startsWith(adv + ' ')) {
+        advogado = adv;
+        name = name.substring(adv.length).replace(/^[_ ]+/, '').trim();
+        // Skip "corrigir" if present after name
+        if (name.toLowerCase().startsWith('corrigir ')) {
+          name = name.substring('corrigir '.length).trim();
+        }
+        break;
+      }
+    }
   }
 
-  // Try to match known type from the beginning of the name
+  // Match filing type
   const nameUpper = name.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  
   let tipoAbrev = '';
   let tipoFull = '';
   let clientePart = name;
@@ -79,11 +112,10 @@ function parseFileName(fileName: string): { advogado: string | null; tipo: strin
     }
   }
 
-  // If no known type matched, try splitting on first underscore
   if (!tipoAbrev && name.includes('_')) {
     const firstUnderscore = name.indexOf('_');
     tipoAbrev = name.substring(0, firstUnderscore).trim();
-    tipoFull = tipoAbrev; // Use as-is
+    tipoFull = tipoAbrev;
     clientePart = name.substring(firstUnderscore + 1).trim();
   }
 
@@ -93,10 +125,7 @@ function parseFileName(fileName: string): { advogado: string | null; tipo: strin
     clientePart = name;
   }
 
-  // Clean client name: remove " X EMPRESA" pattern for display
-  const cliente = clientePart.replace(/\s+/g, ' ').trim();
-
-  return { advogado, tipo: tipoFull, tipoAbrev, cliente };
+  return { advogado, tipo: tipoFull, tipoAbrev, cliente: clientePart.replace(/\s+/g, ' ').trim() };
 }
 
 async function listChildren(token: string, folderId: string): Promise<DriveItem[]> {
@@ -132,11 +161,16 @@ export async function GET(req: NextRequest) {
 
     const token = session.accessToken;
 
-    // Step 1: List date folders
+    // List date folders
     const rootItems = await listChildren(token, PRAZOS_FOLDER_ID);
-    const dateFolders = rootItems.filter(isFolder).sort((a, b) => a.name.localeCompare(b.name));
+    const dateFolders = rootItems
+      .filter(isFolder)
+      .filter(f => {
+        const d = parseFolderDate(f.name);
+        return d && d >= DATA_INICIO; // Só a partir de 08/06/2026
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
 
-    // Step 2: For each date folder, find PROTOCOLO OK, then list files
     const allFilings: {
       advogado: string;
       tipo: string;
@@ -155,11 +189,8 @@ export async function GET(req: NextRequest) {
         if (!protocoloOk) return;
 
         const protocoloChildren = await listChildren(token, protocoloOk.id);
-        
-        // Get files directly in PROTOCOLO OK (not folders)
         const files = protocoloChildren.filter(c => !isFolder(c));
-        
-        // Deduplicate: keep unique by base name (ignore extension)
+
         const seen = new Set<string>();
         for (const file of files) {
           const baseName = file.name.replace(/\.(docx?|pdf|odt|rtf)$/i, '').trim().toUpperCase();
@@ -178,55 +209,49 @@ export async function GET(req: NextRequest) {
       }));
     }
 
-    // Step 3: Aggregate by advogado
-    const advogadoMap = new Map<string, { total: number; tipos: Map<string, { abrev: string; count: number; clientes: string[] }> }>();
-
-    for (const filing of allFilings) {
-      if (!advogadoMap.has(filing.advogado)) {
-        advogadoMap.set(filing.advogado, { total: 0, tipos: new Map() });
+    // Build response for each fixed lawyer
+    const advogados = ADVOGADOS_FIXOS.map(nome => {
+      const filings = allFilings.filter(f => f.advogado === nome);
+      const tipoMap = new Map<string, { abrev: string; count: number; clientes: string[] }>();
+      for (const f of filings) {
+        if (!tipoMap.has(f.tipo)) tipoMap.set(f.tipo, { abrev: f.tipoAbrev, count: 0, clientes: [] });
+        const t = tipoMap.get(f.tipo)!;
+        t.count++;
+        if (t.clientes.length < 50) t.clientes.push(`${f.cliente} (${f.data})`);
       }
-      const adv = advogadoMap.get(filing.advogado)!;
-      adv.total++;
-
-      if (!adv.tipos.has(filing.tipo)) {
-        adv.tipos.set(filing.tipo, { abrev: filing.tipoAbrev, count: 0, clientes: [] });
-      }
-      const tipo = adv.tipos.get(filing.tipo)!;
-      tipo.count++;
-      if (tipo.clientes.length < 50) {
-        tipo.clientes.push(`${filing.cliente} (${filing.data})`);
-      }
-    }
-
-    // Step 4: Format response
-    const advogados = Array.from(advogadoMap.entries())
-      .sort((a, b) => b[1].total - a[1].total)
-      .map(([nome, data]) => ({
+      return {
         nome,
-        total: data.total,
-        tipos: Array.from(data.tipos.entries())
+        total: filings.length,
+        tipos: Array.from(tipoMap.entries())
           .sort((a, b) => b[1].count - a[1].count)
-          .map(([tipoNome, tipoData]) => ({
-            nome: tipoNome,
-            abrev: tipoData.abrev,
-            count: tipoData.count,
-            clientes: tipoData.clientes,
-          })),
-      }));
+          .map(([tipoNome, data]) => ({ nome: tipoNome, abrev: data.abrev, count: data.count, clientes: data.clientes })),
+      };
+    });
 
-    // Step 5: Aggregate by tipo (global)
-    const tipoGlobal = new Map<string, number>();
-    for (const filing of allFilings) {
-      tipoGlobal.set(filing.tipo, (tipoGlobal.get(filing.tipo) || 0) + 1);
+    // Also include "Não identificado" if any unmatched files
+    const naoId = allFilings.filter(f => f.advogado === 'Não identificado');
+    if (naoId.length > 0) {
+      const tipoMap = new Map<string, { abrev: string; count: number; clientes: string[] }>();
+      for (const f of naoId) {
+        if (!tipoMap.has(f.tipo)) tipoMap.set(f.tipo, { abrev: f.tipoAbrev, count: 0, clientes: [] });
+        const t = tipoMap.get(f.tipo)!;
+        t.count++;
+        if (t.clientes.length < 50) t.clientes.push(`${f.cliente} (${f.data})`);
+      }
+      advogados.push({
+        nome: 'Não identificado',
+        total: naoId.length,
+        tipos: Array.from(tipoMap.entries())
+          .sort((a, b) => b[1].count - a[1].count)
+          .map(([tipoNome, data]) => ({ nome: tipoNome, abrev: data.abrev, count: data.count, clientes: data.clientes })),
+      });
     }
 
     return NextResponse.json({
       advogados,
       totalFilings: allFilings.length,
       totalDays: dateFolders.length,
-      tiposGlobal: Array.from(tipoGlobal.entries())
-        .sort((a, b) => b[1] - a[1])
-        .map(([nome, count]) => ({ nome, count })),
+      dataInicio: '08/06/2026',
     });
 
   } catch (err) {
