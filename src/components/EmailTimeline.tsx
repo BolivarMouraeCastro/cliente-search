@@ -19,6 +19,7 @@ interface EmailTimelineProps {
   emails: Email[];
   hearings?: HearingData[];
   clientProcessNumber?: string;
+  datajudPhase?: { name: string; date: string; simple: string } | null;
 }
 
 function formatDateBR(dateStr: string): string {
@@ -30,10 +31,26 @@ function formatDateBR(dateStr: string): string {
   }
 }
 
+// Map DataJud phase names to our phase IDs
+function datajudPhaseToId(phaseName: string): string {
+  const lower = phaseName.toLowerCase();
+  if (lower.includes('execuç') || lower.includes('execuc') || lower.includes('liquidaç') || lower.includes('penhora') || lower.includes('alvará')) return 'execucao';
+  if (lower.includes('trânsito') || lower.includes('transito') || lower.includes('transitado')) return 'transito';
+  if (lower.includes('acórdão') || lower.includes('acordão') || lower.includes('acordao')) return 'acordao';
+  if (lower.includes('recurso') || lower.includes('embargo')) return 'recurso';
+  if (lower.includes('sentença') || lower.includes('sentenç') || lower.includes('procedente') || lower.includes('improcedente')) return 'sentenca';
+  if (lower.includes('perícia') || lower.includes('pericia') || lower.includes('perito')) return 'pericia';
+  if (lower.includes('audiência') || lower.includes('audiencia')) return 'audiencia_instrucao';
+  if (lower.includes('citaç') || lower.includes('citac')) return 'citacao';
+  if (lower.includes('distribuí') || lower.includes('distribui')) return 'distribuicao';
+  if (lower.includes('acordo') || lower.includes('conciliaç')) return 'acordo';
+  return 'distribuicao';
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
-export default function EmailTimeline({ emails, hearings = [], clientProcessNumber }: EmailTimelineProps) {
+export default function EmailTimeline({ emails, hearings = [], clientProcessNumber, datajudPhase }: EmailTimelineProps) {
   if (!emails || emails.length === 0) {
     return (
       <div className="empty-state">
@@ -92,28 +109,46 @@ export default function EmailTimeline({ emails, hearings = [], clientProcessNumb
   const hasPastHearing = pastHearings.length > 0;
   const hasFutureHearing = futureHearings.length > 0;
 
-  // --- SMART PHASE OVERRIDE ---
-  // Priority: Future hearing > Past hearing (if no advanced phase) > Email phase
-  // A future hearing is ALWAYS the most relevant info for the client.
+  // --- SMART PHASE DETECTION ---
+  // Priority: 1. DataJud (direct from court) > 2. Future hearing > 3. Past hearing > 4. Email
   const advancedPhases = ['sentenca', 'acordao', 'recurso', 'execucao', 'transito', 'arquivamento'];
   const phaseFromEmails = currentPhase?.id;
 
-  // Determine effective phase considering hearings
   let effectivePhaseId = phaseFromEmails;
   let effectivePhaseName = currentPhase?.name || 'Não identificada';
   let effectivePhaseSimple = currentPhase?.simple || '';
+  let datajudPhaseDateFormatted = '';
 
-  if (hasFutureHearing) {
-    // FUTURE HEARING = ALWAYS the current phase (most actionable info)
-    const nextHearing = futureHearings[0];
-    effectivePhaseId = 'audiencia_marcada';
-    effectivePhaseName = `Audiência Marcada${nextHearing.tipoAudiencia ? ` (${nextHearing.tipoAudiencia})` : ''}`;
-    effectivePhaseSimple = `Audiência agendada para ${nextHearing.dataAudiencia}${nextHearing.horario ? ` às ${nextHearing.horario}` : ''} — o cliente deve comparecer`;
-  } else if (hasPastHearing && (!phaseFromEmails || !advancedPhases.includes(phaseFromEmails))) {
-    // Past hearing + no advanced phase = waiting for sentença
-    effectivePhaseId = 'pos_audiencia';
-    effectivePhaseName = 'Aguardando Sentença';
-    effectivePhaseSimple = 'A audiência já foi realizada — aguardando decisão do juiz';
+  // 1. DataJud phase (HIGHEST PRIORITY — direct from court system)
+  if (datajudPhase && datajudPhase.name) {
+    const djId = datajudPhaseToId(datajudPhase.name);
+    const djPhase = PHASE_MAP.get(djId);
+    datajudPhaseDateFormatted = datajudPhase.date ? formatDateBR(datajudPhase.date) : '';
+    
+    // DataJud overrides if it detected a more advanced or equal phase
+    effectivePhaseId = djId;
+    effectivePhaseName = djPhase?.name || datajudPhase.name;
+    effectivePhaseSimple = datajudPhase.simple || djPhase?.simple || '';
+    
+    // But if there's a FUTURE hearing, that's the most ACTIONABLE info
+    if (hasFutureHearing) {
+      const nextHearing = futureHearings[0];
+      effectivePhaseId = 'audiencia_marcada';
+      effectivePhaseName = `Audiência Marcada${nextHearing.tipoAudiencia ? ` (${nextHearing.tipoAudiencia})` : ''}`;
+      effectivePhaseSimple = `Audiência agendada para ${nextHearing.dataAudiencia}${nextHearing.horario ? ` às ${nextHearing.horario}` : ''} — o cliente deve comparecer`;
+    }
+  } else {
+    // No DataJud data — use hearings + emails
+    if (hasFutureHearing) {
+      const nextHearing = futureHearings[0];
+      effectivePhaseId = 'audiencia_marcada';
+      effectivePhaseName = `Audiência Marcada${nextHearing.tipoAudiencia ? ` (${nextHearing.tipoAudiencia})` : ''}`;
+      effectivePhaseSimple = `Audiência agendada para ${nextHearing.dataAudiencia}${nextHearing.horario ? ` às ${nextHearing.horario}` : ''} — o cliente deve comparecer`;
+    } else if (hasPastHearing && (!phaseFromEmails || !advancedPhases.includes(phaseFromEmails))) {
+      effectivePhaseId = 'pos_audiencia';
+      effectivePhaseName = 'Aguardando Sentença';
+      effectivePhaseSimple = 'A audiência já foi realizada — aguardando decisão do juiz';
+    }
   }
 
   // Next expected phase
@@ -123,9 +158,11 @@ export default function EmailTimeline({ emails, hearings = [], clientProcessNumb
   if (effectivePhaseId === 'pos_audiencia') {
     nextPhase = PHASE_MAP.get('sentenca');
   } else if (effectivePhaseId === 'audiencia_marcada') {
-    // Next after hearing is sentença
     nextPhaseId = 'sentenca';
     nextPhase = PHASE_MAP.get('sentenca');
+  } else if (effectivePhaseId) {
+    nextPhaseId = NEXT_PHASE[effectivePhaseId];
+    nextPhase = nextPhaseId ? PHASE_MAP.get(nextPhaseId) : undefined;
   } else {
     nextPhaseId = currentPhase ? NEXT_PHASE[currentPhase.id] : undefined;
     nextPhase = nextPhaseId ? PHASE_MAP.get(nextPhaseId) : undefined;
@@ -147,7 +184,20 @@ export default function EmailTimeline({ emails, hearings = [], clientProcessNumb
   const currentColor = getPhaseColor(effectivePhaseId || '');
 
   // --- Build smart explanation based on ALL available data ---
-  let explanation = currentPhase ? PHASE_EXPLANATIONS[currentPhase.id] : undefined;
+  // Priority: DataJud phase > hearing-based > email-based
+  let explanation = effectivePhaseId ? PHASE_EXPLANATIONS[effectivePhaseId] : 
+    (currentPhase ? PHASE_EXPLANATIONS[currentPhase.id] : undefined);
+
+  // DataJud-specific explanation (most accurate)
+  if (datajudPhase && datajudPhase.name && effectivePhaseId && effectivePhaseId !== 'audiencia_marcada') {
+    const djExplanation = PHASE_EXPLANATIONS[effectivePhaseId];
+    if (djExplanation) {
+      explanation = {
+        ...djExplanation,
+        oQueAconteceu: `${djExplanation.oQueAconteceu}${datajudPhaseDateFormatted ? ` (Última movimentação: ${datajudPhaseDateFormatted} — fonte: DataJud/CNJ)` : ' (Fonte: DataJud/CNJ)'}`,
+      };
+    }
+  }
 
   // Override explanation if hearings data gives us better info
   if (effectivePhaseId === 'pos_audiencia' && pastHearings.length > 0) {

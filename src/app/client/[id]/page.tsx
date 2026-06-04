@@ -142,10 +142,10 @@ export default function ClientDetailPage() {
     fetchData();
   }, [client?.id]);
 
-  // Fetch movements from DataJud when tab is activated
+  // Fetch movements from DataJud EAGERLY when client loads
+  // (not just when tab is clicked — we need the real phase for all views)
   useEffect(() => {
-    if (activeTab !== 'movements' || !client) return;
-    // Only fetch if we have a process number and haven't loaded yet
+    if (!client) return;
     const processNum = client.numeroProcesso;
     if (!processNum || processNum.trim() === '' || movements) return;
 
@@ -170,7 +170,7 @@ export default function ClientDetailPage() {
       }
     }
     fetchMovements();
-  }, [activeTab, client?.id]);
+  }, [client?.id]);
 
   if (loadingClient) {
     return (
@@ -327,7 +327,12 @@ export default function ClientDetailPage() {
               <LoadingSpinner size="md" />
             </div>
           ) : (
-            <EmailTimeline emails={emails} hearings={hearings} clientProcessNumber={client?.numeroProcesso} />
+            <EmailTimeline
+              emails={emails}
+              hearings={hearings}
+              clientProcessNumber={client?.numeroProcesso}
+              datajudPhase={movements?.currentPhase || null}
+            />
           )
         )}
 
