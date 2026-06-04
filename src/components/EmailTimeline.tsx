@@ -18,6 +18,7 @@ interface HearingData {
 interface EmailTimelineProps {
   emails: Email[];
   hearings?: HearingData[];
+  clientProcessNumber?: string;
 }
 
 function formatDateBR(dateStr: string): string {
@@ -32,7 +33,7 @@ function formatDateBR(dateStr: string): string {
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
-export default function EmailTimeline({ emails, hearings = [] }: EmailTimelineProps) {
+export default function EmailTimeline({ emails, hearings = [], clientProcessNumber }: EmailTimelineProps) {
   if (!emails || emails.length === 0) {
     return (
       <div className="empty-state">
@@ -130,8 +131,8 @@ export default function EmailTimeline({ emails, hearings = [] }: EmailTimelinePr
     nextPhase = nextPhaseId ? PHASE_MAP.get(nextPhaseId) : undefined;
   }
 
-  // Process number
-  const processNumber = emails.find((e) => e.processNumber)?.processNumber;
+  // Process number — prefer the one from the client record (correct for this specific process)
+  const processNumber = clientProcessNumber || emails.find((e) => e.processNumber)?.processNumber;
 
   // Current phase color
   const getPhaseColor = (id: string) => {

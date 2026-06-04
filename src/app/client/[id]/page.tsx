@@ -321,7 +321,7 @@ export default function ClientDetailPage() {
               <LoadingSpinner size="md" />
             </div>
           ) : (
-            <EmailTimeline emails={emails} hearings={hearings} />
+            <EmailTimeline emails={emails} hearings={hearings} clientProcessNumber={client?.numeroProcesso} />
           )
         )}
 

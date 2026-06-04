@@ -172,25 +172,28 @@ export async function getClientHearings(
 
   const normalizedClientName = normalizeName(clientName);
 
-  return allHearings.filter((h) => {
-    // Match by process number first (most reliable)
-    if (processNumber && processNumber.trim() !== "" && h.numeroProcesso) {
-      if (h.numeroProcesso.includes(processNumber) || processNumber.includes(h.numeroProcesso)) {
-        return true;
-      }
-    }
+  // If we have a process number, filter ONLY by it to avoid mixing
+  // audiências from different processes of the same client
+  if (processNumber && processNumber.trim() !== '') {
+    return allHearings.filter((h) => {
+      if (!h.numeroProcesso) return false;
+      return (
+        h.numeroProcesso.includes(processNumber) ||
+        processNumber.includes(h.numeroProcesso)
+      );
+    });
+  }
 
-    // Match by name
+  // No process number — fall back to name matching
+  return allHearings.filter((h) => {
     const normalizedHearingName = normalizeName(h.reclamante);
     if (normalizedHearingName && normalizedClientName) {
-      // Exact match or one contains the other
       return (
         normalizedHearingName === normalizedClientName ||
         normalizedHearingName.includes(normalizedClientName) ||
         normalizedClientName.includes(normalizedHearingName)
       );
     }
-
     return false;
   });
 }
