@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { Client } from '@/types';
 
 interface ClientCardProps {
@@ -20,11 +21,135 @@ function getStatusBadgeClass(status: string): string {
   return 'badge-default';
 }
 
+interface ReportData {
+  fase: string;
+  resumo: string;
+  audiencia?: string;
+  processo?: string;
+  empresa?: string;
+  emailCount: number;
+  movimentacoes: number;
+}
+
 export default function ClientCard({ client }: ClientCardProps) {
   const router = useRouter();
+  const [showReport, setShowReport] = useState(false);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportData, setReportData] = useState<ReportData | null>(null);
+  const [reportError, setReportError] = useState('');
 
   const handleClick = () => {
     router.push(`/client/${encodeURIComponent(client.id)}`);
+  };
+
+  const handleGenerateReport = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (showReport && reportData) {
+      setShowReport(false);
+      return;
+    }
+
+    setShowReport(true);
+    setReportLoading(true);
+    setReportError('');
+
+    try {
+      // Fetch emails
+      const emailRes = await fetch(
+        `/api/emails?clientName=${encodeURIComponent(client.nome)}&clientId=${encodeURIComponent(client.id)}${client.numeroProcesso ? `&processNumber=${encodeURIComponent(client.numeroProcesso)}` : ''}`
+      );
+      const emailData = emailRes.ok ? await emailRes.json() : { emails: [] };
+
+      // Fetch movements if has process number
+      let movData = { movements: [] as any[], currentPhase: '' };
+      if (client.numeroProcesso) {
+        const movRes = await fetch(`/api/movements?processNumber=${encodeURIComponent(client.numeroProcesso)}`);
+        if (movRes.ok) movData = await movRes.json();
+      }
+
+      // Determine phase
+      const fase = movData.currentPhase || emailData.newStatus || client.status || 'Sem informação';
+
+      // Find next hearing
+      let audiencia = '';
+      for (const email of (emailData.emails || [])) {
+        if (email.hearingDate) {
+          const hDate = new Date(email.hearingDate);
+          if (hDate > new Date()) {
+            audiencia = `${String(hDate.getDate()).padStart(2, '0')}/${String(hDate.getMonth() + 1).padStart(2, '0')}/${hDate.getFullYear()}`;
+            if (email.hearingType) audiencia += ` (${email.hearingType})`;
+            break;
+          }
+        }
+      }
+
+      // Build friendly summary
+      const faseUpper = fase.toUpperCase();
+      let resumo = '';
+
+      if (faseUpper.includes('DISTRIBUÍ') || faseUpper.includes('DISTRIBUI')) {
+        resumo = `O processo de ${client.nome} contra ${client.empresa || 'a empresa'} foi distribuído na Justiça${client.numeroProcesso ? ` com o número ${client.numeroProcesso}` : ''}. Estamos aguardando a marcação da audiência.`;
+      } else if (faseUpper.includes('CITAÇÃO') || faseUpper.includes('CITACAO')) {
+        resumo = `A empresa ${client.empresa || 'reclamada'} foi notificada (citada) sobre o processo de ${client.nome}. Próximo passo: audiência de conciliação.`;
+      } else if (faseUpper.includes('AUDIÊNCIA') || faseUpper.includes('AUDIENCIA')) {
+        resumo = `O processo de ${client.nome} está na fase de Audiência.${audiencia ? ` Próxima audiência marcada para ${audiencia}.` : ''} O advogado está acompanhando de perto.`;
+      } else if (faseUpper.includes('PERÍCIA') || faseUpper.includes('PERICIA')) {
+        resumo = `O processo de ${client.nome} está na fase de Perícia. Um perito foi designado para avaliar as questões técnicas do caso.`;
+      } else if (faseUpper.includes('SENTENÇA') || faseUpper.includes('SENTENCA')) {
+        resumo = `O juiz já proferiu a Sentença (decisão) no processo de ${client.nome} contra ${client.empresa || 'a empresa'}. O advogado está analisando o resultado.`;
+      } else if (faseUpper.includes('RECURSO')) {
+        resumo = `O processo de ${client.nome} está na fase de Recurso. Foi interposto recurso e estamos aguardando a análise do tribunal superior.`;
+      } else if (faseUpper.includes('ACÓRDÃO') || faseUpper.includes('ACORDAO')) {
+        resumo = `O tribunal de segunda instância proferiu o Acórdão (decisão colegiada) no processo de ${client.nome}.`;
+      } else if (faseUpper.includes('EXECUÇÃO') || faseUpper.includes('EXECUCAO')) {
+        resumo = `O processo de ${client.nome} está na fase de Execução — fase de cumprimento/cobrança da decisão judicial.`;
+      } else if (faseUpper.includes('TRÂNSITO') || faseUpper.includes('TRANSITO')) {
+        resumo = `O processo de ${client.nome} transitou em julgado — a decisão é definitiva e não cabe mais recurso.`;
+      } else if (faseUpper.includes('ARQUIVADO') || faseUpper.includes('ENCERRADO')) {
+        resumo = `O processo de ${client.nome} contra ${client.empresa || 'a empresa'} foi finalizado e arquivado definitivamente.`;
+      } else if (faseUpper.includes('BOLIVAR') || faseUpper.includes('FAZER INICIAL')) {
+        resumo = `O processo de ${client.nome} está em fase inicial — a petição inicial está sendo elaborada pela equipe.`;
+      } else {
+        resumo = `O processo de ${client.nome}${client.empresa ? ` contra ${client.empresa}` : ''} está com status "${fase}".${client.numeroProcesso ? ` Número: ${client.numeroProcesso}.` : ''}`;
+      }
+
+      setReportData({
+        fase,
+        resumo,
+        audiencia: audiencia || undefined,
+        processo: client.numeroProcesso || undefined,
+        empresa: client.empresa || undefined,
+        emailCount: emailData.emails?.length || 0,
+        movimentacoes: movData.movements?.length || 0,
+      });
+    } catch (err) {
+      setReportError('Erro ao gerar relatório. Tente novamente.');
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
+  const handleCopyReport = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!reportData) return;
+    const text = `📋 Relatório — ${client.nome}\n\n` +
+      `📌 Fase atual: ${reportData.fase}\n` +
+      (reportData.processo ? `📄 Processo: ${reportData.processo}\n` : '') +
+      (reportData.empresa ? `🏢 Empresa: ${reportData.empresa}\n` : '') +
+      (reportData.audiencia ? `📅 Próxima audiência: ${reportData.audiencia}\n` : '') +
+      `\n${reportData.resumo}`;
+    navigator.clipboard.writeText(text);
+  };
+
+  const handleWhatsApp = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!reportData) return;
+    const msg = `Olá! Aqui é do escritório *BM&C Advogados*. Segue atualização do seu processo:\n\n` +
+      `📌 *Fase atual:* ${reportData.fase}\n` +
+      (reportData.processo ? `📄 *Processo:* ${reportData.processo}\n` : '') +
+      (reportData.audiencia ? `📅 *Próxima audiência:* ${reportData.audiencia}\n` : '') +
+      `\n${reportData.resumo}\n\nQualquer dúvida, estamos à disposição! 🤝`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
   return (
@@ -58,7 +183,7 @@ export default function ClientCard({ client }: ClientCardProps) {
         )}
       </div>
 
-      {/* Entry date - prominent for distinguishing duplicate clients */}
+      {/* Entry date */}
       {client.entrada && (
         <div style={{
           display: 'flex',
@@ -135,6 +260,138 @@ export default function ClientCard({ client }: ClientCardProps) {
           </div>
         )}
       </div>
+
+      {/* Generate Report Button */}
+      <div style={{ padding: '0 0.75rem 0.5rem', display: 'flex', gap: '0.5rem' }}>
+        <button
+          onClick={handleGenerateReport}
+          style={{
+            flex: 1,
+            padding: '0.55rem 0.75rem',
+            borderRadius: '0.5rem',
+            cursor: 'pointer',
+            background: showReport && reportData
+              ? 'rgba(212, 175, 55, 0.15)'
+              : 'linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.1))',
+            border: showReport && reportData
+              ? '1px solid rgba(212, 175, 55, 0.3)'
+              : '1px solid rgba(139, 92, 246, 0.2)',
+            color: showReport && reportData ? '#d4af37' : '#a78bfa',
+            fontWeight: 600,
+            fontSize: '0.75rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.4rem',
+            transition: 'all 0.2s',
+          }}
+        >
+          📋 {showReport && reportData ? 'Fechar Relatório' : 'Gerar Relatório'}
+        </button>
+      </div>
+
+      {/* Report Panel */}
+      {showReport && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            margin: '0 0.75rem 0.75rem',
+            padding: '1rem',
+            background: 'rgba(14, 14, 20, 0.8)',
+            border: '1px solid rgba(212, 175, 55, 0.2)',
+            borderRadius: '0.75rem',
+            animation: 'fadeIn 0.3s ease',
+          }}
+        >
+          {reportLoading ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', justifyContent: 'center', padding: '1rem' }}>
+              <div className="shimmer" style={{ width: '20px', height: '20px', borderRadius: '50%' }} />
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Buscando emails e movimentações...</span>
+            </div>
+          ) : reportError ? (
+            <div style={{ fontSize: '0.8rem', color: '#ef4444', textAlign: 'center' }}>{reportError}</div>
+          ) : reportData ? (
+            <>
+              {/* Phase Badge */}
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem',
+                padding: '0.5rem 0.75rem', background: 'rgba(212, 175, 55, 0.08)', borderRadius: '0.5rem',
+                border: '1px solid rgba(212, 175, 55, 0.15)',
+              }}>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 500 }}>FASE ATUAL:</span>
+                <span style={{ fontSize: '0.8rem', color: '#d4af37', fontWeight: 700 }}>{reportData.fase}</span>
+              </div>
+
+              {/* Stats */}
+              <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                <div style={{
+                  flex: 1, padding: '0.4rem', background: 'rgba(59, 130, 246, 0.06)', borderRadius: '0.4rem',
+                  textAlign: 'center', border: '1px solid rgba(59, 130, 246, 0.1)',
+                }}>
+                  <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--accent-blue)' }}>{reportData.emailCount}</div>
+                  <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Emails</div>
+                </div>
+                <div style={{
+                  flex: 1, padding: '0.4rem', background: 'rgba(139, 92, 246, 0.06)', borderRadius: '0.4rem',
+                  textAlign: 'center', border: '1px solid rgba(139, 92, 246, 0.1)',
+                }}>
+                  <div style={{ fontSize: '1rem', fontWeight: 800, color: '#a78bfa' }}>{reportData.movimentacoes}</div>
+                  <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Movimentações</div>
+                </div>
+              </div>
+
+              {/* Hearing */}
+              {reportData.audiencia && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem',
+                  padding: '0.5rem 0.75rem', background: 'rgba(34, 197, 94, 0.08)', borderRadius: '0.5rem',
+                  border: '1px solid rgba(34, 197, 94, 0.15)',
+                }}>
+                  <span style={{ fontSize: '1rem' }}>📅</span>
+                  <span style={{ fontSize: '0.78rem', color: '#22c55e', fontWeight: 600 }}>Próxima audiência: {reportData.audiencia}</span>
+                </div>
+              )}
+
+              {/* Summary */}
+              <div style={{
+                fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.6,
+                padding: '0.75rem', background: 'rgba(255,255,255,0.02)', borderRadius: '0.5rem',
+                marginBottom: '0.75rem', borderLeft: '3px solid rgba(212, 175, 55, 0.3)',
+              }}>
+                {reportData.resumo}
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  onClick={handleCopyReport}
+                  style={{
+                    flex: 1, padding: '0.5rem', borderRadius: '0.4rem', cursor: 'pointer',
+                    background: 'rgba(139, 92, 246, 0.1)', border: '1px solid rgba(139, 92, 246, 0.2)',
+                    color: '#a78bfa', fontWeight: 600, fontSize: '0.7rem',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  📄 Copiar
+                </button>
+                <button
+                  onClick={handleWhatsApp}
+                  style={{
+                    flex: 1, padding: '0.5rem', borderRadius: '0.4rem', cursor: 'pointer',
+                    background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.2)',
+                    color: '#22c55e', fontWeight: 600, fontSize: '0.7rem',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  💬 WhatsApp
+                </button>
+              </div>
+            </>
+          ) : null}
+        </div>
+      )}
 
       <div className="client-card-footer">
         <span className="client-card-date">
