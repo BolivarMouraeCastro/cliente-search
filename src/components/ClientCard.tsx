@@ -54,17 +54,22 @@ export default function ClientCard({ client }: ClientCardProps) {
     setReportError('');
 
     try {
-      // Fetch emails
-      const emailRes = await fetch(
-        `/api/emails?clientName=${encodeURIComponent(client.nome)}&clientId=${encodeURIComponent(client.id)}${client.numeroProcesso ? `&processNumber=${encodeURIComponent(client.numeroProcesso)}` : ''}`
-      );
-      const emailData = emailRes.ok ? await emailRes.json() : { emails: [] };
+      // Fetch emails (don't fail if this errors)
+      let emailData: any = { emails: [] };
+      try {
+        const emailRes = await fetch(
+          `/api/emails?clientName=${encodeURIComponent(client.nome)}&clientId=${encodeURIComponent(client.id)}${client.numeroProcesso ? `&processNumber=${encodeURIComponent(client.numeroProcesso)}` : ''}`
+        );
+        if (emailRes.ok) emailData = await emailRes.json();
+      } catch { /* continue without emails */ }
 
-      // Fetch movements if has process number
-      let movData = { movements: [] as any[], currentPhase: '' };
+      // Fetch movements if has process number (don't fail if this errors)
+      let movData: any = { movements: [], currentPhase: '' };
       if (client.numeroProcesso) {
-        const movRes = await fetch(`/api/movements?processNumber=${encodeURIComponent(client.numeroProcesso)}`);
-        if (movRes.ok) movData = await movRes.json();
+        try {
+          const movRes = await fetch(`/api/movements?processNumber=${encodeURIComponent(client.numeroProcesso)}`);
+          if (movRes.ok) movData = await movRes.json();
+        } catch { /* continue without movements */ }
       }
 
       // Determine phase
@@ -122,8 +127,9 @@ export default function ClientCard({ client }: ClientCardProps) {
         emailCount: emailData.emails?.length || 0,
         movimentacoes: movData.movements?.length || 0,
       });
-    } catch (err) {
-      setReportError('Erro ao gerar relatório. Tente novamente.');
+    } catch (err: any) {
+      console.error('Report error:', err);
+      setReportError(`Erro: ${err?.message || 'Falha ao gerar relatório'}`);
     } finally {
       setReportLoading(false);
     }
