@@ -54,30 +54,33 @@ export default function ClientCard({ client }: ClientCardProps) {
     setReportError('');
 
     try {
-      // Fetch emails (don't fail if this errors)
       let emailData: any = { emails: [] };
-      try {
-        const emailRes = await fetch(
-          `/api/emails?clientName=${encodeURIComponent(client.nome)}&clientId=${encodeURIComponent(client.id)}${client.numeroProcesso ? `&processNumber=${encodeURIComponent(client.numeroProcesso)}` : ''}`
-        );
-        if (emailRes.ok) emailData = await emailRes.json();
-      } catch { /* continue without emails */ }
-
-      // Fetch movements if has process number (don't fail if this errors)
       let movData: any = { movements: [], currentPhase: '' };
+
       if (client.numeroProcesso) {
+        // HAS process number → search ONLY by process number (not by name) to avoid mixing
+        try {
+          const emailRes = await fetch(
+            `/api/emails?clientName=${encodeURIComponent(client.nome)}&clientId=${encodeURIComponent(client.id)}&processNumber=${encodeURIComponent(client.numeroProcesso)}`
+          );
+          if (emailRes.ok) emailData = await emailRes.json();
+        } catch { /* continue */ }
+
+        // Fetch DataJud movements for THIS specific process
         try {
           const movRes = await fetch(`/api/movements?processNumber=${encodeURIComponent(client.numeroProcesso)}`);
           if (movRes.ok) movData = await movRes.json();
-        } catch { /* continue without movements */ }
+        } catch { /* continue */ }
       }
+      // If NO process number → don't search emails (would mix data from other processes)
+      // Use only the spreadsheet status
 
-      // Determine phase (currentPhase from movements API is an object { name, date, simple })
+      // Determine phase: DataJud (most precise) > email detection > spreadsheet status
       const rawPhase = movData.currentPhase;
       const phaseFromMov = rawPhase ? (typeof rawPhase === 'string' ? rawPhase : rawPhase.name || rawPhase.simple || '') : '';
-      const fase = phaseFromMov || emailData.newStatus || client.status || 'Sem informação';
+      const fase = phaseFromMov || (client.numeroProcesso ? (emailData.newStatus || client.status) : client.status) || 'Sem informação';
 
-      // Find next hearing
+      // Find next hearing (only from emails of THIS process)
       let audiencia = '';
       for (const email of (emailData.emails || [])) {
         if (email.hearingDate) {
@@ -93,31 +96,36 @@ export default function ClientCard({ client }: ClientCardProps) {
       // Build friendly summary
       const faseUpper = fase.toUpperCase();
       let resumo = '';
+      const nomeCliente = client.nome;
+      const empresaCliente = client.empresa || 'a empresa';
+      const numProcesso = client.numeroProcesso || '';
 
-      if (faseUpper.includes('DISTRIBUÍ') || faseUpper.includes('DISTRIBUI')) {
-        resumo = `O processo de ${client.nome} contra ${client.empresa || 'a empresa'} foi distribuído na Justiça${client.numeroProcesso ? ` com o número ${client.numeroProcesso}` : ''}. Estamos aguardando a marcação da audiência.`;
+      if (!client.numeroProcesso) {
+        resumo = `O processo de ${nomeCliente} contra ${empresaCliente} ainda não possui número de processo. Status atual: ${fase}. A equipe está acompanhando.`;
+      } else if (faseUpper.includes('DISTRIBUÍ') || faseUpper.includes('DISTRIBUI')) {
+        resumo = `O processo de ${nomeCliente} contra ${empresaCliente} foi distribuído na Justiça com o número ${numProcesso}. Estamos aguardando a marcação da audiência.`;
       } else if (faseUpper.includes('CITAÇÃO') || faseUpper.includes('CITACAO')) {
-        resumo = `A empresa ${client.empresa || 'reclamada'} foi notificada (citada) sobre o processo de ${client.nome}. Próximo passo: audiência de conciliação.`;
+        resumo = `A empresa ${empresaCliente} foi notificada (citada) sobre o processo nº ${numProcesso} de ${nomeCliente}. Próximo passo: audiência.`;
       } else if (faseUpper.includes('AUDIÊNCIA') || faseUpper.includes('AUDIENCIA')) {
-        resumo = `O processo de ${client.nome} está na fase de Audiência.${audiencia ? ` Próxima audiência marcada para ${audiencia}.` : ''} O advogado está acompanhando de perto.`;
+        resumo = `O processo nº ${numProcesso} de ${nomeCliente} está na fase de Audiência.${audiencia ? ` Próxima audiência: ${audiencia}.` : ''} O advogado está acompanhando.`;
       } else if (faseUpper.includes('PERÍCIA') || faseUpper.includes('PERICIA')) {
-        resumo = `O processo de ${client.nome} está na fase de Perícia. Um perito foi designado para avaliar as questões técnicas do caso.`;
+        resumo = `O processo nº ${numProcesso} de ${nomeCliente} está na fase de Perícia. Um perito foi designado para avaliar as questões técnicas.`;
       } else if (faseUpper.includes('SENTENÇA') || faseUpper.includes('SENTENCA')) {
-        resumo = `O juiz já proferiu a Sentença (decisão) no processo de ${client.nome} contra ${client.empresa || 'a empresa'}. O advogado está analisando o resultado.`;
+        resumo = `O juiz proferiu a Sentença no processo nº ${numProcesso} de ${nomeCliente} contra ${empresaCliente}. O advogado está analisando.`;
       } else if (faseUpper.includes('RECURSO')) {
-        resumo = `O processo de ${client.nome} está na fase de Recurso. Foi interposto recurso e estamos aguardando a análise do tribunal superior.`;
+        resumo = `O processo nº ${numProcesso} de ${nomeCliente} está na fase de Recurso. Aguardando análise do tribunal superior.`;
       } else if (faseUpper.includes('ACÓRDÃO') || faseUpper.includes('ACORDAO')) {
-        resumo = `O tribunal de segunda instância proferiu o Acórdão (decisão colegiada) no processo de ${client.nome}.`;
+        resumo = `O tribunal proferiu o Acórdão no processo nº ${numProcesso} de ${nomeCliente}.`;
       } else if (faseUpper.includes('EXECUÇÃO') || faseUpper.includes('EXECUCAO')) {
-        resumo = `O processo de ${client.nome} está na fase de Execução — fase de cumprimento/cobrança da decisão judicial.`;
+        resumo = `O processo nº ${numProcesso} de ${nomeCliente} está na fase de Execução — cumprimento/cobrança da decisão judicial.`;
       } else if (faseUpper.includes('TRÂNSITO') || faseUpper.includes('TRANSITO')) {
-        resumo = `O processo de ${client.nome} transitou em julgado — a decisão é definitiva e não cabe mais recurso.`;
+        resumo = `O processo nº ${numProcesso} de ${nomeCliente} transitou em julgado — decisão definitiva.`;
       } else if (faseUpper.includes('ARQUIVADO') || faseUpper.includes('ENCERRADO')) {
-        resumo = `O processo de ${client.nome} contra ${client.empresa || 'a empresa'} foi finalizado e arquivado definitivamente.`;
+        resumo = `O processo nº ${numProcesso} de ${nomeCliente} contra ${empresaCliente} foi finalizado e arquivado.`;
       } else if (faseUpper.includes('BOLIVAR') || faseUpper.includes('FAZER INICIAL')) {
-        resumo = `O processo de ${client.nome} está em fase inicial — a petição inicial está sendo elaborada pela equipe.`;
+        resumo = `O processo de ${nomeCliente} está em fase inicial — a petição inicial está sendo elaborada.`;
       } else {
-        resumo = `O processo de ${client.nome}${client.empresa ? ` contra ${client.empresa}` : ''} está com status "${fase}".${client.numeroProcesso ? ` Número: ${client.numeroProcesso}.` : ''}`;
+        resumo = `O processo${numProcesso ? ` nº ${numProcesso}` : ''} de ${nomeCliente} contra ${empresaCliente} está com status "${fase}".`;
       }
 
       setReportData({
