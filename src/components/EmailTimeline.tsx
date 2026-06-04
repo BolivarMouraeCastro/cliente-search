@@ -68,10 +68,19 @@ export default function EmailTimeline({ emails, hearings = [], clientProcessNumb
     );
   }
 
+  // Filter emails: if we have a specific process number, only use emails
+  // that match this process (or have no process number — generic notifications)
+  const relevantEmails = clientProcessNumber
+    ? emails.filter((e) => {
+        if (!e.processNumber || e.processNumber.trim() === '') return true; // generic email, include
+        return e.processNumber === clientProcessNumber;
+      })
+    : emails;
+
   // Classify emails
   const phaseEmails: Record<string, Email[]> = {};
 
-  for (const email of emails) {
+  for (const email of relevantEmails) {
     const phase = classifyEmail(email);
 
     if (phase) {
@@ -104,8 +113,20 @@ export default function EmailTimeline({ emails, hearings = [], clientProcessNumb
   let currentPhase = completedPhases[completedPhases.length - 1];
 
   // --- Hearing (audiência) data from spreadsheet ---
-  const pastHearings = hearings.filter((h) => !h.isFuture);
-  const futureHearings = hearings.filter((h) => h.isFuture);
+  // STRICT FILTER: Only show hearings for THIS specific process number
+  // This prevents mixing audiências from different processes of the same client
+  const filteredHearings = clientProcessNumber
+    ? hearings.filter((h) => {
+        if (!h.numeroProcesso) return false;
+        return (
+          h.numeroProcesso.includes(clientProcessNumber) ||
+          clientProcessNumber.includes(h.numeroProcesso)
+        );
+      })
+    : hearings;
+
+  const pastHearings = filteredHearings.filter((h) => !h.isFuture);
+  const futureHearings = filteredHearings.filter((h) => h.isFuture);
   const hasPastHearing = pastHearings.length > 0;
   const hasFutureHearing = futureHearings.length > 0;
 
@@ -254,9 +275,9 @@ export default function EmailTimeline({ emails, hearings = [], clientProcessNumb
       </div>
 
       {/* ======= HEARINGS FROM SPREADSHEET ======= */}
-      {hearings.length > 0 && (
+      {filteredHearings.length > 0 && (
         <div style={{ marginBottom: '1.5rem' }}>
-          {hearings.map((h, idx) => (
+          {filteredHearings.map((h, idx) => (
             <div key={idx} style={{
               background: h.isFuture
                 ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.04))'

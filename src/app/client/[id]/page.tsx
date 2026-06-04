@@ -238,10 +238,28 @@ export default function ClientDetailPage() {
         )}
         <div className="client-detail-badges">
           {(() => {
-            // Override status if there's a future hearing
-            const hasFutureHearing = hearings.some((h) => h.isFuture);
-            const displayStatus = hasFutureHearing ? 'AUDIÊNCIA MARCADA' : client.status;
-            const badgeClass = hasFutureHearing ? 'badge-pendente' : getStatusBadgeClass(client.status || '');
+            // Filter hearings for THIS specific process
+            const processFilteredHearings = client.numeroProcesso
+              ? hearings.filter((h) => h.numeroProcesso && (
+                  h.numeroProcesso.includes(client.numeroProcesso!) ||
+                  client.numeroProcesso!.includes(h.numeroProcesso)
+                ))
+              : hearings;
+            const hasFutureHearing = processFilteredHearings.some((h) => h.isFuture);
+            
+            // Priority: DataJud > Future hearing > Spreadsheet status
+            let displayStatus = client.status;
+            let badgeClass = getStatusBadgeClass(client.status || '');
+            
+            if (movements?.currentPhase?.name) {
+              displayStatus = movements.currentPhase.name.toUpperCase();
+              badgeClass = getStatusBadgeClass(displayStatus);
+            }
+            if (hasFutureHearing) {
+              displayStatus = 'AUDIÊNCIA MARCADA';
+              badgeClass = 'badge-pendente';
+            }
+            
             return displayStatus ? (
               <span className={`badge ${badgeClass}`}>
                 <span className="badge-dot" />
