@@ -295,10 +295,11 @@ export async function getClientEmails(
 
     // Buscar com AMBAS as estratégias quando temos número do processo
     // para não perder nenhum e-mail importante
+    // Quando temos número do processo, buscar SOMENTE por ele
+    // para não misturar emails de outros processos do mesmo cliente
     let query: string;
     if (processNumber && processNumber.trim() !== '') {
-      // Busca por número do processo OU nome do cliente
-      query = `"${processNumber}" OR "${clientName}"`;
+      query = `"${processNumber}"`;
     } else {
       query = `"${clientName}" OR subject:"${clientName}"`;
     }

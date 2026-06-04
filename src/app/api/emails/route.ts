@@ -152,29 +152,44 @@ export async function GET(request: NextRequest) {
         if (shouldProcess) {
           // --- Auto-salvar número do processo se ainda não armazenado ---
           if (!client.numeroProcesso || client.numeroProcesso.trim() === '') {
-            // Para BOLIVAR, só salvar se o ano do processo é compatível
-            const emailWithProcess = emails.find((e) => {
-              if (!e.processNumber || e.processNumber.trim() === '') return false;
-              if (!entrada) return true;
-              const parsedEntrada = parseEntradaDate(entrada);
-              if (!parsedEntrada) return true;
-              const yearMatch = e.processNumber.match(/\.(\d{4})\./);
-              if (!yearMatch) return true;
-              const processYear = parseInt(yearMatch[1], 10);
-              return Math.abs(parsedEntrada.getFullYear() - processYear) <= 2;
-            });
-
-            if (emailWithProcess?.processNumber) {
-              const saved = await writeProcessNumber(
-                session.accessToken,
-                SPREADSHEET_ID,
-                clientId,
-                emailWithProcess.processNumber
-              );
-              if (saved) {
-                processNumberSaved = true;
-                console.log(`Auto-saved process number ${emailWithProcess.processNumber} for client: ${clientName} (row ${clientId})`);
+            // Coletar TODOS os números de processo distintos dos emails
+            const allProcessNumbers = new Set<string>();
+            for (const e of emails) {
+              if (e.processNumber && e.processNumber.trim() !== '') {
+                allProcessNumbers.add(e.processNumber.trim());
               }
+            }
+
+            // Só salvar automaticamente se encontrou EXATAMENTE UM número de processo
+            // Se tem mais de um, o cliente pode ter múltiplos processos e não sabemos qual é o certo
+            if (allProcessNumbers.size === 1) {
+              const processNum = Array.from(allProcessNumbers)[0];
+              // Verificar compatibilidade de ano
+              let yearOk = true;
+              if (entrada) {
+                const parsedEntrada = parseEntradaDate(entrada);
+                if (parsedEntrada) {
+                  const yearMatch = processNum.match(/\.(\d{4})\./);
+                  if (yearMatch) {
+                    const processYear = parseInt(yearMatch[1], 10);
+                    yearOk = Math.abs(parsedEntrada.getFullYear() - processYear) <= 2;
+                  }
+                }
+              }
+              if (yearOk) {
+                const saved = await writeProcessNumber(
+                  session.accessToken,
+                  SPREADSHEET_ID,
+                  clientId,
+                  processNum
+                );
+                if (saved) {
+                  processNumberSaved = true;
+                  console.log(`Auto-saved process number ${processNum} for client: ${clientName} (row ${clientId})`);
+                }
+              }
+            } else if (allProcessNumbers.size > 1) {
+              console.log(`⚠️ Found ${allProcessNumbers.size} different process numbers for ${clientName}. NOT auto-saving to avoid confusion: ${Array.from(allProcessNumbers).join(', ')}`);
             }
           }
 
