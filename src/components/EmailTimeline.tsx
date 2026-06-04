@@ -93,10 +93,9 @@ export default function EmailTimeline({ emails, hearings = [], clientProcessNumb
   const hasFutureHearing = futureHearings.length > 0;
 
   // --- SMART PHASE OVERRIDE ---
-  // If the hearings spreadsheet shows a hearing already happened,
-  // but emails only detected an early phase (distribuicao, citacao),
-  // upgrade the current phase to reflect reality.
-  const earlyPhases = ['distribuicao', 'citacao'];
+  // Priority: Future hearing > Past hearing (if no advanced phase) > Email phase
+  // A future hearing is ALWAYS the most relevant info for the client.
+  const advancedPhases = ['sentenca', 'acordao', 'recurso', 'execucao', 'transito', 'arquivamento'];
   const phaseFromEmails = currentPhase?.id;
 
   // Determine effective phase considering hearings
@@ -104,16 +103,17 @@ export default function EmailTimeline({ emails, hearings = [], clientProcessNumb
   let effectivePhaseName = currentPhase?.name || 'Não identificada';
   let effectivePhaseSimple = currentPhase?.simple || '';
 
-  if (hasPastHearing && (!phaseFromEmails || earlyPhases.includes(phaseFromEmails))) {
-    // Hearing already happened — we're at least post-audiência
+  if (hasFutureHearing) {
+    // FUTURE HEARING = ALWAYS the current phase (most actionable info)
+    const nextHearing = futureHearings[0];
+    effectivePhaseId = 'audiencia_marcada';
+    effectivePhaseName = `Audiência Marcada${nextHearing.tipoAudiencia ? ` (${nextHearing.tipoAudiencia})` : ''}`;
+    effectivePhaseSimple = `Audiência agendada para ${nextHearing.dataAudiencia}${nextHearing.horario ? ` às ${nextHearing.horario}` : ''} — o cliente deve comparecer`;
+  } else if (hasPastHearing && (!phaseFromEmails || !advancedPhases.includes(phaseFromEmails))) {
+    // Past hearing + no advanced phase = waiting for sentença
     effectivePhaseId = 'pos_audiencia';
     effectivePhaseName = 'Aguardando Sentença';
     effectivePhaseSimple = 'A audiência já foi realizada — aguardando decisão do juiz';
-  } else if (hasFutureHearing && (!phaseFromEmails || earlyPhases.includes(phaseFromEmails))) {
-    // Hearing is scheduled but hasn't happened yet
-    effectivePhaseId = 'audiencia_marcada';
-    effectivePhaseName = 'Audiência Marcada';
-    effectivePhaseSimple = 'Audiência agendada — o cliente deve comparecer';
   }
 
   // Next expected phase

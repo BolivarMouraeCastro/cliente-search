@@ -237,12 +237,18 @@ export default function ClientDetailPage() {
           </div>
         )}
         <div className="client-detail-badges">
-          {client.status && (
-            <span className={`badge ${getStatusBadgeClass(client.status)}`}>
-              <span className="badge-dot" />
-              {client.status}
-            </span>
-          )}
+          {(() => {
+            // Override status if there's a future hearing
+            const hasFutureHearing = hearings.some((h) => h.isFuture);
+            const displayStatus = hasFutureHearing ? 'AUDIÊNCIA MARCADA' : client.status;
+            const badgeClass = hasFutureHearing ? 'badge-pendente' : getStatusBadgeClass(client.status || '');
+            return displayStatus ? (
+              <span className={`badge ${badgeClass}`}>
+                <span className="badge-dot" />
+                {displayStatus}
+              </span>
+            ) : null;
+          })()}
           {client.materia && (
             <span className="badge badge-default">
               <span className="badge-dot" />
