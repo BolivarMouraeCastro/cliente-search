@@ -72,8 +72,9 @@ export default function ClientCard({ client }: ClientCardProps) {
         } catch { /* continue without movements */ }
       }
 
-      // Determine phase
-      const fase = movData.currentPhase || emailData.newStatus || client.status || 'Sem informação';
+      // Determine phase (ensure it's always a string)
+      const rawFase = movData.currentPhase || emailData.newStatus || client.status || 'Sem informação';
+      const fase = typeof rawFase === 'string' ? rawFase : String(rawFase ?? 'Sem informação');
 
       // Find next hearing
       let audiencia = '';
