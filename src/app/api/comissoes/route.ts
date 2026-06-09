@@ -189,15 +189,43 @@ export async function GET(req: NextRequest) {
         if (!protocoloOk) return;
 
         const protocoloChildren = await listChildren(token, protocoloOk.id);
-        const files = protocoloChildren.filter(c => !isFolder(c));
+        
+        // Separate files and folders
+        // Only count Word/ODT/RTF files (EXCLUDE PDFs — they duplicate the Word versions)
+        const wordFiles = protocoloChildren.filter(c => 
+          !isFolder(c) && /\.(docx?|odt|rtf)$/i.test(c.name)
+        );
+        // Also count FOLDERS — they represent work too (e.g. ROBSON's REPLICA folders)
+        const subFolders = protocoloChildren.filter(c => isFolder(c));
 
         const seen = new Set<string>();
-        for (const file of files) {
-          const baseName = file.name.replace(/\.(docx?|pdf|odt|rtf)$/i, '').trim().toUpperCase();
+        
+        // Process Word files
+        for (const file of wordFiles) {
+          const baseName = file.name.replace(/\.(docx?|odt|rtf)$/i, '').trim().toUpperCase();
           if (seen.has(baseName)) continue;
           seen.add(baseName);
 
           const parsed = parseFileName(file.name);
+          allFilings.push({
+            advogado: parsed.advogado || 'Não identificado',
+            tipo: parsed.tipo,
+            tipoAbrev: parsed.tipoAbrev,
+            cliente: parsed.cliente,
+            data: dateFolder.name,
+          });
+        }
+        
+        // Process folders (e.g. "ROBSON_REPLICA_Processo_1000...")
+        for (const folder of subFolders) {
+          // Skip system folders like #PROTOCOLO OK itself
+          if (folder.name.startsWith('#')) continue;
+          
+          const baseName = folder.name.trim().toUpperCase();
+          if (seen.has(baseName)) continue;
+          seen.add(baseName);
+
+          const parsed = parseFileName(folder.name);
           allFilings.push({
             advogado: parsed.advogado || 'Não identificado',
             tipo: parsed.tipo,
