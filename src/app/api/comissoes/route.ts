@@ -50,6 +50,9 @@ const TIPO_MAP: Record<string, string> = {
   'ACORDO': 'Acordo',
   'HABILITAÇÃO': 'Habilitação',
   'HABILITACAO': 'Habilitação',
+  'RAZOES FINAIS': 'Razões Finais',
+  'RAZÕES FINAIS': 'Razões Finais',
+  'RF': 'Razões Finais',
 };
 
 const TIPO_KEYS = Object.keys(TIPO_MAP).sort((a, b) => b.length - a.length);
@@ -96,12 +99,13 @@ function parseFileName(fileName: string): { advogado: string | null; tipo: strin
     }
   }
 
-  // Match filing type
+  // Match filing type — check START first, then ANYWHERE in name
   const nameUpper = name.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   let tipoAbrev = '';
   let tipoFull = '';
   let clientePart = name;
 
+  // 1. Try matching at the START (e.g. "REPLICA_ClientName_Processo_...")
   for (const key of TIPO_KEYS) {
     const keyNorm = key.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     if (nameUpper.startsWith(keyNorm + '_') || nameUpper.startsWith(keyNorm + ' ')) {
@@ -112,6 +116,24 @@ function parseFileName(fileName: string): { advogado: string | null; tipo: strin
     }
   }
 
+  // 2. If not at start, try matching ANYWHERE (e.g. "ClientName_REPLICA_Processo_...")
+  if (!tipoAbrev) {
+    for (const key of TIPO_KEYS) {
+      const keyNorm = key.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const idx = nameUpper.indexOf('_' + keyNorm + '_');
+      const idxSpace = nameUpper.indexOf(' ' + keyNorm + '_');
+      const foundIdx = idx >= 0 ? idx : idxSpace;
+      if (foundIdx >= 0) {
+        tipoAbrev = key;
+        tipoFull = TIPO_MAP[key];
+        // Client name = part BEFORE the tipo keyword
+        clientePart = name.substring(0, foundIdx).replace(/[_ ]+$/, '').trim();
+        break;
+      }
+    }
+  }
+
+  // 3. Fallback: use the part before the first underscore as tipo
   if (!tipoAbrev && name.includes('_')) {
     const firstUnderscore = name.indexOf('_');
     tipoAbrev = name.substring(0, firstUnderscore).trim();
