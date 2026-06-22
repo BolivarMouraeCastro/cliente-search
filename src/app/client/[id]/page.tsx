@@ -56,6 +56,63 @@ export default function ClientDetailPage() {
   const [loadingEmails, setLoadingEmails] = useState(false);
   const [loadingFiles, setLoadingFiles] = useState(false);
 
+  // Report state
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportText, setReportText] = useState<string | null>(null);
+  const [reportError, setReportError] = useState('');
+
+  const handleGenerateReport = async () => {
+    if (reportText) {
+      setReportText(null);
+      return;
+    }
+    if (!client) return;
+    setReportLoading(true);
+    setReportError('');
+    try {
+      const res = await fetch('/api/generate-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientName: client.nome,
+          emails: emails.slice(0, 20).map((e) => ({
+            subject: e.subject,
+            date: e.date,
+            snippet: e.snippet,
+          })),
+          files: files.slice(0, 15).map((f) => ({
+            name: f.name,
+            modifiedTime: f.modifiedTime,
+          })),
+          hearings: hearings.map((h: any) => ({
+            data: h.dataAudiencia,
+            horario: h.horario,
+            tipo: h.tipoAudiencia,
+            orgao: h.orgaoJulgador,
+            isFuture: h.isFuture,
+          })),
+          movements: movements?.movements?.slice(0, 15)?.map((m: any) => ({
+            name: m.name,
+            date: m.date,
+            complement: m.complement,
+          })) || [],
+          processNumber: client.numeroProcesso,
+          empresa: client.empresa,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.report) {
+        setReportText(data.report);
+      } else {
+        setReportError(data.error || 'Erro ao gerar relatório');
+      }
+    } catch {
+      setReportError('Erro de conexão ao gerar relatório');
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
   // Fetch client data
   useEffect(() => {
     async function fetchClient() {
@@ -323,6 +380,72 @@ export default function ClientDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Report Button */}
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+        <button
+          onClick={handleGenerateReport}
+          disabled={reportLoading}
+          className="report-generate-btn"
+        >
+          {reportLoading ? (
+            <>
+              <div className="upload-spinner" style={{ width: 16, height: 16 }} />
+              Gerando...
+            </>
+          ) : reportText ? (
+            <>📋 Fechar Relatório</>
+          ) : (
+            <>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <line x1="16" y1="13" x2="8" y2="13" />
+                <line x1="16" y1="17" x2="8" y2="17" />
+              </svg>
+              Gerar Relatório
+            </>
+          )}
+        </button>
+        {reportError && (
+          <span style={{ color: 'var(--error)', fontSize: '0.8rem', alignSelf: 'center' }}>{reportError}</span>
+        )}
+      </div>
+
+      {/* Report Display */}
+      {reportText && (
+        <div className="report-container">
+          <div className="report-header">
+            <span className="report-title">📋 Relatório de Andamento Processual</span>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                className="report-action-btn"
+                onClick={() => {
+                  navigator.clipboard.writeText(reportText);
+                  alert('Relatório copiado!');
+                }}
+              >
+                📋 Copiar
+              </button>
+              <button
+                className="report-action-btn whatsapp"
+                onClick={() => {
+                  const text = encodeURIComponent(`📋 *Relatório — ${client.nome}*\n\n${reportText}`);
+                  window.open(`https://wa.me/?text=${text}`, '_blank');
+                }}
+              >
+                💬 WhatsApp
+              </button>
+            </div>
+          </div>
+          <div className="report-body" dangerouslySetInnerHTML={{
+            __html: reportText
+              .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+              .replace(/\n/g, '<br/>')
+              .replace(/^- /gm, '• ')
+          }} />
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="tabs">
