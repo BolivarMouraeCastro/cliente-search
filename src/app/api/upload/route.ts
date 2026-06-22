@@ -3,13 +3,6 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { findClientFolderId, uploadFileToDrive } from '@/lib/drive';
 
-// Allow large file uploads (default Next.js limit is 1MB)
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
-
 // Increase function execution time for large uploads
 export const maxDuration = 60;
 
