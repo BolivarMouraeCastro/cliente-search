@@ -57,60 +57,116 @@ export default function ClientDetailPage() {
   const [loadingFiles, setLoadingFiles] = useState(false);
 
   // Report state
-  const [reportLoading, setReportLoading] = useState(false);
   const [reportText, setReportText] = useState<string | null>(null);
-  const [reportError, setReportError] = useState('');
 
-  const handleGenerateReport = async () => {
+  const handleGenerateReport = () => {
     if (reportText) {
       setReportText(null);
       return;
     }
     if (!client) return;
-    setReportLoading(true);
-    setReportError('');
-    try {
-      const res = await fetch('/api/generate-report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          clientName: client.nome,
-          emails: emails.slice(0, 20).map((e) => ({
-            subject: e.subject,
-            date: e.date,
-            snippet: e.snippet,
-          })),
-          files: files.slice(0, 15).map((f) => ({
-            name: f.name,
-            modifiedTime: f.modifiedTime,
-          })),
-          hearings: hearings.map((h: any) => ({
-            data: h.dataAudiencia,
-            horario: h.horario,
-            tipo: h.tipoAudiencia,
-            orgao: h.orgaoJulgador,
-            isFuture: h.isFuture,
-          })),
-          movements: movements?.movements?.slice(0, 15)?.map((m: any) => ({
-            name: m.name,
-            date: m.date,
-            complement: m.complement,
-          })) || [],
-          processNumber: client.numeroProcesso,
-          empresa: client.empresa,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok && data.report) {
-        setReportText(data.report);
-      } else {
-        setReportError(data.error || 'Erro ao gerar relatório');
-      }
-    } catch {
-      setReportError('Erro de conexão ao gerar relatório');
-    } finally {
-      setReportLoading(false);
+
+    const today = new Date();
+    const dateStr = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+
+    // Filter hearings for this process
+    const processHearings = client.numeroProcesso
+      ? hearings.filter((h: any) => h.numeroProcesso && (
+          h.numeroProcesso.includes(client.numeroProcesso!) || client.numeroProcesso!.includes(h.numeroProcesso)
+        ))
+      : hearings;
+
+    const futureHearings = processHearings.filter((h: any) => h.isFuture);
+    const pastHearings = processHearings.filter((h: any) => !h.isFuture);
+
+    // Movements from DataJud
+    const movList = movements?.movements || [];
+
+    // Build the report
+    let report = '';
+    report += `📋 **RELATÓRIO DE ANDAMENTO PROCESSUAL**\n`;
+    report += `**BM&C Advogados**\n`;
+    report += `Data: ${dateStr}\n\n`;
+    report += `---\n\n`;
+    report += `Prezado(a) **${client.nome}**,\n\n`;
+    report += `Segue abaixo o resumo atualizado do seu processo.\n\n`;
+
+    // Process info
+    if (client.numeroProcesso) {
+      report += `**📌 Dados do Processo:**\n`;
+      report += `- Número: ${client.numeroProcesso}\n`;
+      if (client.empresa) report += `- Empresa: ${client.empresa}\n`;
+      if (client.materia) report += `- Matéria: ${client.materia}\n`;
+      if (client.origem) report += `- Vara/Origem: ${client.origem}\n`;
+      report += `\n`;
     }
+
+    // Current phase
+    if (movements?.currentPhase) {
+      report += `**⚖️ Fase Atual:** ${movements.currentPhase}\n\n`;
+    }
+
+    // Future hearings
+    if (futureHearings.length > 0) {
+      report += `**📅 Próxima(s) Audiência(s):**\n`;
+      for (const h of futureHearings) {
+        report += `- **${h.dataAudiencia}** às **${h.horario || 'horário a confirmar'}**`;
+        if (h.tipoAudiencia) report += ` — ${h.tipoAudiencia}`;
+        if (h.orgaoJulgador) report += ` (${h.orgaoJulgador})`;
+        report += `\n`;
+      }
+      report += `\n⚠️ **IMPORTANTE:** O comparecimento do(a) cliente é obrigatório na audiência.\n\n`;
+    }
+
+    // Past hearings
+    if (pastHearings.length > 0) {
+      report += `**✅ Audiência(s) Realizada(s):**\n`;
+      for (const h of pastHearings.slice(0, 5)) {
+        report += `- ${h.dataAudiencia}`;
+        if (h.tipoAudiencia) report += ` — ${h.tipoAudiencia}`;
+        if (h.orgaoJulgador) report += ` (${h.orgaoJulgador})`;
+        report += `\n`;
+      }
+      report += `\n`;
+    }
+
+    // DataJud movements
+    if (movList.length > 0) {
+      report += `**🏛️ Últimas Movimentações do Tribunal (CNJ):**\n`;
+      for (const m of movList.slice(0, 8)) {
+        report += `- ${m.date || ''} — ${m.name || ''}`;
+        if (m.complement) report += `: ${m.complement}`;
+        report += `\n`;
+      }
+      report += `\n`;
+    }
+
+    // Emails/intimações
+    if (emails.length > 0) {
+      report += `**📧 Últimas Intimações Recebidas:**\n`;
+      for (const e of emails.slice(0, 5)) {
+        report += `- ${e.date || ''} — ${e.subject || ''}\n`;
+      }
+      report += `\n`;
+    }
+
+    // Documents
+    if (files.length > 0) {
+      report += `**📁 Documentos no Processo:** ${files.length} arquivo(s)\n`;
+      for (const f of files.slice(0, 5)) {
+        report += `- ${f.name}\n`;
+      }
+      if (files.length > 5) report += `- ... e mais ${files.length - 5} arquivo(s)\n`;
+      report += `\n`;
+    }
+
+    // Closing
+    report += `---\n\n`;
+    report += `Nossa equipe continua acompanhando o andamento do processo e tomando todas as medidas cabíveis. `;
+    report += `Qualquer dúvida, estamos à disposição.\n\n`;
+    report += `Atenciosamente,\n**Equipe BM&C Advogados**`;
+
+    setReportText(report);
   };
 
   // Fetch client data
@@ -385,15 +441,9 @@ export default function ClientDetailPage() {
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
         <button
           onClick={handleGenerateReport}
-          disabled={reportLoading}
           className="report-generate-btn"
         >
-          {reportLoading ? (
-            <>
-              <div className="upload-spinner" style={{ width: 16, height: 16 }} />
-              Gerando...
-            </>
-          ) : reportText ? (
+          {reportText ? (
             <>📋 Fechar Relatório</>
           ) : (
             <>
@@ -407,9 +457,6 @@ export default function ClientDetailPage() {
             </>
           )}
         </button>
-        {reportError && (
-          <span style={{ color: 'var(--error)', fontSize: '0.8rem', alignSelf: 'center' }}>{reportError}</span>
-        )}
       </div>
 
       {/* Report Display */}
