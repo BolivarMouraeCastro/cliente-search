@@ -136,7 +136,7 @@ export async function findClientFolderId(
 
 /**
  * Upload a file to a specific Google Drive folder.
- * Uses multipart upload via the googleapis library.
+ * Uses direct REST API with multipart/related upload (works in serverless).
  */
 export async function uploadFileToDrive(
   accessToken: string,
@@ -146,25 +146,45 @@ export async function uploadFileToDrive(
   mimeType: string
 ): Promise<DriveFile> {
   try {
-    const drive = getDriveService(accessToken);
-    const { Readable } = await import('stream');
-    const stream = new Readable();
-    stream.push(fileBuffer);
-    stream.push(null);
-
-    const response = await drive.files.create({
-      requestBody: {
-        name: fileName,
-        parents: [folderId],
-      },
-      media: {
-        mimeType,
-        body: stream,
-      },
-      fields: 'id, name, mimeType, modifiedTime, webViewLink, size, iconLink',
+    // Build multipart/related request body
+    const boundary = '---upload-boundary-' + Date.now();
+    const metadata = JSON.stringify({
+      name: fileName,
+      parents: [folderId],
     });
 
-    const file = response.data;
+    // Construct the multipart body
+    const bodyParts = [
+      `--${boundary}\r\n`,
+      'Content-Type: application/json; charset=UTF-8\r\n\r\n',
+      metadata + '\r\n',
+      `--${boundary}\r\n`,
+      `Content-Type: ${mimeType}\r\n`,
+      'Content-Transfer-Encoding: base64\r\n\r\n',
+      fileBuffer.toString('base64') + '\r\n',
+      `--${boundary}--`,
+    ];
+    const body = bodyParts.join('');
+
+    const response = await fetch(
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,modifiedTime,webViewLink,size,iconLink',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': `multipart/related; boundary=${boundary}`,
+        },
+        body,
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Drive upload error:', response.status, errorText);
+      throw new Error(`Drive API error ${response.status}: ${errorText}`);
+    }
+
+    const file = await response.json();
     return {
       id: file.id ?? '',
       name: file.name ?? '',
@@ -176,7 +196,7 @@ export async function uploadFileToDrive(
     };
   } catch (error) {
     console.error('Error uploading file to Drive:', error);
-    throw new Error('Failed to upload file to Google Drive');
+    throw new Error(`Failed to upload file to Google Drive: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
