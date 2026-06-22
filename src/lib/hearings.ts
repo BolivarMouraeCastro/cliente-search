@@ -110,7 +110,7 @@ function rowToHearing(row: string[]): Hearing {
 /**
  * Fetch ALL hearings from the hearings spreadsheet (READ-ONLY).
  */
-async function getAllHearings(accessToken: string): Promise<Hearing[]> {
+export async function getAllHearings(accessToken: string): Promise<Hearing[]> {
   // Check cache
   if (hearingsCache && Date.now() - hearingsCache.timestamp < CACHE_TTL_MS) {
     return hearingsCache.data;
