@@ -15,36 +15,35 @@ interface Publicacao {
   concluido: boolean;
 }
 
-// ── Identificação do tipo de ação ─────────────────────────────────────
+// ── Identification ────────────────────────────────────────────────────
 function identificarTipoAcao(descricao: string): string {
   const d = descricao.toLowerCase();
   if (d.includes('recurso de revista') || /\br\.?\s?r\.?\b/.test(d)) return 'RR';
   if (d.includes('contrarraz') && d.includes('revista')) return 'CRRR';
-  if (d.includes('recurso ordinário') || d.includes('recurso ordinario') || /\br\.?\s?o\.?\b/.test(d)) return 'R.O';
+  if (d.includes('recurso ordinário') || d.includes('recurso ordinario')) return 'R.O';
   if (d.includes('contrarraz') && (d.includes('ordinário') || d.includes('ordinario'))) return 'CRRO';
   if (d.includes('réplica') || d.includes('replica')) return 'RÉPLICA';
   if (d.includes('alvará') || d.includes('alvara')) return 'ALVARÁ';
   if (d.includes('trânsito em julgado') || d.includes('transito em julgado')) return 'TRÂNSITO EM JULGADO';
-  if (d.includes('acordo') && (d.includes('homolog') || d.includes('manifest'))) return 'MANIFESTAÇÃO APÓS ACORDO';
+  if (d.includes('acordo') && (d.includes('homolog') || d.includes('manifest'))) return 'APÓS ACORDO';
   if (d.includes('inss') || d.includes('previdenciário') || d.includes('previdenciario')) return 'INSS';
   if (d.includes('audiência') || d.includes('audiencia')) return 'AUDIÊNCIA';
   if (d.includes('execução') || d.includes('execucao') || d.includes('liquidação') || d.includes('liquidacao')) return 'EXECUÇÃO';
   if (d.includes('cálculo') || d.includes('calculo')) return 'CÁLCULOS';
   if (d.includes('sentença') || d.includes('sentenca')) return 'SENTENÇA';
   if (d.includes('manifest') || d.includes('prazo') || d.includes('intimação') || d.includes('intimacao')) return 'MANIFESTAÇÃO';
-  if (d.includes('cível') || d.includes('civel')) return 'CÍVEL E TRABALHISTA';
-  return 'MANIFESTAÇÃO';
+  return 'PRAZO';
 }
 
 function atribuirAdvogado(tipoAcao: string): string {
   const t = tipoAcao.toUpperCase();
   if (t === 'RR' || t === 'CRRR' || t === 'RÉPLICA') return 'ROBSON';
   if (t === 'EXECUÇÃO' || t === 'CÁLCULOS') return 'ROBSON';
-  if (t === 'ALVARÁ' || t === 'TRÂNSITO EM JULGADO' || t === 'MANIFESTAÇÃO APÓS ACORDO') return 'JOÃO PAULO';
+  if (t === 'ALVARÁ' || t === 'TRÂNSITO EM JULGADO' || t === 'APÓS ACORDO') return 'JOÃO PAULO';
   if (t === 'INSS') return 'JOÃO PAULO';
   if (t === 'AUDIÊNCIA') return 'JOÃO CARLOS';
   if (t === 'R.O' || t === 'CRRO') return 'DENIS';
-  if (t === 'MANIFESTAÇÃO' || t === 'CÍVEL E TRABALHISTA' || t === 'SENTENÇA') return 'DENIS';
+  if (t === 'MANIFESTAÇÃO' || t === 'SENTENÇA') return 'DENIS';
   return 'SIMON';
 }
 
@@ -58,19 +57,11 @@ function getTipoColor(tipo: string): string {
   if (t.includes('INSS')) return '#ec4899';
   if (t.includes('ALVARÁ')) return '#14b8a6';
   if (t.includes('TRÂNSITO') || t.includes('ACORDO')) return '#f97316';
-  return '#d4af37';
+  if (t.includes('MANIFESTAÇÃO')) return '#d4af37';
+  return '#94a3b8';
 }
 
-const ADVOGADO_COLORS: Record<string, string> = {
-  'DENIS': '#f59e0b',
-  'ROBSON': '#10b981',
-  'SIMON': '#6366f1',
-  'JOÃO CARLOS': '#ef4444',
-  'JOÃO PAULO': '#8b5cf6',
-  'NYCOLLE': '#ec4899',
-};
-
-// ── PDF extraction via CDN ────────────────────────────────────────────
+// ── PDF extraction ────────────────────────────────────────────────────
 async function extractTextFromPDF(arrayBuffer: ArrayBuffer): Promise<string> {
   const pdfjsUrl = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js';
   if (!(window as any).pdfjsLib) {
@@ -94,19 +85,13 @@ async function extractTextFromPDF(arrayBuffer: ArrayBuffer): Promise<string> {
   return pages.join('\n');
 }
 
-// ── Parse publications from text ──────────────────────────────────────
 function parsePublicacoes(text: string, pdfId: string): Publicacao[] {
-  const splitPattern = /(?=Cliente\s+[A-Z\u00C0-\u00FF])/g;
-  const blocks = text.split(splitPattern);
+  const blocks = text.split(/(?=Cliente\s+[A-Z\u00C0-\u00FF])/g);
   const publicacoes: Publicacao[] = [];
-
   for (let idx = 0; idx < blocks.length; idx++) {
     const block = blocks[idx];
-    if (block.trim().length < 50) continue;
-    if (!/N[uú]mero do processo/i.test(block)) continue;
-
+    if (block.trim().length < 50 || !/N[uú]mero do processo/i.test(block)) continue;
     let cliente = '', adverso = '', numeroProcesso = '', data = '', vara = '', descricao = '';
-
     const cm = block.match(/^Cliente[\s:]+([A-Z\u00C0-\u00FF][A-Z\u00C0-\u00FF\s\.]+?)[\s]+N[uú]mero/i);
     if (cm) cliente = cm[1].trim();
     const pm = block.match(/N[uú]mero do processo[\s:]+(\d[\d.\-\/]+)/i);
@@ -115,31 +100,30 @@ function parsePublicacoes(text: string, pdfId: string): Publicacao[] {
     if (am) adverso = am[1].trim();
     const dm = block.match(/Data da Disponibiliza[cç][aã]o[\s:]+(\d{2}\/\d{2}\/\d{4})/i);
     if (dm) data = dm[1].trim();
-    const vm = block.match(/Vara[\s:]+([^\n]+?)(?:\s*[OÓ]rg[aã]o|\s*Descri)/i);
-    if (vm) vara = vm[1].trim();
+    const vmatch = block.match(/Vara[\s:]+([^\n]+?)(?:\s*[OÓ]rg[aã]o|\s*Descri)/i);
+    if (vmatch) vara = vmatch[1].trim();
     const descM = block.match(/Descri[cç][aã]o[\s:]+([\s\S]+)/i);
     if (descM) descricao = descM[1].replace(/https?:\/\/[^\s]+/g, '').trim();
-
     if (cliente || numeroProcesso) {
       const tipoAcao = identificarTipoAcao(descricao);
-      const advogadoAtribuido = atribuirAdvogado(tipoAcao);
-      const id = `${pdfId}-${idx}`;
-      publicacoes.push({ id, cliente, adverso, numeroProcesso, data, vara, descricao, tipoAcao, advogadoAtribuido, concluido: false });
+      publicacoes.push({ id: `${pdfId}-${idx}`, cliente, adverso, numeroProcesso, data, vara, descricao, tipoAcao, advogadoAtribuido: atribuirAdvogado(tipoAcao), concluido: false });
     }
   }
   return publicacoes;
 }
 
-// ── LocalStorage for "concluido" state ────────────────────────────────
+// ── LocalStorage ──────────────────────────────────────────────────────
 function getConcluidosMap(): Record<string, boolean> {
   if (typeof window === 'undefined') return {};
   try { return JSON.parse(localStorage.getItem('pub_concluidos') || '{}'); } catch { return {}; }
 }
-function saveConcluido(id: string, value: boolean) {
-  const map = getConcluidosMap();
-  map[id] = value;
-  localStorage.setItem('pub_concluidos', JSON.stringify(map));
+function saveConcluido(id: string, val: boolean) {
+  const m = getConcluidosMap(); m[id] = val;
+  localStorage.setItem('pub_concluidos', JSON.stringify(m));
 }
+
+// Ordered list of lawyers for columns
+const ADVOGADOS_ORDER = ['DENIS', 'ROBSON', 'SIMON', 'JOÃO CARLOS', 'JOÃO PAULO', 'NYCOLLE'];
 
 // ── Component ─────────────────────────────────────────────────────────
 export default function PublicacoesPage() {
@@ -147,88 +131,72 @@ export default function PublicacoesPage() {
   const [error, setError] = useState('');
   const [publicacoes, setPublicacoes] = useState<Publicacao[]>([]);
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
-  const [filterAdvogado, setFilterAdvogado] = useState('');
-  const [showConcluidos, setShowConcluidos] = useState(false);
 
   const loadFromDrive = useCallback(async () => {
-    setLoading(true);
-    setError('');
+    setLoading(true); setError('');
     try {
       const res = await fetch('/api/publicacoes');
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Erro'); return; }
-
-      if (!data.pdfs || data.pdfs.length === 0) {
-        setError('Nenhum PDF encontrado na pasta do Drive.');
-        return;
-      }
-
+      if (!data.pdfs || data.pdfs.length === 0) { setError('Nenhum PDF na pasta do Drive.'); return; }
       const allPubs: Publicacao[] = [];
       const concluidos = getConcluidosMap();
-
       for (const pdf of data.pdfs) {
-        // Convert base64 to ArrayBuffer
         const binary = atob(pdf.base64);
         const bytes = new Uint8Array(binary.length);
         for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-
         const text = await extractTextFromPDF(bytes.buffer);
         const pubs = parsePublicacoes(text, pdf.id);
-        // Apply saved concluido state
-        for (const p of pubs) {
-          p.concluido = concluidos[p.id] === true;
-        }
+        for (const p of pubs) p.concluido = concluidos[p.id] === true;
         allPubs.push(...pubs);
       }
-
-      if (allPubs.length === 0) {
-        setError('PDFs encontrados mas nenhuma publicação reconhecida. Verifique se são do PROMAD.');
-      }
-
+      if (allPubs.length === 0) setError('PDFs encontrados mas nenhuma publicação reconhecida.');
       setPublicacoes(allPubs);
-    } catch (err) {
-      setError(`Erro: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setLoading(false);
-    }
+    } catch (err) { setError(`Erro: ${err instanceof Error ? err.message : String(err)}`); }
+    finally { setLoading(false); }
   }, []);
 
   useEffect(() => { loadFromDrive(); }, [loadFromDrive]);
 
   const handleConcluir = (id: string) => {
     setPublicacoes(prev => prev.map(p => {
-      if (p.id === id) {
-        const newVal = !p.concluido;
-        saveConcluido(id, newVal);
-        return { ...p, concluido: newVal };
-      }
+      if (p.id === id) { const v = !p.concluido; saveConcluido(id, v); return { ...p, concluido: v }; }
       return p;
     }));
   };
 
-  const toggleExpand = (id: string) => {
-    setExpandedCard(prev => prev === id ? null : id);
-  };
-
-  // Group by assigned lawyer
+  // Group by lawyer
   const byAdvogado: Record<string, Publicacao[]> = {};
   for (const pub of publicacoes) {
-    if (!showConcluidos && pub.concluido) continue;
-    if (filterAdvogado && pub.advogadoAtribuido !== filterAdvogado) continue;
     const key = pub.advogadoAtribuido;
     if (!byAdvogado[key]) byAdvogado[key] = [];
     byAdvogado[key].push(pub);
   }
-  const advogados = [...new Set(publicacoes.map(p => p.advogadoAtribuido))].sort();
+
+  // Build ordered columns (only show lawyers that have publications)
+  const columns = ADVOGADOS_ORDER.filter(adv => byAdvogado[adv] && byAdvogado[adv].length > 0);
+  // Add any lawyers not in the predefined order
+  for (const adv of Object.keys(byAdvogado)) {
+    if (!columns.includes(adv)) columns.push(adv);
+  }
+
+  const totalPubs = publicacoes.length;
   const totalPendentes = publicacoes.filter(p => !p.concluido).length;
-  const totalConcluidos = publicacoes.filter(p => p.concluido).length;
 
   return (
     <div className="detail-page">
-      <section className="hero">
-        <h1 className="hero-title" style={{ fontSize: '1.8rem' }}>📰 Publicações</h1>
-        <p className="hero-subtitle">Prazos do PROMAD — distribuídos automaticamente</p>
-      </section>
+      {/* Header — same style as Agenda */}
+      <div className="agenda-header">
+        <div className="agenda-title-row">
+          <h1 className="agenda-title">📰 Publicações</h1>
+          {totalPubs > 0 && (
+            <span className="agenda-week-total">{totalPendentes} prazo{totalPendentes !== 1 ? 's' : ''} pendente{totalPendentes !== 1 ? 's' : ''}</span>
+          )}
+        </div>
+        <div className="agenda-nav">
+          <button onClick={loadFromDrive} className="agenda-today-btn">🔄 Atualizar</button>
+        </div>
+      </div>
 
       {error && <div style={{ padding: '0.75rem 1rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '0.75rem', color: '#ef4444', fontSize: '0.85rem', marginBottom: '1rem' }}>❌ {error}</div>}
 
@@ -239,101 +207,91 @@ export default function PublicacoesPage() {
         </div>
       )}
 
-      {!loading && publicacoes.length > 0 && (
-        <>
-          {/* Summary bar */}
-          <div className="pub-summary">
-            <span className="pub-summary-total">📋 {totalPendentes} pendente{totalPendentes !== 1 ? 's' : ''}</span>
-            <span className="pub-summary-advs" style={{ color: '#10b981' }}>✅ {totalConcluidos} concluído{totalConcluidos !== 1 ? 's' : ''}</span>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', color: 'var(--text-muted)', cursor: 'pointer' }}>
-              <input type="checkbox" checked={showConcluidos} onChange={(e) => setShowConcluidos(e.target.checked)} />
-              Mostrar concluídos
-            </label>
-            {advogados.length > 1 && (
-              <select className="agenda-filter" value={filterAdvogado} onChange={(e) => setFilterAdvogado(e.target.value)}>
-                <option value="">Todos os advogados</option>
-                {advogados.map(adv => (
-                  <option key={adv} value={adv}>{adv} ({publicacoes.filter(p => p.advogadoAtribuido === adv && !p.concluido).length})</option>
-                ))}
-              </select>
-            )}
-            <button onClick={loadFromDrive} className="pub-card-expand" style={{ marginLeft: 'auto' }}>🔄 Atualizar</button>
-          </div>
-
-          {/* Groups by lawyer — agenda style */}
-          {Object.entries(byAdvogado).sort().map(([advogado, pubs]) => {
-            const color = ADVOGADO_COLORS[advogado] || '#d4af37';
+      {/* Grid — same as agenda-grid but columns = lawyers */}
+      {!loading && totalPubs > 0 && (
+        <div className="agenda-grid">
+          {columns.map((advogado) => {
+            const pubs = byAdvogado[advogado] || [];
             const pendentes = pubs.filter(p => !p.concluido).length;
 
             return (
-              <div key={advogado} className="pub-group" style={{ marginBottom: '1.5rem' }}>
-                {/* Lawyer header */}
-                <div className="pub-group-header" style={{ borderLeft: `4px solid ${color}` }}>
-                  <div className="pub-group-avatar" style={{ background: color }}>
-                    {advogado.charAt(0)}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div className="pub-group-name">{advogado}</div>
-                    <div className="pub-group-count">
-                      {pendentes} pendente{pendentes !== 1 ? 's' : ''}
-                      {pubs.length !== pendentes && ` • ${pubs.length - pendentes} concluído${(pubs.length - pendentes) !== 1 ? 's' : ''}`}
-                    </div>
-                  </div>
+              <div key={advogado} className="agenda-day">
+                {/* Lawyer header — like day header */}
+                <div className="agenda-day-header">
+                  <span className="agenda-day-name">{advogado}</span>
                 </div>
+                <div className="agenda-day-count">{pendentes} prazo{pendentes !== 1 ? 's' : ''}</div>
 
-                {/* Publication cards — accordion */}
-                <div className="pub-cards">
+                {/* Cards */}
+                <div className="agenda-day-cards">
                   {pubs.map((pub) => {
                     const isOpen = expandedCard === pub.id;
                     const tipoColor = getTipoColor(pub.tipoAcao);
 
                     return (
-                      <div key={pub.id} className={`pub-card ${pub.concluido ? 'pub-card-done' : ''}`}>
-                        {/* Clickable header */}
-                        <div className="pub-card-top" onClick={() => toggleExpand(pub.id)} style={{ cursor: 'pointer' }}>
-                          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                            <span style={{ fontSize: '1rem' }}>{isOpen ? '▼' : '▶'}</span>
-                            <div>
-                              <div className="pub-card-cliente" style={{ textDecoration: pub.concluido ? 'line-through' : 'none', opacity: pub.concluido ? 0.6 : 1 }}>
-                                {pub.cliente || 'Sem nome'}
-                              </div>
-                              {pub.adverso && <div className="pub-card-adverso">vs {pub.adverso}</div>}
-                            </div>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <span className="agenda-card-badge" style={{ background: tipoColor + '22', color: tipoColor, fontSize: '0.65rem' }}>
-                              {pub.tipoAcao}
-                            </span>
-                            {pub.data && <span className="pub-card-date">{pub.data}</span>}
-                          </div>
+                      <div
+                        key={pub.id}
+                        className="agenda-card"
+                        style={{
+                          borderLeftColor: tipoColor,
+                          opacity: pub.concluido ? 0.4 : 1,
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => setExpandedCard(isOpen ? null : pub.id)}
+                      >
+                        {/* Client name */}
+                        <div className="agenda-card-name" style={{ textDecoration: pub.concluido ? 'line-through' : 'none' }}>
+                          {pub.cliente || 'Sem nome'}
                         </div>
 
-                        {/* Expanded content */}
+                        {/* Adverso */}
+                        {pub.adverso && (
+                          <div className="agenda-card-company">vs {pub.adverso}</div>
+                        )}
+
+                        {/* Badge */}
+                        <div className="agenda-card-badge" style={{ background: tipoColor + '22', color: tipoColor }}>
+                          {pub.tipoAcao}
+                        </div>
+
+                        {/* Expanded details */}
                         {isOpen && (
-                          <div style={{ padding: '0.75rem 0 0.5rem 2rem', animation: 'slideUp 0.2s ease-out' }}>
-                            <div className="pub-card-meta" style={{ marginBottom: '0.5rem' }}>
-                              {pub.numeroProcesso && <span className="pub-card-processo">{pub.numeroProcesso}</span>}
-                              {pub.vara && <span className="pub-card-vara">{pub.vara}</span>}
-                            </div>
+                          <div style={{ marginTop: '0.5rem', animation: 'slideUp 0.2s ease-out' }}>
+                            {pub.numeroProcesso && (
+                              <div className="agenda-card-process">{pub.numeroProcesso}</div>
+                            )}
+                            {pub.vara && (
+                              <div className="agenda-card-court">{pub.vara}</div>
+                            )}
+                            {pub.data && (
+                              <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                                📅 {pub.data}
+                              </div>
+                            )}
 
                             {pub.descricao && (
-                              <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '0.75rem', maxHeight: '200px', overflowY: 'auto' }}>
-                                {pub.descricao}
+                              <div style={{
+                                fontSize: '0.72rem', color: 'var(--text-secondary)', lineHeight: 1.5,
+                                marginTop: '0.5rem', maxHeight: '120px', overflowY: 'auto',
+                                padding: '0.5rem', background: 'rgba(0,0,0,0.2)', borderRadius: '0.5rem',
+                              }}>
+                                {pub.descricao.substring(0, 500)}{pub.descricao.length > 500 ? '...' : ''}
                               </div>
                             )}
 
                             <button
                               onClick={(e) => { e.stopPropagation(); handleConcluir(pub.id); }}
                               style={{
-                                padding: '0.4rem 1rem',
+                                marginTop: '0.5rem',
+                                padding: '0.35rem 0.8rem',
                                 borderRadius: '999px',
-                                border: pub.concluido ? '1px solid #10b981' : '1px solid var(--border-subtle)',
-                                background: pub.concluido ? 'rgba(16,185,129,0.1)' : 'rgba(255,255,255,0.05)',
-                                color: pub.concluido ? '#10b981' : 'var(--text-primary)',
-                                fontSize: '0.8rem',
-                                fontWeight: 600,
+                                border: pub.concluido ? '1px solid #10b981' : '1px solid rgba(212,175,55,0.3)',
+                                background: pub.concluido ? 'rgba(16,185,129,0.15)' : 'rgba(212,175,55,0.1)',
+                                color: pub.concluido ? '#10b981' : '#d4af37',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
                                 cursor: 'pointer',
-                                transition: 'all 0.2s',
+                                width: '100%',
                               }}
                             >
                               {pub.concluido ? '✅ Concluído' : '☐ Concluir'}
@@ -347,7 +305,15 @@ export default function PublicacoesPage() {
               </div>
             );
           })}
-        </>
+        </div>
+      )}
+
+      {!loading && totalPubs === 0 && !error && (
+        <div className="empty-state" style={{ marginTop: '2rem' }}>
+          <div className="empty-state-icon">📰</div>
+          <div className="empty-state-title">Nenhuma publicação encontrada</div>
+          <div className="empty-state-desc">Suba um PDF do PROMAD na pasta do Google Drive.</div>
+        </div>
       )}
     </div>
   );
