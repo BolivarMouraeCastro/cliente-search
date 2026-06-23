@@ -273,7 +273,7 @@ export default function Sidebar() {
         </div>
 
         <nav className="sidebar-nav">
-          {navLinks.filter(link => !link.adminOnly || isAdmin).map((link, i) => {
+          {navLinks.filter(link => !link.adminOnly || role !== 'colaborador').map((link, i) => {
             if (link.href === '/comissoes' || link.href === '/financeiro') {
               const target = link.href === '/comissoes' ? 'comissoes' : 'financeiro';
               return (
