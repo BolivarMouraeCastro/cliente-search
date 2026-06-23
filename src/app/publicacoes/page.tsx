@@ -15,6 +15,106 @@ interface Publicacao {
   descricao: string;
 }
 
+/**
+ * Extract text from PDF using browser's pdfjs loaded from CDN.
+ */
+async function extractTextFromPDF(file: File): Promise<string> {
+  // Load pdf.js from CDN (works in browser, no serverless issues)
+  const pdfjsUrl = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+  const workerUrl = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  // Load script if not already loaded
+  if (!(window as any).pdfjsLib) {
+    await new Promise<void>((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = pdfjsUrl;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error('Falha ao carregar leitor de PDF'));
+      document.head.appendChild(script);
+    });
+    (window as any).pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+  }
+
+  const pdfjsLib = (window as any).pdfjsLib;
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+  const pages: string[] = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const text = content.items
+      .map((item: any) => item.str || '')
+      .join(' ');
+    pages.push(text);
+  }
+
+  return pages.join('\n');
+}
+
+/**
+ * Parse extracted text into publications.
+ */
+function parsePublicacoes(text: string): Publicacao[] {
+  const blocks = text.split(/Publica[çc][ãa]o\s+Jur[ií]dica\s+Impressa/i);
+  const publicacoes: Publicacao[] = [];
+
+  for (const block of blocks) {
+    if (block.trim().length < 50) continue;
+
+    const pub: Publicacao = {
+      cliente: '', adverso: '', advogado: '', numeroProcesso: '',
+      data: '', pagina: '', vara: '', orgao: '', jornal: '', descricao: '',
+    };
+
+    // Cliente
+    const clienteMatch = block.match(/Cliente[\s:]+([A-Z\u00C0-\u00FF][A-Z\u00C0-\u00FF\s]+?)(?:\s*N[uú]mero|\s*Adverso)/i);
+    if (clienteMatch) pub.cliente = clienteMatch[1].trim();
+
+    // Número do processo
+    const processoMatch = block.match(/N[uú]mero do processo[\s:]+(\d[\d.\-\/]+)/i);
+    if (processoMatch) pub.numeroProcesso = processoMatch[1].trim();
+
+    // Adverso
+    const adversoMatch = block.match(/Adverso[\s:]+([\s\S]+?)(?:\s*Pasta|\s*Respons[aá]vel)/i);
+    if (adversoMatch) pub.adverso = adversoMatch[1].trim();
+
+    // Advogado
+    const advMatch = block.match(/(?:Respons[aá]vel|Advogado)[\s:]+([A-Z\u00C0-\u00FF][A-Z\u00C0-\u00FF\s]+?)(?:\s*Data|\s*Jornal|\s*\d{2}\/)/i);
+    if (advMatch) pub.advogado = advMatch[1].trim();
+
+    // Data
+    const dataMatch = block.match(/Data da Disponibiliza[cç][aã]o[\s:]+(\d{2}\/\d{2}\/\d{4})/i);
+    if (dataMatch) pub.data = dataMatch[1].trim();
+
+    // Jornal
+    const jornalMatch = block.match(/Jornal[\s:]+([\s\S]+?)(?:\s*P[aá]gina)/i);
+    if (jornalMatch) pub.jornal = jornalMatch[1].trim();
+
+    // Página
+    const paginaMatch = block.match(/P[aá]gina[\s:]+(\d+)/i);
+    if (paginaMatch) pub.pagina = paginaMatch[1].trim();
+
+    // Vara
+    const varaMatch = block.match(/Vara[\s:]+([^\n]+?)(?:\s*[OÓ]rg[aã]o|\s*Descri)/i);
+    if (varaMatch) pub.vara = varaMatch[1].trim();
+
+    // Órgão
+    const orgaoMatch = block.match(/[OÓ]rg[aã]o[\s:]+([^\n]+?)(?:\s*Vara|\s*Descri)/i);
+    if (orgaoMatch) pub.orgao = orgaoMatch[1].trim();
+
+    // Descrição
+    const descMatch = block.match(/Descri[cç][aã]o[\s:]+([\s\S]+)/i);
+    if (descMatch) pub.descricao = descMatch[1].trim();
+
+    if (pub.cliente || pub.numeroProcesso) {
+      publicacoes.push(pub);
+    }
+  }
+
+  return publicacoes;
+}
+
 export default function PublicacoesPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -36,24 +136,34 @@ export default function PublicacoesPage() {
     setTotal(0);
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
+      // Extract text directly in the browser
+      const text = await extractTextFromPDF(file);
 
-      const res = await fetch('/api/publicacoes', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const data = await res.json();
-
-      if (res.ok) {
-        setByAdvogado(data.byAdvogado || {});
-        setTotal(data.total || 0);
-      } else {
-        setError(data.error || 'Erro ao processar PDF');
+      if (!text || text.trim().length === 0) {
+        setError('PDF vazio ou não foi possível extrair texto.');
+        return;
       }
-    } catch {
-      setError('Erro de conexão ao processar PDF');
+
+      // Parse publications
+      const publicacoes = parsePublicacoes(text);
+
+      if (publicacoes.length === 0) {
+        setError('Nenhuma publicação encontrada. Verifique se é um relatório do PROMAD.');
+        return;
+      }
+
+      // Group by advogado
+      const grouped: Record<string, Publicacao[]> = {};
+      for (const pub of publicacoes) {
+        const key = pub.advogado || 'SEM ADVOGADO';
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(pub);
+      }
+
+      setByAdvogado(grouped);
+      setTotal(publicacoes.length);
+    } catch (err) {
+      setError(`Erro ao processar PDF: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setIsLoading(false);
     }
@@ -90,7 +200,6 @@ export default function PublicacoesPage() {
 
   return (
     <div className="detail-page">
-      {/* Header */}
       <section className="hero">
         <h1 className="hero-title" style={{ fontSize: '1.8rem' }}>
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline', verticalAlign: 'middle', marginRight: '0.5rem' }}>
@@ -134,7 +243,6 @@ export default function PublicacoesPage() {
         <div className="upload-dropzone-formats">Apenas PDF</div>
       </div>
 
-      {/* Error */}
       {error && (
         <div style={{
           padding: '0.75rem 1rem',
@@ -149,7 +257,6 @@ export default function PublicacoesPage() {
         </div>
       )}
 
-      {/* Loading */}
       {isLoading && (
         <div className="agenda-loading">
           <div className="upload-spinner" style={{ width: 32, height: 32 }} />
@@ -157,12 +264,10 @@ export default function PublicacoesPage() {
         </div>
       )}
 
-      {/* Results */}
       {hasResults && !isLoading && (
         <>
-          {/* Summary bar */}
           <div className="pub-summary">
-            <span className="pub-summary-total">{total} publicação{total !== 1 ? 'ões' : ''} encontrada{total !== 1 ? 's' : ''}</span>
+            <span className="pub-summary-total">{total} publicação{total !== 1 ? 'ões' : ''}</span>
             <span className="pub-summary-advs">{advogados.length} advogado{advogados.length !== 1 ? 's' : ''}</span>
             {advogados.length > 1 && (
               <select
@@ -178,7 +283,6 @@ export default function PublicacoesPage() {
             )}
           </div>
 
-          {/* Grouped by advogado */}
           {Object.entries(filtered).map(([advogado, pubs]) => (
             <div key={advogado} className="pub-group">
               <div className="pub-group-header">
@@ -204,35 +308,22 @@ export default function PublicacoesPage() {
                       <div className="pub-card-top">
                         <div style={{ flex: 1 }}>
                           <div className="pub-card-cliente">{pub.cliente || 'Sem nome'}</div>
-                          {pub.adverso && (
-                            <div className="pub-card-adverso">vs {pub.adverso}</div>
-                          )}
+                          {pub.adverso && <div className="pub-card-adverso">vs {pub.adverso}</div>}
                         </div>
-                        {pub.data && (
-                          <div className="pub-card-date">{pub.data}</div>
-                        )}
+                        {pub.data && <div className="pub-card-date">{pub.data}</div>}
                       </div>
 
                       <div className="pub-card-meta">
-                        {pub.numeroProcesso && (
-                          <span className="pub-card-processo">{pub.numeroProcesso}</span>
-                        )}
-                        {pub.vara && (
-                          <span className="pub-card-vara">{pub.vara}</span>
-                        )}
+                        {pub.numeroProcesso && <span className="pub-card-processo">{pub.numeroProcesso}</span>}
+                        {pub.vara && <span className="pub-card-vara">{pub.vara}</span>}
                       </div>
 
                       {pub.descricao && (
                         <>
-                          <div
-                            className={`pub-card-desc ${isExpanded ? 'expanded' : ''}`}
-                          >
+                          <div className={`pub-card-desc ${isExpanded ? 'expanded' : ''}`}>
                             {pub.descricao}
                           </div>
-                          <button
-                            className="pub-card-expand"
-                            onClick={() => toggleExpand(cardKey)}
-                          >
+                          <button className="pub-card-expand" onClick={() => toggleExpand(cardKey)}>
                             {isExpanded ? 'Ver menos ▲' : 'Ver descrição completa ▼'}
                           </button>
                         </>
