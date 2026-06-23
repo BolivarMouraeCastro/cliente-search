@@ -126,12 +126,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (session.user.email !== ADMIN_EMAIL) {
-      return NextResponse.json(
-        { error: 'Acesso negado. Apenas administradores podem adicionar usuários.' },
-        { status: 403 }
-      );
-    }
+
 
     const body = await request.json();
     const { email, nome } = body;
@@ -201,12 +196,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    if (session.user.email !== ADMIN_EMAIL) {
-      return NextResponse.json(
-        { error: 'Acesso negado. Apenas administradores podem remover usuários.' },
-        { status: 403 }
-      );
-    }
+
 
     const body = await request.json();
     const { email } = body;
