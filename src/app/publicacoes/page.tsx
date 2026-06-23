@@ -300,27 +300,36 @@ export default function PublicacoesPage() {
                           borderLeftColor: tipoColor,
                           opacity: pub.concluido ? 0.35 : isDragging ? 0.5 : 1,
                           cursor: 'grab',
+                          padding: isOpen ? '0.6rem 0.75rem' : '0.4rem 0.75rem',
                         }}
                         onClick={() => setExpandedCard(isOpen ? null : pub.id)}
                       >
-                        <div className="agenda-card-name" style={{ textDecoration: pub.concluido ? 'line-through' : 'none' }}>
-                          {pub.cliente || 'Sem nome'}
-                        </div>
-                        {pub.adverso && <div className="agenda-card-company">vs {pub.adverso}</div>}
-                        <div className="agenda-card-badge" style={{ background: tipoColor + '22', color: tipoColor }}>
-                          {pub.tipoAcao}
+                        {/* Compact: single line with name + arrow */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                          <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>{isOpen ? '▼' : '▶'}</span>
+                          <span className="agenda-card-name" style={{
+                            textDecoration: pub.concluido ? 'line-through' : 'none',
+                            fontSize: '0.78rem',
+                            margin: 0,
+                          }}>
+                            {pub.cliente || 'Sem nome'}
+                          </span>
+                          {pub.concluido && <span style={{ fontSize: '0.65rem' }}>✅</span>}
+                          {isSimon && pub.advogadoAtribuido !== 'SIMON' && (
+                            <span style={{ fontSize: '0.6rem', color: tipoColor, marginLeft: 'auto', whiteSpace: 'nowrap' }}>
+                              → {pub.advogadoAtribuido}
+                            </span>
+                          )}
                         </div>
 
-                        {/* Show which lawyer it's assigned to (in Simon's column) */}
-                        {isSimon && pub.advogadoAtribuido !== 'SIMON' && (
-                          <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-                            → {pub.advogadoAtribuido}
-                          </div>
-                        )}
-
+                        {/* Expanded */}
                         {isOpen && (
                           <div style={{ marginTop: '0.5rem', animation: 'slideUp 0.2s ease-out' }} onClick={(e) => e.stopPropagation()}>
-                            {pub.numeroProcesso && <div className="agenda-card-process">{pub.numeroProcesso}</div>}
+                            {pub.adverso && <div className="agenda-card-company">vs {pub.adverso}</div>}
+                            <div className="agenda-card-badge" style={{ background: tipoColor + '22', color: tipoColor, marginTop: '0.3rem' }}>
+                              {pub.tipoAcao}
+                            </div>
+                            {pub.numeroProcesso && <div className="agenda-card-process" style={{ marginTop: '0.3rem' }}>{pub.numeroProcesso}</div>}
                             {pub.vara && <div className="agenda-card-court">{pub.vara}</div>}
                             {pub.data && <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>📅 {pub.data}</div>}
 
