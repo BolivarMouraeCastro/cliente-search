@@ -19,9 +19,7 @@ interface Publicacao {
  * Extract text from PDF using browser's pdfjs loaded from CDN.
  */
 async function extractTextFromPDF(file: File): Promise<string> {
-  // Load pdf.js from CDN (works in browser, no serverless issues)
-  const pdfjsUrl = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-  const workerUrl = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const pdfjsUrl = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js';
 
   // Load script if not already loaded
   if (!(window as any).pdfjsLib) {
@@ -29,15 +27,23 @@ async function extractTextFromPDF(file: File): Promise<string> {
       const script = document.createElement('script');
       script.src = pdfjsUrl;
       script.onload = () => resolve();
-      script.onerror = () => reject(new Error('Falha ao carregar leitor de PDF'));
+      script.onerror = () => reject(new Error('Falha ao carregar biblioteca PDF. Verifique sua conexão.'));
       document.head.appendChild(script);
     });
-    (window as any).pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+    // Disable worker to avoid CORS issues
+    (window as any).pdfjsLib.GlobalWorkerOptions.workerSrc = '';
   }
 
   const pdfjsLib = (window as any).pdfjsLib;
+  if (!pdfjsLib) {
+    throw new Error('Biblioteca PDF não carregou. Recarregue a página.');
+  }
+
   const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const pdf = await pdfjsLib.getDocument({
+    data: new Uint8Array(arrayBuffer),
+    disableWorker: true,
+  }).promise;
 
   const pages: string[] = [];
   for (let i = 1; i <= pdf.numPages; i++) {
