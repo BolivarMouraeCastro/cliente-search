@@ -3,8 +3,6 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 
-const ADMIN_EMAIL = 'advogadosbmc@gmail.com';
-
 interface Usuario {
   email: string;
   nome: string;
@@ -34,12 +32,11 @@ export default function UsuariosPage() {
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
 
-  const isAdmin = status === 'authenticated' && session?.user?.email?.toLowerCase().trim() === ADMIN_EMAIL;
+  const isAuthenticated = status === 'authenticated';
 
   useEffect(() => {
-    if (status !== 'authenticated') return;
-    if (isAdmin) loadData();
-  }, [status, isAdmin]);
+    if (isAuthenticated) loadData();
+  }, [isAuthenticated]);
 
   const loadData = async () => {
     setLoading(true);
@@ -92,7 +89,7 @@ export default function UsuariosPage() {
     ? atividades.filter(a => a.email === selectedUser)
     : atividades;
 
-  if (status === 'loading' || (loading && isAdmin)) {
+  if (status === 'loading' || (loading && isAuthenticated)) {
     return (
       <div className="detail-page">
         <div className="agenda-loading">
@@ -103,7 +100,7 @@ export default function UsuariosPage() {
     );
   }
 
-  if (!isAdmin) {
+  if (!isAuthenticated) {
     return (
       <div className="detail-page">
         <div className="agenda-loading">
