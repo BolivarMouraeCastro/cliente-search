@@ -13,6 +13,7 @@ export default function Sidebar() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState(false);
+  const [passwordTarget, setPasswordTarget] = useState<'comissoes' | 'financeiro'>('comissoes');
 
   // Close sidebar on route change (mobile)
   useEffect(() => {
@@ -145,13 +146,13 @@ export default function Sidebar() {
 
   const COMISSOES_SENHA = '5610';
 
-  const handleComissoesClick = (e: React.MouseEvent) => {
+  const handleProtectedClick = (e: React.MouseEvent, target: 'comissoes' | 'financeiro') => {
     e.preventDefault();
-    // Check if already authenticated this session
-    if (typeof window !== 'undefined' && sessionStorage.getItem('comissoes_auth') === 'true') {
-      router.push('/comissoes');
+    if (typeof window !== 'undefined' && sessionStorage.getItem(`${target}_auth`) === 'true') {
+      router.push(`/${target}`);
       return;
     }
+    setPasswordTarget(target);
     setShowPasswordModal(true);
     setPasswordInput('');
     setPasswordError(false);
@@ -160,12 +161,12 @@ export default function Sidebar() {
   const handlePasswordSubmit = () => {
     if (passwordInput === COMISSOES_SENHA) {
       if (typeof window !== 'undefined') {
-        sessionStorage.setItem('comissoes_auth', 'true');
+        sessionStorage.setItem(`${passwordTarget}_auth`, 'true');
       }
       setShowPasswordModal(false);
       setPasswordInput('');
       setPasswordError(false);
-      router.push('/comissoes');
+      router.push(`/${passwordTarget}`);
     } else {
       setPasswordError(true);
     }
@@ -252,12 +253,13 @@ export default function Sidebar() {
 
         <nav className="sidebar-nav">
           {navLinks.map((link, i) => {
-            if (link.href === '/comissoes') {
+            if (link.href === '/comissoes' || link.href === '/financeiro') {
+              const target = link.href === '/comissoes' ? 'comissoes' : 'financeiro';
               return (
                 <a
                   key={i}
-                  href="/comissoes"
-                  onClick={handleComissoesClick}
+                  href={link.href}
+                  onClick={(e) => handleProtectedClick(e, target as 'comissoes' | 'financeiro')}
                   className={`sidebar-link ${pathname === link.href ? 'active' : ''}`}
                   style={{ cursor: 'pointer' }}
                 >
