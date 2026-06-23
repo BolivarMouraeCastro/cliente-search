@@ -48,7 +48,7 @@ function parsePublicacoes(text: string): Publicacao[] {
     // The PDF text typically has "Label\nValue" or "Label  Value" patterns
 
     // Cliente
-    const clienteMatch = block.match(/Cliente\s*\n?\s*(.+?)(?:\s*N[úu]mero do processo)/is);
+    const clienteMatch = block.match(/Cliente\s*\n?\s*([\s\S]+?)(?:\s*N[úu]mero do processo)/i);
     if (clienteMatch) pub.cliente = clienteMatch[1].trim();
 
     // Número do processo
@@ -56,11 +56,11 @@ function parsePublicacoes(text: string): Publicacao[] {
     if (processoMatch) pub.numeroProcesso = processoMatch[1].trim();
 
     // Adverso
-    const adversoMatch = block.match(/Adverso\s*\n?\s*(.+?)(?:\s*Pasta|\s*Respons[áa]vel)/is);
+    const adversoMatch = block.match(/Adverso\s*\n?\s*([\s\S]+?)(?:\s*Pasta|\s*Respons[áa]vel)/i);
     if (adversoMatch) pub.adverso = adversoMatch[1].trim();
 
     // Advogado (can be under "Responsável" or "Advogado")
-    const advMatch = block.match(/(?:Respons[áa]vel|Advogado)\s*\n?\s*(.+?)(?:\s*Data da Disponibiliza|Jornal|\n)/is);
+    const advMatch = block.match(/(?:Respons[áa]vel|Advogado)\s*\n?\s*([\s\S]+?)(?:\s*Data da Disponibiliza|Jornal|\n)/i);
     if (advMatch) pub.advogado = advMatch[1].trim();
 
     // If advogado not found, try second pattern
@@ -74,7 +74,7 @@ function parsePublicacoes(text: string): Publicacao[] {
     if (dataMatch) pub.data = dataMatch[1].trim();
 
     // Jornal
-    const jornalMatch = block.match(/Jornal\s*\n?\s*(.+?)(?:\s*P[áa]gina)/is);
+    const jornalMatch = block.match(/Jornal\s*\n?\s*([\s\S]+?)(?:\s*P[áa]gina)/i);
     if (jornalMatch) pub.jornal = jornalMatch[1].trim();
 
     // Página
@@ -82,11 +82,11 @@ function parsePublicacoes(text: string): Publicacao[] {
     if (paginaMatch) pub.pagina = paginaMatch[1].trim();
 
     // Vara
-    const varaMatch = block.match(/Vara\s*\n?\s*(.+?)(?:\s*[ÓO]rg[ãa]o|\s*Descri)/is);
+    const varaMatch = block.match(/Vara\s*\n?\s*([\s\S]+?)(?:\s*[ÓO]rg[ãa]o|\s*Descri)/i);
     if (varaMatch) pub.vara = varaMatch[1].trim();
 
     // Órgão
-    const orgaoMatch = block.match(/[ÓO]rg[ãa]o\s*\n?\s*(.+?)(?:\s*Vara|\s*Descri)/is);
+    const orgaoMatch = block.match(/[ÓO]rg[ãa]o\s*\n?\s*([\s\S]+?)(?:\s*Vara|\s*Descri)/i);
     if (orgaoMatch) pub.orgao = orgaoMatch[1].trim();
 
     // Descrição — everything after "Descrição" label
