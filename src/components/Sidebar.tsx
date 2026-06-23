@@ -11,16 +11,6 @@ export default function Sidebar() {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
 
-  // Admin sees everything, everyone else is a collaborator with restricted sidebar
-  const adminEmails = ['advogadosbmc@gmail.com'];
-  const userEmail = session?.user?.email?.toLowerCase().trim() || '';
-  const isColaborador = userEmail ? !adminEmails.includes(userEmail) : false;
-  
-  // DEBUG: log to console (remove after testing)
-  if (typeof window !== 'undefined' && userEmail) {
-    console.log('SIDEBAR DEBUG:', { userEmail, isColaborador, match: adminEmails.includes(userEmail) });
-  }
-
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState(false);
@@ -40,11 +30,11 @@ export default function Sidebar() {
     return () => window.removeEventListener('keydown', handleEsc);
   }, []);
 
-  const navLinks: { href: string; label: string; icon: JSX.Element; adminOnly?: boolean }[] = [
+  const navLinks: { href: string; label: string; icon: JSX.Element }[] = [
     {
       href: '/dashboard',
       label: 'Dashboard',
-      adminOnly: true,
+
       icon: (
         <svg className="sidebar-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <rect x="3" y="3" width="7" height="7" />
@@ -67,7 +57,7 @@ export default function Sidebar() {
     {
       href: '/materias',
       label: 'Fases (CNJ)',
-      adminOnly: true,
+
       icon: (
         <svg className="sidebar-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M4 22h14a2 2 0 0 0 2-2V7.5L14.5 2H6a2 2 0 0 0-2 2v4" />
@@ -93,7 +83,7 @@ export default function Sidebar() {
     {
       href: '/prescricoes',
       label: 'Prescrições',
-      adminOnly: true,
+
       icon: (
         <svg className="sidebar-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="10" />
@@ -104,7 +94,7 @@ export default function Sidebar() {
     {
       href: '/comissoes',
       label: 'Comissões',
-      adminOnly: true,
+
       icon: (
         <svg className="sidebar-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <line x1="12" y1="1" x2="12" y2="23" />
@@ -138,7 +128,7 @@ export default function Sidebar() {
     {
       href: '/publicacoes',
       label: 'Publicações',
-      adminOnly: true,
+
       icon: (
         <svg className="sidebar-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -151,7 +141,7 @@ export default function Sidebar() {
     {
       href: '/financeiro',
       label: 'Financeiro',
-      adminOnly: true,
+
       icon: (
         <svg className="sidebar-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <line x1="12" y1="1" x2="12" y2="23" />
@@ -162,7 +152,7 @@ export default function Sidebar() {
     {
       href: '/usuarios',
       label: 'Usuários',
-      adminOnly: true,
+
       icon: (
         <svg className="sidebar-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -282,7 +272,7 @@ export default function Sidebar() {
         </div>
 
         <nav className="sidebar-nav">
-          {navLinks.filter(link => !link.adminOnly || !isColaborador).map((link, i) => {
+          {navLinks.map((link, i) => {
             if (link.href === '/comissoes' || link.href === '/financeiro') {
               const target = link.href === '/comissoes' ? 'comissoes' : 'financeiro';
               return (
