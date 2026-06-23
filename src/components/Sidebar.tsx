@@ -4,14 +4,13 @@ import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useSession, signIn, signOut } from 'next-auth/react';
 import Link from 'next/link';
-import { useUserRole } from '@/hooks/useUserRole';
 
 export default function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
-  const { role, isAdmin } = useUserRole();
+  const isColaborador = session?.user?.email ? session.user.email.toLowerCase().trim() !== 'advogadosbmc@gmail.com' : false;
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState(false);
@@ -273,7 +272,7 @@ export default function Sidebar() {
         </div>
 
         <nav className="sidebar-nav">
-          {navLinks.filter(link => !link.adminOnly || role !== 'colaborador').map((link, i) => {
+          {navLinks.filter(link => !link.adminOnly || !isColaborador).map((link, i) => {
             if (link.href === '/comissoes' || link.href === '/financeiro') {
               const target = link.href === '/comissoes' ? 'comissoes' : 'financeiro';
               return (
