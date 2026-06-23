@@ -10,22 +10,12 @@ export default function Sidebar() {
   const { data: session } = useSession();
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
-  const [isColaborador, setIsColaborador] = useState(false);
 
-  // Check if user is a registered collaborator (only they get restricted view)
-  useEffect(() => {
-    if (!session?.user?.email) return;
-    const email = session.user.email.toLowerCase().trim();
-    // Admin always sees everything
-    if (email === 'advogadosbmc@gmail.com') { setIsColaborador(false); return; }
-    // Check API if this email is a registered collaborator
-    fetch('/api/usuarios')
-      .then(res => res.json())
-      .then(data => {
-        if (data.role === 'colaborador') setIsColaborador(true);
-      })
-      .catch(() => {}); // On error, show everything
-  }, [session?.user?.email]);
+  // Admin sees everything, everyone else is a collaborator with restricted sidebar
+  const adminEmails = ['advogadosbmc@gmail.com'];
+  const userEmail = session?.user?.email?.toLowerCase().trim() || '';
+  const isColaborador = userEmail ? !adminEmails.includes(userEmail) : false;
+
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState(false);
