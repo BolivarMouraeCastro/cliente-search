@@ -18,7 +18,7 @@ interface Publicacao {
 // ── Identification ────────────────────────────────────────────────────
 function identificarTipoAcao(descricao: string): string {
   const d = descricao.toLowerCase();
-  if (d.includes('recurso de revista') || /\br\.?\s?r\.?\b/.test(d)) return 'RR';
+  if (d.includes('recurso de revista')) return 'RR';
   if (d.includes('contrarraz') && d.includes('revista')) return 'CRRR';
   if (d.includes('recurso ordinário') || d.includes('recurso ordinario')) return 'R.O';
   if (d.includes('contrarraz') && (d.includes('ordinário') || d.includes('ordinario'))) return 'CRRO';
@@ -35,7 +35,7 @@ function identificarTipoAcao(descricao: string): string {
   return 'PRAZO';
 }
 
-function atribuirAdvogado(tipoAcao: string): string {
+function autoAtribuir(tipoAcao: string): string {
   const t = tipoAcao.toUpperCase();
   if (t === 'RR' || t === 'CRRR' || t === 'RÉPLICA') return 'ROBSON';
   if (t === 'EXECUÇÃO' || t === 'CÁLCULOS') return 'ROBSON';
@@ -98,15 +98,15 @@ function parsePublicacoes(text: string, pdfId: string): Publicacao[] {
     if (pm) numeroProcesso = pm[1].trim();
     const am = block.match(/Adverso[\s:]+([\s\S]+?)(?:\s*Pasta|\s*Respons[aá]vel)/i);
     if (am) adverso = am[1].trim();
-    const dm = block.match(/Data da Disponibiliza[cç][aã]o[\s:]+(\d{2}\/\d{2}\/\d{4})/i);
-    if (dm) data = dm[1].trim();
+    const dm2 = block.match(/Data da Disponibiliza[cç][aã]o[\s:]+(\d{2}\/\d{2}\/\d{4})/i);
+    if (dm2) data = dm2[1].trim();
     const vmatch = block.match(/Vara[\s:]+([^\n]+?)(?:\s*[OÓ]rg[aã]o|\s*Descri)/i);
     if (vmatch) vara = vmatch[1].trim();
     const descM = block.match(/Descri[cç][aã]o[\s:]+([\s\S]+)/i);
     if (descM) descricao = descM[1].replace(/https?:\/\/[^\s]+/g, '').trim();
     if (cliente || numeroProcesso) {
       const tipoAcao = identificarTipoAcao(descricao);
-      publicacoes.push({ id: `${pdfId}-${idx}`, cliente, adverso, numeroProcesso, data, vara, descricao, tipoAcao, advogadoAtribuido: atribuirAdvogado(tipoAcao), concluido: false });
+      publicacoes.push({ id: `${pdfId}-${idx}`, cliente, adverso, numeroProcesso, data, vara, descricao, tipoAcao, advogadoAtribuido: autoAtribuir(tipoAcao), concluido: false });
     }
   }
   return publicacoes;
@@ -121,9 +121,16 @@ function saveConcluido(id: string, val: boolean) {
   const m = getConcluidosMap(); m[id] = val;
   localStorage.setItem('pub_concluidos', JSON.stringify(m));
 }
+function getReassignments(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  try { return JSON.parse(localStorage.getItem('pub_reassign') || '{}'); } catch { return {}; }
+}
+function saveReassignment(id: string, advogado: string) {
+  const m = getReassignments(); m[id] = advogado;
+  localStorage.setItem('pub_reassign', JSON.stringify(m));
+}
 
-// Ordered list of lawyers for columns
-const ADVOGADOS_ORDER = ['DENIS', 'ROBSON', 'SIMON', 'JOÃO CARLOS', 'JOÃO PAULO', 'NYCOLLE'];
+const COLUMNS = ['SIMON', 'DENIS', 'ROBSON', 'JOÃO CARLOS', 'JOÃO PAULO', 'NYCOLLE'];
 
 // ── Component ─────────────────────────────────────────────────────────
 export default function PublicacoesPage() {
@@ -131,6 +138,8 @@ export default function PublicacoesPage() {
   const [error, setError] = useState('');
   const [publicacoes, setPublicacoes] = useState<Publicacao[]>([]);
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
+  const [dragOverCol, setDragOverCol] = useState<string | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
 
   const loadFromDrive = useCallback(async () => {
     setLoading(true); setError('');
@@ -141,13 +150,18 @@ export default function PublicacoesPage() {
       if (!data.pdfs || data.pdfs.length === 0) { setError('Nenhum PDF na pasta do Drive.'); return; }
       const allPubs: Publicacao[] = [];
       const concluidos = getConcluidosMap();
+      const reassignments = getReassignments();
       for (const pdf of data.pdfs) {
         const binary = atob(pdf.base64);
         const bytes = new Uint8Array(binary.length);
         for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
         const text = await extractTextFromPDF(bytes.buffer);
         const pubs = parsePublicacoes(text, pdf.id);
-        for (const p of pubs) p.concluido = concluidos[p.id] === true;
+        for (const p of pubs) {
+          p.concluido = concluidos[p.id] === true;
+          // Apply manual reassignment if exists
+          if (reassignments[p.id]) p.advogadoAtribuido = reassignments[p.id];
+        }
         allPubs.push(...pubs);
       }
       if (allPubs.length === 0) setError('PDFs encontrados mas nenhuma publicação reconhecida.');
@@ -165,27 +179,57 @@ export default function PublicacoesPage() {
     }));
   };
 
-  // Group by lawyer
+  // ── Drag & Drop handlers ────────────────────────────────────────────
+  const handleDragStart = (e: React.DragEvent, pubId: string) => {
+    e.dataTransfer.setData('text/plain', pubId);
+    setDragId(pubId);
+  };
+
+  const handleDragOver = (e: React.DragEvent, colName: string) => {
+    e.preventDefault();
+    setDragOverCol(colName);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverCol(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetAdvogado: string) => {
+    e.preventDefault();
+    const pubId = e.dataTransfer.getData('text/plain');
+    setDragOverCol(null);
+    setDragId(null);
+    if (!pubId) return;
+
+    // Reassign
+    saveReassignment(pubId, targetAdvogado);
+    setPublicacoes(prev => prev.map(p =>
+      p.id === pubId ? { ...p, advogadoAtribuido: targetAdvogado } : p
+    ));
+  };
+
+  // Group by lawyer — SIMON sees ALL + his own
   const byAdvogado: Record<string, Publicacao[]> = {};
+  for (const col of COLUMNS) byAdvogado[col] = [];
+
   for (const pub of publicacoes) {
     const key = pub.advogadoAtribuido;
-    if (!byAdvogado[key]) byAdvogado[key] = [];
-    byAdvogado[key].push(pub);
+    if (byAdvogado[key]) {
+      byAdvogado[key].push(pub);
+    } else {
+      byAdvogado[key] = [pub];
+    }
   }
 
-  // Build ordered columns (only show lawyers that have publications)
-  const columns = ADVOGADOS_ORDER.filter(adv => byAdvogado[adv] && byAdvogado[adv].length > 0);
-  // Add any lawyers not in the predefined order
-  for (const adv of Object.keys(byAdvogado)) {
-    if (!columns.includes(adv)) columns.push(adv);
-  }
+  // SIMON always gets a copy of ALL publications
+  byAdvogado['SIMON'] = [...publicacoes];
 
   const totalPubs = publicacoes.length;
   const totalPendentes = publicacoes.filter(p => !p.concluido).length;
 
   return (
     <div className="detail-page">
-      {/* Header — same style as Agenda */}
+      {/* Header */}
       <div className="agenda-header">
         <div className="agenda-title-row">
           <h1 className="agenda-title">📰 Publicações</h1>
@@ -207,95 +251,99 @@ export default function PublicacoesPage() {
         </div>
       )}
 
-      {/* Grid — same as agenda-grid but columns = lawyers */}
+      {/* Kanban Grid */}
       {!loading && totalPubs > 0 && (
         <div className="agenda-grid">
-          {columns.map((advogado) => {
+          {COLUMNS.map((advogado) => {
             const pubs = byAdvogado[advogado] || [];
             const pendentes = pubs.filter(p => !p.concluido).length;
+            const isSimon = advogado === 'SIMON';
+            const isDragTarget = dragOverCol === advogado;
 
             return (
-              <div key={advogado} className="agenda-day">
-                {/* Lawyer header — like day header */}
+              <div
+                key={advogado}
+                className={`agenda-day ${isDragTarget ? 'today' : ''}`}
+                onDragOver={(e) => handleDragOver(e, advogado)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, advogado)}
+              >
+                {/* Column header */}
                 <div className="agenda-day-header">
-                  <span className="agenda-day-name">{advogado}</span>
+                  <span className="agenda-day-name" style={{ fontSize: isSimon ? '0.75rem' : undefined }}>
+                    {isSimon ? '📋 SIMON (TODOS)' : advogado}
+                  </span>
                 </div>
-                <div className="agenda-day-count">{pendentes} prazo{pendentes !== 1 ? 's' : ''}</div>
+                <div className="agenda-day-count">
+                  {isSimon ? `${pubs.length} total` : `${pendentes} prazo${pendentes !== 1 ? 's' : ''}`}
+                </div>
 
                 {/* Cards */}
                 <div className="agenda-day-cards">
+                  {pubs.length === 0 && (
+                    <div className="agenda-empty-day" style={{ padding: '2rem 0.5rem', fontSize: '0.75rem' }}>
+                      Arraste cards aqui
+                    </div>
+                  )}
                   {pubs.map((pub) => {
                     const isOpen = expandedCard === pub.id;
                     const tipoColor = getTipoColor(pub.tipoAcao);
+                    const isDragging = dragId === pub.id;
 
                     return (
                       <div
                         key={pub.id}
                         className="agenda-card"
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, pub.id)}
                         style={{
                           borderLeftColor: tipoColor,
-                          opacity: pub.concluido ? 0.4 : 1,
-                          cursor: 'pointer',
+                          opacity: pub.concluido ? 0.35 : isDragging ? 0.5 : 1,
+                          cursor: 'grab',
                         }}
                         onClick={() => setExpandedCard(isOpen ? null : pub.id)}
                       >
-                        {/* Client name */}
                         <div className="agenda-card-name" style={{ textDecoration: pub.concluido ? 'line-through' : 'none' }}>
                           {pub.cliente || 'Sem nome'}
                         </div>
-
-                        {/* Adverso */}
-                        {pub.adverso && (
-                          <div className="agenda-card-company">vs {pub.adverso}</div>
-                        )}
-
-                        {/* Badge */}
+                        {pub.adverso && <div className="agenda-card-company">vs {pub.adverso}</div>}
                         <div className="agenda-card-badge" style={{ background: tipoColor + '22', color: tipoColor }}>
                           {pub.tipoAcao}
                         </div>
 
-                        {/* Expanded details */}
+                        {/* Show which lawyer it's assigned to (in Simon's column) */}
+                        {isSimon && pub.advogadoAtribuido !== 'SIMON' && (
+                          <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                            → {pub.advogadoAtribuido}
+                          </div>
+                        )}
+
                         {isOpen && (
-                          <div style={{ marginTop: '0.5rem', animation: 'slideUp 0.2s ease-out' }}>
-                            {pub.numeroProcesso && (
-                              <div className="agenda-card-process">{pub.numeroProcesso}</div>
-                            )}
-                            {pub.vara && (
-                              <div className="agenda-card-court">{pub.vara}</div>
-                            )}
-                            {pub.data && (
-                              <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                                📅 {pub.data}
-                              </div>
-                            )}
+                          <div style={{ marginTop: '0.5rem', animation: 'slideUp 0.2s ease-out' }} onClick={(e) => e.stopPropagation()}>
+                            {pub.numeroProcesso && <div className="agenda-card-process">{pub.numeroProcesso}</div>}
+                            {pub.vara && <div className="agenda-card-court">{pub.vara}</div>}
+                            {pub.data && <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>📅 {pub.data}</div>}
 
                             {pub.descricao && (
-                              <div style={{
-                                fontSize: '0.72rem', color: 'var(--text-secondary)', lineHeight: 1.5,
-                                marginTop: '0.5rem', maxHeight: '120px', overflowY: 'auto',
-                                padding: '0.5rem', background: 'rgba(0,0,0,0.2)', borderRadius: '0.5rem',
-                              }}>
-                                {pub.descricao.substring(0, 500)}{pub.descricao.length > 500 ? '...' : ''}
+                              <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', lineHeight: 1.5, marginTop: '0.5rem', maxHeight: '100px', overflowY: 'auto', padding: '0.4rem', background: 'rgba(0,0,0,0.2)', borderRadius: '0.5rem' }}>
+                                {pub.descricao.substring(0, 400)}{pub.descricao.length > 400 ? '...' : ''}
                               </div>
                             )}
 
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleConcluir(pub.id); }}
-                              style={{
-                                marginTop: '0.5rem',
-                                padding: '0.35rem 0.8rem',
-                                borderRadius: '999px',
-                                border: pub.concluido ? '1px solid #10b981' : '1px solid rgba(212,175,55,0.3)',
-                                background: pub.concluido ? 'rgba(16,185,129,0.15)' : 'rgba(212,175,55,0.1)',
-                                color: pub.concluido ? '#10b981' : '#d4af37',
-                                fontSize: '0.75rem',
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                                width: '100%',
-                              }}
-                            >
-                              {pub.concluido ? '✅ Concluído' : '☐ Concluir'}
-                            </button>
+                            {!isSimon && (
+                              <button
+                                onClick={() => handleConcluir(pub.id)}
+                                style={{
+                                  marginTop: '0.5rem', padding: '0.35rem 0.8rem', borderRadius: '999px', width: '100%',
+                                  border: pub.concluido ? '1px solid #10b981' : '1px solid rgba(212,175,55,0.3)',
+                                  background: pub.concluido ? 'rgba(16,185,129,0.15)' : 'rgba(212,175,55,0.1)',
+                                  color: pub.concluido ? '#10b981' : '#d4af37',
+                                  fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer',
+                                }}
+                              >
+                                {pub.concluido ? '✅ Concluído' : '☐ Concluir'}
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
