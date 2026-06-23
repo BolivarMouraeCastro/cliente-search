@@ -78,95 +78,49 @@ export default function ClientDetailPage() {
 
     const futureHearings = processHearings.filter((h: any) => h.isFuture);
     const pastHearings = processHearings.filter((h: any) => !h.isFuture);
-
-    // Movements from DataJud
     const movList = movements?.movements || [];
 
-    // Build the report
-    let report = '';
-    report += `📋 **RELATÓRIO DE ANDAMENTO PROCESSUAL**\n`;
-    report += `**BM&C Advogados**\n`;
-    report += `Data: ${dateStr}\n\n`;
-    report += `---\n\n`;
-    report += `Prezado(a) **${client.nome}**,\n\n`;
-    report += `Segue abaixo o resumo atualizado do seu processo.\n\n`;
+    // Build simple text
+    let r = `Olá, ${client.nome}!\n\n`;
+    r += `Segue a atualização do seu processo`;
+    if (client.empresa) r += ` contra ${client.empresa}`;
+    r += `.\n\n`;
 
-    // Process info
-    if (client.numeroProcesso) {
-      report += `**📌 Dados do Processo:**\n`;
-      report += `- Número: ${client.numeroProcesso}\n`;
-      if (client.empresa) report += `- Empresa: ${client.empresa}\n`;
-      if (client.materia) report += `- Matéria: ${client.materia}\n`;
-      if (client.origem) report += `- Vara/Origem: ${client.origem}\n`;
-      report += `\n`;
-    }
-
-    // Current phase
+    // Phase
     if (movements?.currentPhase) {
-      report += `**⚖️ Fase Atual:** ${movements.currentPhase}\n\n`;
+      r += `Fase atual: ${movements.currentPhase}.\n\n`;
     }
 
-    // Future hearings
+    // Future hearing
     if (futureHearings.length > 0) {
-      report += `**📅 Próxima(s) Audiência(s):**\n`;
-      for (const h of futureHearings) {
-        report += `- **${h.dataAudiencia}** às **${h.horario || 'horário a confirmar'}**`;
-        if (h.tipoAudiencia) report += ` — ${h.tipoAudiencia}`;
-        if (h.orgaoJulgador) report += ` (${h.orgaoJulgador})`;
-        report += `\n`;
-      }
-      report += `\n⚠️ **IMPORTANTE:** O comparecimento do(a) cliente é obrigatório na audiência.\n\n`;
+      const h = futureHearings[0];
+      r += `Você tem audiência marcada para o dia ${h.dataAudiencia}`;
+      if (h.horario) r += ` às ${h.horario}`;
+      if (h.tipoAudiencia) r += ` (${h.tipoAudiencia})`;
+      if (h.orgaoJulgador) r += `, na ${h.orgaoJulgador}`;
+      r += `. Seu comparecimento é obrigatório.\n\n`;
     }
 
-    // Past hearings
-    if (pastHearings.length > 0) {
-      report += `**✅ Audiência(s) Realizada(s):**\n`;
-      for (const h of pastHearings.slice(0, 5)) {
-        report += `- ${h.dataAudiencia}`;
-        if (h.tipoAudiencia) report += ` — ${h.tipoAudiencia}`;
-        if (h.orgaoJulgador) report += ` (${h.orgaoJulgador})`;
-        report += `\n`;
-      }
-      report += `\n`;
+    // Past hearing
+    if (pastHearings.length > 0 && futureHearings.length === 0) {
+      const h = pastHearings[0];
+      r += `A última audiência foi realizada em ${h.dataAudiencia}`;
+      if (h.tipoAudiencia) r += ` (${h.tipoAudiencia})`;
+      r += `. Estamos aguardando os próximos andamentos do tribunal.\n\n`;
     }
 
-    // DataJud movements
+    // Last movement
     if (movList.length > 0) {
-      report += `**🏛️ Últimas Movimentações do Tribunal (CNJ):**\n`;
-      for (const m of movList.slice(0, 8)) {
-        report += `- ${m.date || ''} — ${m.name || ''}`;
-        if (m.complement) report += `: ${m.complement}`;
-        report += `\n`;
-      }
-      report += `\n`;
+      const m = movList[0];
+      r += `Última movimentação no tribunal: ${m.name || ''}`;
+      if (m.date) r += ` em ${m.date}`;
+      r += `.\n\n`;
     }
 
-    // Emails/intimações
-    if (emails.length > 0) {
-      report += `**📧 Últimas Intimações Recebidas:**\n`;
-      for (const e of emails.slice(0, 5)) {
-        report += `- ${e.date || ''} — ${e.subject || ''}\n`;
-      }
-      report += `\n`;
-    }
+    r += `Estamos acompanhando tudo de perto. Qualquer dúvida, estamos à disposição.\n\n`;
+    r += `Atenciosamente,\nEquipe BM&C Advogados\n${dateStr}`;
 
-    // Documents
-    if (files.length > 0) {
-      report += `**📁 Documentos no Processo:** ${files.length} arquivo(s)\n`;
-      for (const f of files.slice(0, 5)) {
-        report += `- ${f.name}\n`;
-      }
-      if (files.length > 5) report += `- ... e mais ${files.length - 5} arquivo(s)\n`;
-      report += `\n`;
-    }
-
-    // Closing
-    report += `---\n\n`;
-    report += `Nossa equipe continua acompanhando o andamento do processo e tomando todas as medidas cabíveis. `;
-    report += `Qualquer dúvida, estamos à disposição.\n\n`;
-    report += `Atenciosamente,\n**Equipe BM&C Advogados**`;
-
-    setReportText(report);
+    setReportText(r);
   };
 
   // Fetch client data
