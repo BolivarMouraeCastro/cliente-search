@@ -1,9 +1,6 @@
-import { google } from "googleapis";
-
 /**
  * Gets an admin access token using the stored refresh token.
- * This allows collaborators to access Drive/Sheets/Gmail
- * using the admin's permissions.
+ * Uses direct OAuth2 token refresh via fetch (no googleapis dependency needed).
  */
 export async function getAdminAccessToken(): Promise<string> {
   const refreshToken = process.env.ADMIN_REFRESH_TOKEN;
@@ -12,22 +9,25 @@ export async function getAdminAccessToken(): Promise<string> {
     throw new Error("ADMIN_REFRESH_TOKEN não configurado nas variáveis de ambiente");
   }
 
-  const oauth2Client = new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET
-  );
-
-  oauth2Client.setCredentials({
-    refresh_token: refreshToken,
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: process.env.GOOGLE_CLIENT_ID!,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+    }),
   });
 
-  const { credentials } = await oauth2Client.refreshAccessToken();
-  
-  if (!credentials.access_token) {
+  const data = await response.json();
+
+  if (!response.ok || !data.access_token) {
+    console.error("Failed to refresh admin token:", data);
     throw new Error("Falha ao obter token de acesso do admin");
   }
 
-  return credentials.access_token;
+  return data.access_token;
 }
 
 /**
@@ -46,6 +46,12 @@ export async function getEffectiveAccessToken(
     return sessionAccessToken;
   }
 
-  // For collaborators (or if admin token is missing), use the admin refresh token
-  return await getAdminAccessToken();
+  // For collaborators, use the admin refresh token
+  try {
+    return await getAdminAccessToken();
+  } catch (error) {
+    // Fallback: if admin token fails and user has their own token, use it
+    if (sessionAccessToken) return sessionAccessToken;
+    throw error;
+  }
 }
