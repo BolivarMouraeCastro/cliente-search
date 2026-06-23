@@ -2227,3 +2227,14 @@ img { max-width: 100%; display: block; }
 .pub-card-expand:hover {
   text-decoration: underline;
 }
+
+.pub-card-done {
+  opacity: 0.5;
+  background: rgba(16, 185, 129, 0.03);
+}
+
+.pub-group-avatar {
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: #0a0a0f;
+}
