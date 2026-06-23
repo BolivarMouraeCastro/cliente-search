@@ -172,12 +172,16 @@ async function extractTextFromPDF(file: File): Promise<string> {
 
 // ── Parse publications ────────────────────────────────────────────────
 function parsePublicacoes(text: string): Publicacao[] {
-  // Split by the publication header
-  const blocks = text.split(/Publica[çc][ãa]o\s+Jur[ií]dica\s+Impressa/i);
+  // Each publication starts with "Cliente" followed by name and "Número do processo"
+  // Split the text at each "Cliente" that appears as a field header
+  const splitPattern = /(?=Cliente\s+[A-Z\u00C0-\u00FF])/g;
+  const blocks = text.split(splitPattern);
   const publicacoes: Publicacao[] = [];
 
   for (const block of blocks) {
     if (block.trim().length < 50) continue;
+    // Must contain "Número do processo" to be a valid publication
+    if (!/N[uú]mero do processo/i.test(block)) continue;
 
     let cliente = '';
     let adverso = '';
@@ -186,23 +190,34 @@ function parsePublicacoes(text: string): Publicacao[] {
     let vara = '';
     let descricao = '';
 
-    const clienteMatch = block.match(/Cliente[\s:]+([A-Z\u00C0-\u00FF][A-Z\u00C0-\u00FF\s]+?)(?:\s*N[uú]mero|\s*Adverso)/i);
+    // Cliente - extract name between "Cliente" and "Número do processo"
+    const clienteMatch = block.match(/^Cliente[\s:]+([A-Z\u00C0-\u00FF][A-Z\u00C0-\u00FF\s\.]+?)[\s]+N[uú]mero/i);
     if (clienteMatch) cliente = clienteMatch[1].trim();
 
+    // Número do processo
     const processoMatch = block.match(/N[uú]mero do processo[\s:]+(\d[\d.\-\/]+)/i);
     if (processoMatch) numeroProcesso = processoMatch[1].trim();
 
+    // Adverso
     const adversoMatch = block.match(/Adverso[\s:]+([\s\S]+?)(?:\s*Pasta|\s*Respons[aá]vel)/i);
     if (adversoMatch) adverso = adversoMatch[1].trim();
 
+    // Data da Disponibilização
     const dataMatch = block.match(/Data da Disponibiliza[cç][aã]o[\s:]+(\d{2}\/\d{2}\/\d{4})/i);
     if (dataMatch) data = dataMatch[1].trim();
 
+    // Vara
     const varaMatch = block.match(/Vara[\s:]+([^\n]+?)(?:\s*[OÓ]rg[aã]o|\s*Descri)/i);
     if (varaMatch) vara = varaMatch[1].trim();
 
+    // Descrição - everything after "Descrição" until the end of block
     const descMatch = block.match(/Descri[cç][aã]o[\s:]+([\s\S]+)/i);
-    if (descMatch) descricao = descMatch[1].trim();
+    if (descMatch) {
+      // Clean up: remove URLs and excess whitespace
+      let desc = descMatch[1].trim();
+      desc = desc.replace(/https?:\/\/[^\s]+/g, '').trim();
+      descricao = desc;
+    }
 
     if (cliente || numeroProcesso) {
       const tipoAcao = identificarTipoAcao(descricao);
