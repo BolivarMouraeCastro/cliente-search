@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
 
 const ADMIN_EMAIL = 'advogadosbmc@gmail.com';
 
@@ -23,7 +22,6 @@ interface Atividade {
 
 export default function UsuariosPage() {
   const { data: session, status } = useSession();
-  const router = useRouter();
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [atividades, setAtividades] = useState<Atividade[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,12 +34,11 @@ export default function UsuariosPage() {
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
 
-  const isAdmin = session?.user?.email?.toLowerCase().trim() === ADMIN_EMAIL;
+  const isAdmin = status === 'authenticated' && session?.user?.email?.toLowerCase().trim() === ADMIN_EMAIL;
 
   useEffect(() => {
-    if (status === 'loading') return;
-    if (!isAdmin) { router.push('/'); return; }
-    loadData();
+    if (status !== 'authenticated') return;
+    if (isAdmin) loadData();
   }, [status, isAdmin]);
 
   const loadData = async () => {
@@ -106,7 +103,16 @@ export default function UsuariosPage() {
     );
   }
 
-  if (!isAdmin) return null;
+  if (!isAdmin) {
+    return (
+      <div className="detail-page">
+        <div className="agenda-loading">
+          <div className="upload-spinner" style={{ width: 32, height: 32 }} />
+          <p style={{ color: 'var(--text-muted)', marginTop: '1rem' }}>Verificando permissões...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="detail-page">
