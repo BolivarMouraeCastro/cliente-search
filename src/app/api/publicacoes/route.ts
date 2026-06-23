@@ -16,29 +16,14 @@ export interface Publicacao {
 }
 
 /**
- * Extract text from PDF using pdfjs-dist (works in serverless).
+ * Extract text from PDF buffer.
+ * Uses pdf-parse/lib/pdf-parse to avoid the test file issue in serverless.
  */
-async function extractTextFromPDF(buffer: ArrayBuffer): Promise<string> {
-  // Dynamic import to avoid SSR issues
-  const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
-
-  const loadingTask = pdfjsLib.getDocument({
-    data: new Uint8Array(buffer),
-    useSystemFonts: true,
-  });
-  const pdf = await loadingTask.promise;
-  
-  const pages: string[] = [];
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    const text = content.items
-      .map((item: any) => ('str' in item ? item.str : ''))
-      .join(' ');
-    pages.push(text);
-  }
-  
-  return pages.join('\n');
+async function extractPDFText(buffer: Buffer): Promise<string> {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const pdfParse = require('pdf-parse/lib/pdf-parse');
+  const data = await pdfParse(buffer, {});
+  return data.text || '';
 }
 
 /**
@@ -67,46 +52,45 @@ function parsePublicacoes(text: string): Publicacao[] {
     };
 
     // Cliente
-    const clienteMatch = block.match(/Cliente[\s:]*([A-ZÁÀÃÂÉÊÍÓÔÕÚÇ][A-ZÁÀÃÂÉÊÍÓÔÕÚÇ\s]+?)(?:\s*N[úu]mero|\s*Adverso)/i);
+    const clienteMatch = block.match(/Cliente[\s:]*([A-Z\u00C0-\u00FF][A-Z\u00C0-\u00FF\s]+?)(?:\s*N[uú]mero|\s*Adverso)/i);
     if (clienteMatch) pub.cliente = clienteMatch[1].trim();
 
     // Número do processo
-    const processoMatch = block.match(/N[úu]mero do processo[\s:]*(\d[\d.\-\/]+)/i);
+    const processoMatch = block.match(/N[uú]mero do processo[\s:]*(\d[\d.\-\/]+)/i);
     if (processoMatch) pub.numeroProcesso = processoMatch[1].trim();
 
     // Adverso
-    const adversoMatch = block.match(/Adverso[\s:]*([A-ZÁÀÃÂÉÊÍÓÔÕÚÇa-záàãâéêíóôõúç][\s\S]+?)(?:\s*Pasta|\s*Respons[áa]vel)/i);
+    const adversoMatch = block.match(/Adverso[\s:]*([\s\S]+?)(?:\s*Pasta|\s*Respons[aá]vel)/i);
     if (adversoMatch) pub.adverso = adversoMatch[1].trim();
 
     // Advogado / Responsável
-    const advMatch = block.match(/(?:Respons[áa]vel|Advogado)[\s:]*([A-ZÁÀÃÂÉÊÍÓÔÕÚÇ][A-ZÁÀÃÂÉÊÍÓÔÕÚÇ\s]+?)(?:\s*Data|\s*Jornal|\s*\d{2}\/)/i);
+    const advMatch = block.match(/(?:Respons[aá]vel|Advogado)[\s:]*([A-Z\u00C0-\u00FF][A-Z\u00C0-\u00FF\s]+?)(?:\s*Data|\s*Jornal|\s*\d{2}\/)/i);
     if (advMatch) pub.advogado = advMatch[1].trim();
 
     // Data da Disponibilização
-    const dataMatch = block.match(/Data da Disponibiliza[çc][ãa]o[\s:]*(\d{2}\/\d{2}\/\d{4})/i);
+    const dataMatch = block.match(/Data da Disponibiliza[cç][aã]o[\s:]*(\d{2}\/\d{2}\/\d{4})/i);
     if (dataMatch) pub.data = dataMatch[1].trim();
 
     // Jornal
-    const jornalMatch = block.match(/Jornal[\s:]*([A-ZÁÀÃÂa-záàãâ][\s\S]+?)(?:\s*P[áa]gina)/i);
+    const jornalMatch = block.match(/Jornal[\s:]*([\s\S]+?)(?:\s*P[aá]gina)/i);
     if (jornalMatch) pub.jornal = jornalMatch[1].trim();
 
     // Página
-    const paginaMatch = block.match(/P[áa]gina[\s:]*(\d+)/i);
+    const paginaMatch = block.match(/P[aá]gina[\s:]*(\d+)/i);
     if (paginaMatch) pub.pagina = paginaMatch[1].trim();
 
     // Vara
-    const varaMatch = block.match(/Vara[\s:]*([^\n]+?)(?:\s*[ÓO]rg[ãa]o|\s*Descri)/i);
+    const varaMatch = block.match(/Vara[\s:]*([^\n]+?)(?:\s*[OÓ]rg[aã]o|\s*Descri)/i);
     if (varaMatch) pub.vara = varaMatch[1].trim();
 
     // Órgão
-    const orgaoMatch = block.match(/[ÓO]rg[ãa]o[\s:]*([^\n]+?)(?:\s*Vara|\s*Descri)/i);
+    const orgaoMatch = block.match(/[OÓ]rg[aã]o[\s:]*([^\n]+?)(?:\s*Vara|\s*Descri)/i);
     if (orgaoMatch) pub.orgao = orgaoMatch[1].trim();
 
     // Descrição
-    const descMatch = block.match(/Descri[çc][ãa]o[\s:]*([\s\S]+)/i);
+    const descMatch = block.match(/Descri[cç][aã]o[\s:]*([\s\S]+)/i);
     if (descMatch) pub.descricao = descMatch[1].trim();
 
-    // Only add if we found at least cliente or processo
     if (pub.cliente || pub.numeroProcesso) {
       publicacoes.push(pub);
     }
@@ -128,11 +112,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Apenas arquivos PDF são aceitos' }, { status: 400 });
     }
 
-    // Read file
+    // Read file into buffer
     const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
 
     // Extract text from PDF
-    const text = await extractTextFromPDF(arrayBuffer);
+    const text = await extractPDFText(buffer);
 
     if (!text || text.trim().length === 0) {
       return NextResponse.json({ error: 'PDF vazio ou não foi possível extrair texto' }, { status: 400 });
