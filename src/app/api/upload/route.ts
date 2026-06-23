@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { findClientFolderId, uploadFileToDrive } from '@/lib/drive';
+import { getEffectiveAccessToken } from '@/lib/admin-token';
 
 // Increase function execution time for large uploads
 export const maxDuration = 60;
@@ -27,7 +28,8 @@ function formatDateBR(): string {
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.accessToken) {
+    const accessToken = await getEffectiveAccessToken(session?.user?.email, (session as any)?.accessToken);
+    if (!accessToken) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
     }
 
@@ -59,7 +61,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Find client folder
-    const folderId = await findClientFolderId(session.accessToken, clientName);
+    const folderId = await findClientFolderId(accessToken, clientName);
     if (!folderId) {
       return NextResponse.json(
         { error: `Pasta do cliente "${clientName}" não encontrada no Google Drive` },
@@ -79,7 +81,7 @@ export async function POST(req: NextRequest) {
 
     // Upload to Drive
     const uploadedFile = await uploadFileToDrive(
-      session.accessToken,
+      accessToken,
       folderId,
       newFileName,
       buffer,

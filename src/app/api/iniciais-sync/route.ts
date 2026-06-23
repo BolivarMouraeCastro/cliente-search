@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { getClients } from '@/lib/sheets';
+import { getEffectiveAccessToken } from '@/lib/admin-token';
 
 const INICIAIS_FOLDER_ID = '1AFf7qFK2cYNPDmOJuAqVFfiqK2pmMBuZ';
 const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID ?? '';
@@ -93,10 +94,11 @@ function isDividerFolder(name: string): boolean {
 export async function GET(_request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.accessToken) {
+    const accessToken = await getEffectiveAccessToken(session?.user?.email, (session as any)?.accessToken);
+    if (!accessToken) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
     }
-    const token = session.accessToken;
+    const token = accessToken;
 
     // Step 1: Get all lawyer folders
     const rootItems = await listChildren(token, INICIAIS_FOLDER_ID);
@@ -177,7 +179,8 @@ export async function GET(_request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.accessToken) {
+    const accessToken = await getEffectiveAccessToken(session?.user?.email, (session as any)?.accessToken);
+    if (!accessToken) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
     }
 
@@ -198,7 +201,7 @@ export async function POST(request: NextRequest) {
       {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${session.accessToken}`,
+          Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({

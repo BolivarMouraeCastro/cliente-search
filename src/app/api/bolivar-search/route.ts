@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { getLixeiraIds } from '@/lib/lixeira';
+import { getEffectiveAccessToken } from '@/lib/admin-token';
 
 const BOLIVAR_FOLDER_ID = '10qkRpTzO4hwiR_QIFt_KlCT1Rw7KRKJh';
 
@@ -29,7 +30,8 @@ function parseInicialName(raw: string): { cliente: string; prescricao: string; e
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.accessToken) {
+    const accessToken = await getEffectiveAccessToken(session?.user?.email, (session as any)?.accessToken);
+    if (!accessToken) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
@@ -54,7 +56,7 @@ export async function GET(req: NextRequest) {
     });
 
     const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
-      headers: { Authorization: `Bearer ${session.accessToken}` }
+      headers: { Authorization: `Bearer ${accessToken}` }
     });
 
     if (!res.ok) {
@@ -67,7 +69,7 @@ export async function GET(req: NextRequest) {
     const files = data.files || [];
     
     // Virtual Trash filtering
-    const lixeiraIds = await getLixeiraIds(session.accessToken);
+    const lixeiraIds = await getLixeiraIds(accessToken);
 
     const results = files
       .filter((f: any) => !lixeiraIds.has(f.id))

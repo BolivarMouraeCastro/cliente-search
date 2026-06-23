@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { addToLixeira } from '@/lib/lixeira';
+import { getEffectiveAccessToken } from '@/lib/admin-token';
 
 const INICIAIS_ROOT_FOLDER_ID = '1AFf7qFK2cYNPDmOJuAqVFfiqK2pmMBuZ';
 const BOLIVAR_FOLDER_ID = '10qkRpTzO4hwiR_QIFt_KlCT1Rw7KRKJh';
@@ -135,7 +136,8 @@ async function migrateRecursively(accessToken: string, sourceFolderId: string, t
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.accessToken) {
+    const accessToken = await getEffectiveAccessToken(session?.user?.email, (session as any)?.accessToken);
+    if (!accessToken) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
@@ -148,24 +150,24 @@ export async function POST(req: NextRequest) {
 
     // Step 1: Find destination folder paths based on destinationType
     if (destinationType === 'URGENTE') {
-      const advId = await findFolder(session.accessToken, 'ALESSANDRA', INICIAIS_ROOT_FOLDER_ID);
+      const advId = await findFolder(accessToken, 'ALESSANDRA', INICIAIS_ROOT_FOLDER_ID);
       if (!advId) return NextResponse.json({ error: 'Pasta ALESSANDRA não encontrada' }, { status: 404 });
-      const iniciaisFazerId = await findFolder(session.accessToken, 'INICIAIS PARA FAZER', advId);
+      const iniciaisFazerId = await findFolder(accessToken, 'INICIAIS PARA FAZER', advId);
       if (!iniciaisFazerId) return NextResponse.json({ error: 'Pasta INICIAIS PARA FAZER não encontrada' }, { status: 404 });
-      const urgentesId = await findFolder(session.accessToken, 'URGENTES', iniciaisFazerId);
+      const urgentesId = await findFolder(accessToken, 'URGENTES', iniciaisFazerId);
       if (!urgentesId) return NextResponse.json({ error: 'Pasta CLIENTES URGENTES não encontrada' }, { status: 404 });
       targetParentId = urgentesId;
     } else if (destinationType === 'PERGUNTANDO') {
-      const advId = await findFolder(session.accessToken, 'ELITON', INICIAIS_ROOT_FOLDER_ID);
+      const advId = await findFolder(accessToken, 'ELITON', INICIAIS_ROOT_FOLDER_ID);
       if (!advId) return NextResponse.json({ error: 'Pasta ELITON não encontrada' }, { status: 404 });
-      const iniciaisFazerId = await findFolder(session.accessToken, 'INICIAIS PARA FAZER', advId);
+      const iniciaisFazerId = await findFolder(accessToken, 'INICIAIS PARA FAZER', advId);
       if (!iniciaisFazerId) return NextResponse.json({ error: 'Pasta INICIAIS PARA FAZER não encontrada' }, { status: 404 });
-      const perguntandoId = await findFolder(session.accessToken, 'PERGUNTANDO', iniciaisFazerId);
+      const perguntandoId = await findFolder(accessToken, 'PERGUNTANDO', iniciaisFazerId);
       targetParentId = perguntandoId || iniciaisFazerId; // Fallback para INICIAIS PARA FAZER se CLIENTES PERGUNTANDO não existir
     } else if (destinationType === 'ELITON_INICIAIS') {
-      const advId = await findFolder(session.accessToken, 'ELITON', INICIAIS_ROOT_FOLDER_ID);
+      const advId = await findFolder(accessToken, 'ELITON', INICIAIS_ROOT_FOLDER_ID);
       if (!advId) return NextResponse.json({ error: 'Pasta ELITON não encontrada' }, { status: 404 });
-      const iniciaisFazerId = await findFolder(session.accessToken, 'INICIAIS PARA FAZER', advId);
+      const iniciaisFazerId = await findFolder(accessToken, 'INICIAIS PARA FAZER', advId);
       if (!iniciaisFazerId) return NextResponse.json({ error: 'Pasta INICIAIS PARA FAZER não encontrada dentro de ELITON' }, { status: 404 });
       targetParentId = iniciaisFazerId;
     } else {
@@ -173,12 +175,12 @@ export async function POST(req: NextRequest) {
     }
 
     // Step 2: Get the old folder's name
-    const folderInfo = await getFolderInfo(session.accessToken, folderId);
+    const folderInfo = await getFolderInfo(accessToken, folderId);
     if (!folderInfo) return NextResponse.json({ error: 'Pasta original não encontrada' }, { status: 404 });
     const folderName = folderInfo.name;
 
     // Step 3: Start safe migration!
-    const newParentId = await migrateRecursively(session.accessToken, folderId, targetParentId, folderName);
+    const newParentId = await migrateRecursively(accessToken, folderId, targetParentId, folderName);
 
     return NextResponse.json({ success: true, newParentId });
 

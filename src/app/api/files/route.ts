@@ -3,14 +3,16 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { getClientFiles } from "@/lib/drive";
 import { getClientById, updateClientStatus } from "@/lib/sheets";
+import { getEffectiveAccessToken } from '@/lib/admin-token';
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
+    const accessToken = await getEffectiveAccessToken(session?.user?.email, (session as any)?.accessToken);
 
-    if (!session?.accessToken) {
+    if (!accessToken) {
       return NextResponse.json(
         { error: "Unauthorized. Please sign in." },
         { status: 401 }
@@ -29,7 +31,7 @@ export async function GET(request: NextRequest) {
     }
 
     const files = await getClientFiles(
-      session.accessToken,
+      accessToken,
       clientName.trim()
     );
 
@@ -45,7 +47,7 @@ export async function GET(request: NextRequest) {
         if (spreadsheetId) {
           // Check current status first
           const client = await getClientById(
-            session.accessToken,
+            accessToken,
             spreadsheetId,
             clientId
           );
@@ -56,7 +58,7 @@ export async function GET(request: NextRequest) {
             client.status.toUpperCase() !== "DISTRIBUIDO"
           ) {
             statusUpdated = await updateClientStatus(
-              session.accessToken,
+              accessToken,
               spreadsheetId,
               clientId,
               "DISTRIBUÍDO"

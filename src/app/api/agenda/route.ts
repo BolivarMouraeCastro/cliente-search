@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { getAllHearings } from '@/lib/hearings';
+import { getEffectiveAccessToken } from '@/lib/admin-token';
 
 /**
  * GET /api/agenda — Returns ALL hearings (READ-ONLY).
@@ -10,14 +11,15 @@ import { getAllHearings } from '@/lib/hearings';
 export async function GET(req: Request) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.accessToken) {
+    const accessToken = await getEffectiveAccessToken(session?.user?.email, (session as any)?.accessToken);
+    if (!accessToken) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
     }
 
     const { searchParams } = new URL(req.url);
     const advogadoFilter = searchParams.get('advogado')?.trim().toUpperCase() || '';
 
-    let hearings = await getAllHearings(session.accessToken);
+    let hearings = await getAllHearings(accessToken);
 
     // Filter by lawyer if specified
     if (advogadoFilter) {
@@ -35,7 +37,7 @@ export async function GET(req: Request) {
     });
 
     // Extract unique lawyer names for filter dropdown
-    const allHearings = await getAllHearings(session.accessToken);
+    const allHearings = await getAllHearings(accessToken);
     const advogados = [...new Set(allHearings.map((h) => h.advogado).filter(Boolean))].sort();
 
     return NextResponse.json({
