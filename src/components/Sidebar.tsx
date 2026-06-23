@@ -15,6 +15,11 @@ export default function Sidebar() {
   const adminEmails = ['advogadosbmc@gmail.com'];
   const userEmail = session?.user?.email?.toLowerCase().trim() || '';
   const isColaborador = userEmail ? !adminEmails.includes(userEmail) : false;
+  
+  // DEBUG: log to console (remove after testing)
+  if (typeof window !== 'undefined' && userEmail) {
+    console.log('SIDEBAR DEBUG:', { userEmail, isColaborador, match: adminEmails.includes(userEmail) });
+  }
 
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
