@@ -1,12 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
-import { getToken } from 'next-auth/jwt';
-import { headers } from 'next/headers';
 
-// This endpoint shows the admin's refresh token so it can be saved in Vercel env vars.
-// Should only be called ONCE by the admin.
-export async function GET(request: Request) {
+// Simple endpoint to show the admin's refresh token
+export async function GET() {
   try {
     const session = await getServerSession(authOptions);
     
@@ -14,22 +11,10 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
     }
 
-    // Get the JWT token which contains the refresh token
-    const headersList = headers();
-    const token = await getToken({ 
-      req: {
-        headers: Object.fromEntries(headersList.entries()),
-        cookies: Object.fromEntries(
-          (headersList.get('cookie') || '').split(';').map(c => {
-            const [key, ...val] = c.trim().split('=');
-            return [key, val.join('=')];
-          })
-        ),
-      } as any,
-      secret: process.env.NEXTAUTH_SECRET,
-    });
+    // The refresh token is stored in the session via our callback
+    const refreshToken = (session as any)?.refreshToken;
 
-    if (!token?.refreshToken) {
+    if (!refreshToken) {
       return NextResponse.json({ 
         error: 'Refresh token não encontrado. Faça logout e login novamente.',
         email: session.user.email,
@@ -38,7 +23,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       email: session.user.email,
-      refreshToken: token.refreshToken,
+      refreshToken,
       message: 'Copie o refreshToken e adicione no Vercel como ADMIN_REFRESH_TOKEN',
     });
   } catch (error: any) {
