@@ -59,6 +59,11 @@ export default function AgendaPage() {
   const [selectedAdvogado, setSelectedAdvogado] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [weekStart, setWeekStart] = useState(() => getMonday(new Date()));
+  const [collapsedDays, setCollapsedDays] = useState<Record<number, boolean>>({});
+
+  const toggleDay = (dayIndex: number) => {
+    setCollapsedDays(prev => ({ ...prev, [dayIndex]: !prev[dayIndex] }));
+  };
 
   const fetchHearings = useCallback(async () => {
     setIsLoading(true);
@@ -196,21 +201,49 @@ export default function AgendaPage() {
 
             return (
               <div key={i} className={`agenda-day ${isToday ? 'today' : ''} ${dayHearings.length === 0 ? 'empty' : ''}`}>
-                {/* Day header */}
-                <div className="agenda-day-header">
+                {/* Day header - clickable to collapse/expand */}
+                <div
+                  className="agenda-day-header"
+                  onClick={() => toggleDay(i)}
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                >
                   <span className="agenda-day-name">{DAYS[i]}</span>
                   <span className={`agenda-day-number ${isToday ? 'today' : ''}`}>
                     {day.getDate()}
                   </span>
                   <span className="agenda-day-month">{formatDateBR(day)}</span>
+                  {dayHearings.length > 0 && (
+                    <svg
+                      width="14" height="14" viewBox="0 0 24 24" fill="none"
+                      stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                      style={{
+                        marginLeft: 'auto',
+                        transition: 'transform 0.2s',
+                        transform: collapsedDays[i] ? 'rotate(-90deg)' : 'rotate(0deg)',
+                      }}
+                    >
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  )}
                 </div>
 
                 {dayHearings.length > 0 && (
-                  <div className="agenda-day-count">{dayHearings.length} audiência{dayHearings.length !== 1 ? 's' : ''}</div>
+                  <div
+                    className="agenda-day-count"
+                    onClick={() => toggleDay(i)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    {dayHearings.length} audiência{dayHearings.length !== 1 ? 's' : ''}
+                  </div>
                 )}
 
-                {/* Hearing cards */}
-                <div className="agenda-day-cards">
+                {/* Hearing cards - collapsible */}
+                <div className="agenda-day-cards" style={{
+                  maxHeight: collapsedDays[i] ? '0px' : '2000px',
+                  overflow: 'hidden',
+                  transition: 'max-height 0.3s ease',
+                  opacity: collapsedDays[i] ? 0 : 1,
+                }}>
                   {dayHearings.length === 0 && (
                     <div className="agenda-empty-day">—</div>
                   )}
