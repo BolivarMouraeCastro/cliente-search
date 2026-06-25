@@ -15,7 +15,7 @@ interface AtaItem {
   proximaAudiencia?: { data: string; horario: string; modalidade: 'online' | 'presencial' | 'julgamento'; tipo: string };
   prazoReplica?: { prazo: string; descricao: string };
   prazoPericia?: { prazo: string; perito?: string; tipo?: string };
-  acordo?: { textoAcordo: string };
+  acordo?: { textoAcordo: string; dataPagamento?: string };
   julgamento?: { descricao: string };
   // Source
   pdfName: string;
@@ -145,10 +145,12 @@ function extrairDadosAta(texto: string, classificacoes: string[]): Partial<AtaIt
     }
   }
 
-  // Extract réplica prazo
-  const replicaMatch = texto.match(/prazo\s+(?:de\s+)?(\d+)\s*(?:dias?)?\s*(?:para|para\s+(?:réplica|replica|razões|razoes|manifestação))/i);
-  if (replicaMatch) {
-    result.prazoReplica = { prazo: `${replicaMatch[1]} dias`, descricao: 'Prazo para réplica/razões finais' };
+  // Extract réplica prazo — ONLY if NOT acordo
+  if (!isAcordo) {
+    const replicaMatch = texto.match(/prazo\s+(?:de\s+)?(\d+)\s*(?:dias?)?\s*(?:para|para\s+(?:réplica|replica|razões|razoes|manifestação))/i);
+    if (replicaMatch) {
+      result.prazoReplica = { prazo: `${replicaMatch[1]} dias`, descricao: 'Prazo para réplica/razões finais' };
+    }
   }
 
   // Extract perícia info
@@ -178,7 +180,15 @@ function extrairDadosAta(texto: string, classificacoes: string[]): Partial<AtaIt
     for (const pat of acordoPatterns) {
       const m = texto.match(pat);
       if (m) {
-        result.acordo = { textoAcordo: `R$ ${m[1]}` };
+        // Clean the value by removing trailing dots/commas
+        const cleanValue = m[1].replace(/[.,\s]+$/, '');
+        result.acordo = { textoAcordo: `R$ ${cleanValue}` };
+        
+        // Try to extract payment date
+        const dateMatch = texto.match(/(?:dia|data|em|até o dia)\s+(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4})/i);
+        if (dateMatch) {
+          result.acordo.dataPagamento = dateMatch[1].replace(/\./g, '/');
+        }
         break;
       }
     }
@@ -343,14 +353,14 @@ export default function AtaAudienciaPage() {
           processado: processados[ataId] === true,
         });
 
-        // Pre-fill acordo form with extracted value
+        // Pre-fill acordo form with extracted value and date
         if (dados.acordo?.textoAcordo) {
           const valMatch = dados.acordo.textoAcordo.match(/R\$\s*([\d.,]+)/);
           if (valMatch) {
             acordoFormsInit[ataId] = {
               valorAcordo: valMatch[1],
               parcelas: '1',
-              dataUltimaParcela: '',
+              dataUltimaParcela: dados.acordo.dataPagamento || '',
               fgtsLiberado: false,
               seguroDesemprego: false,
             };
