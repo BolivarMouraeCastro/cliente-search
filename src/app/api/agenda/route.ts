@@ -3,11 +3,14 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { getAllHearings } from '@/lib/hearings';
 import { getEffectiveAccessToken, getPericiaAccessToken } from '@/lib/admin-token';
+import { getAllPericiasFromSheet } from '@/lib/pericias-sheet';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * GET /api/agenda — Returns ALL hearings + pericias.
+ * Perícias come primarily from the PERICIA spreadsheet tab.
+ * Email data is used as secondary enrichment.
  * Optional query param: advogado (filter by lawyer name)
  */
 export async function GET(req: Request) {
@@ -39,36 +42,80 @@ export async function GET(req: Request) {
     const allHearings = await getAllHearings(accessToken);
     const advogados = [...new Set(allHearings.map((h) => h.advogado).filter(Boolean))].sort();
 
-    // ===== PERÍCIAS: Fetch from periciajjs Gmail =====
+    // ===== PERÍCIAS: Primary from spreadsheet, enriched with email =====
     let pericias: any[] = [];
     let periciaDebug: any = {};
     try {
-      const periciaResult = await fetchPericias();
-      pericias = periciaResult.pericias;
-      periciaDebug = { emailsSearched: periciaResult.emailsSearched, total: periciaResult.total };
+      // 1. Load from spreadsheet (primary source - reliable data)
+      const sheetResult = await getAllPericiasFromSheet(accessToken);
+      const sheetPericias = sheetResult.pericias.map(p => ({
+        data: p.data,
+        horario: p.horario,
+        reclamante: p.reclamante,
+        reclamada: p.reclamada,
+        processo: p.processo,
+        tipo: p.tipo || 'Perícia',
+        perito: p.perito,
+        local: p.local,
+        advogado: p.advogado,
+        observacao: p.observacao,
+        source: 'planilha' as const,
+      }));
+
+      // 2. Try to also load from email for enrichment/additional entries
+      let emailPericias: any[] = [];
+      try {
+        const emailResult = await fetchPericias();
+        emailPericias = emailResult.pericias.map((p: any) => ({ ...p, source: 'email' }));
+        periciaDebug.emailsSearched = emailResult.emailsSearched;
+        periciaDebug.emailTotal = emailResult.total;
+      } catch (emailErr) {
+        periciaDebug.emailError = emailErr instanceof Error ? emailErr.message : String(emailErr);
+      }
+
+      // 3. Merge: sheet data is authoritative, email adds missing entries
+      pericias = [...sheetPericias];
+      
+      // Add email-only entries that don't exist in sheet (by process number)
+      const sheetProcessos = new Set(sheetPericias.map(p => p.processo).filter(Boolean));
+      for (const ep of emailPericias) {
+        if (ep.processo && !sheetProcessos.has(ep.processo)) {
+          // Check no date+name duplicate either
+          const isDup = pericias.some(p => 
+            p.data === ep.data && p.reclamante === ep.reclamante
+          );
+          if (!isDup) {
+            pericias.push({ ...ep, source: 'email' });
+          }
+        } else if (!ep.processo) {
+          // No process number - check by date + reclamante
+          const isDup = pericias.some(p => 
+            p.data === ep.data && p.reclamante === ep.reclamante
+          );
+          if (!isDup) {
+            pericias.push({ ...ep, source: 'email' });
+          }
+        }
+      }
+
+      // Sort by date
+      pericias.sort((a, b) => {
+        const [dA, mA, yA] = (a.data || '').split('/').map(Number);
+        const [dB, mB, yB] = (b.data || '').split('/').map(Number);
+        const timeA = new Date(yA || 0, (mA || 1) - 1, dA || 1).getTime();
+        const timeB = new Date(yB || 0, (mB || 1) - 1, dB || 1).getTime();
+        if (timeA !== timeB) return timeA - timeB;
+        return (a.horario || '').localeCompare(b.horario || '');
+      });
+
+      periciaDebug.sheetTotal = sheetPericias.length;
+      periciaDebug.mergedTotal = pericias.length;
+      periciaDebug.columns = sheetResult.columnMap;
+      periciaDebug.headers = sheetResult.headers;
+
     } catch (err) {
       console.error('Pericia fetch error in agenda:', err);
-      // Diagnostic: check which env vars exist
-      let runtimeConfig: any = {};
-      try {
-        const getConfig = require('next/config').default;
-        const config = getConfig() || {};
-        runtimeConfig = config.serverRuntimeConfig || {};
-      } catch { /* ignore */ }
-      
-      const envCheck = {
-        processEnv_PERICIA: !!process.env.PERICIA_REFRESH_TOKEN,
-        processEnv_ADMIN: !!process.env.ADMIN_REFRESH_TOKEN,
-        runtimeConfig_PERICIA: !!runtimeConfig.PERICIA_REFRESH_TOKEN,
-        runtimeConfig_ADMIN: !!runtimeConfig.ADMIN_REFRESH_TOKEN,
-        GOOGLE_CLIENT_ID: !!process.env.GOOGLE_CLIENT_ID,
-        GOOGLE_CLIENT_SECRET: !!process.env.GOOGLE_CLIENT_SECRET,
-        allEnvKeysCount: Object.keys(process.env).length,
-        relevantEnvKeys: Object.keys(process.env).filter(k => 
-          k.includes('PERICIA') || k.includes('ADMIN') || k.includes('GOOGLE') || k.includes('TOKEN') || k.includes('REFRESH') || k.includes('DATAJUD') || k.includes('GEMINI')
-        ).sort(),
-      };
-      periciaDebug = { error: err instanceof Error ? err.message : String(err), envCheck };
+      periciaDebug = { error: err instanceof Error ? err.message : String(err) };
     }
 
     return NextResponse.json({

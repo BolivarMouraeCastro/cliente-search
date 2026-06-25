@@ -23,8 +23,11 @@ interface Pericia {
   tipo: string;
   perito: string;
   local: string;
-  emailSubject: string;
-  emailDate: string;
+  advogado?: string;
+  observacao?: string;
+  source?: 'planilha' | 'email';
+  emailSubject?: string;
+  emailDate?: string;
 }
 
 function parseDateBR(dateStr: string): Date | null {
@@ -435,10 +438,25 @@ export default function AgendaPage() {
                         className="agenda-card"
                         style={{ borderLeftColor: '#818cf8' }}
                       >
-                        {p.horario && (
-                          <div className="agenda-card-time">{p.horario}</div>
-                        )}
-                        <div className="agenda-card-name">{p.reclamante}</div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          {p.horario && (
+                            <div className="agenda-card-time">{p.horario}</div>
+                          )}
+                          {p.source && (
+                            <span style={{
+                              fontSize: '0.55rem',
+                              padding: '1px 5px',
+                              borderRadius: '3px',
+                              background: p.source === 'planilha' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(99, 102, 241, 0.15)',
+                              color: p.source === 'planilha' ? '#10b981' : '#818cf8',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.5px',
+                            }}>
+                              {p.source === 'planilha' ? '📋' : '📧'} {p.source}
+                            </span>
+                          )}
+                        </div>
+                        <div className="agenda-card-name">{p.reclamante || 'Sem nome'}</div>
                         {p.reclamada && (
                           <div className="agenda-card-company">vs {p.reclamada}</div>
                         )}
@@ -453,12 +471,26 @@ export default function AgendaPage() {
                               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                               <circle cx="12" cy="7" r="4" />
                             </svg>
-                            {p.perito}
+                            Perito: {p.perito}
+                          </div>
+                        )}
+                        {p.advogado && (
+                          <div className="agenda-card-lawyer">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                              <circle cx="12" cy="7" r="4" />
+                            </svg>
+                            Adv: {p.advogado}
                           </div>
                         )}
                         {p.local && (
                           <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
                             📍 {p.local}
+                          </div>
+                        )}
+                        {p.observacao && (
+                          <div style={{ fontSize: '0.7rem', color: '#f59e0b', marginTop: '0.25rem', fontStyle: 'italic' }}>
+                            💬 {p.observacao}
                           </div>
                         )}
                         {p.processo && (
