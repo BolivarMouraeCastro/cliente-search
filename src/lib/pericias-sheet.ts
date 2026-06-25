@@ -152,67 +152,111 @@ export async function getAllPericiasFromSheet(accessToken: string): Promise<{
   pericias: PericiaSheet[];
   headers: string[];
   columnMap: Record<string, number>;
+  debug: any;
 }> {
   // Check cache
   if (periciasCache && Date.now() - periciasCache.timestamp < CACHE_TTL_MS) {
-    return { pericias: periciasCache.data, headers: [], columnMap: {} };
+    return { pericias: periciasCache.data, headers: [], columnMap: {}, debug: { cached: true } };
   }
+
+  const debug: any = {};
+
+  // Try multiple spreadsheet IDs
+  const spreadsheetIds = [
+    { id: process.env.HEARINGS_SPREADSHEET_ID, label: 'HEARINGS_SPREADSHEET_ID' },
+    { id: process.env.GOOGLE_SPREADSHEET_ID, label: 'GOOGLE_SPREADSHEET_ID' },
+    { id: "1eXJz8UCQImJIqaEHe8V8cwuuJ0YkABviUzz7wOQdFVA", label: 'hardcoded' },
+  ].filter(s => s.id);
+
+  // Remove duplicates
+  const uniqueIds = [...new Map(spreadsheetIds.map(s => [s.id, s])).values()];
+  debug.spreadsheetIds = uniqueIds.map(s => ({ label: s.label, id: s.id?.substring(0, 10) + '...' }));
 
   try {
     const sheets = getSheetsService(accessToken);
 
-    // Try different possible sheet names
-    const sheetNames = ["PERICIA", "PERICIAS", "Pericias", "Perícia", "Perícias", "pericia"];
-    let rows: string[][] | undefined;
-    let usedName = "";
+    for (const { id: ssId, label } of uniqueIds) {
+      if (!ssId) continue;
 
-    for (const name of sheetNames) {
       try {
+        // First, list ALL tabs in this spreadsheet
+        const ssInfo = await sheets.spreadsheets.get({
+          spreadsheetId: ssId,
+          fields: 'sheets.properties.title',
+        });
+
+        const allTabs = ssInfo.data.sheets?.map(s => s.properties?.title || '') || [];
+        debug[`tabs_${label}`] = allTabs;
+
+        // Find the PERICIA tab (case-insensitive, accent-insensitive)
+        const periciaTab = allTabs.find(tab => {
+          const normalized = tab.toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+          return normalized.includes('pericia') || normalized.includes('perícia');
+        });
+
+        if (!periciaTab) {
+          debug[`noMatch_${label}`] = `No tab matching "pericia" found in [${allTabs.join(', ')}]`;
+          continue;
+        }
+
+        debug.matchedTab = periciaTab;
+        debug.matchedSpreadsheet = label;
+
+        // Read the data from the matched tab
         const response = await sheets.spreadsheets.values.get({
-          spreadsheetId: SPREADSHEET_ID,
-          range: `${name}!A:Z`,
+          spreadsheetId: ssId,
+          range: `'${periciaTab}'!A:Z`,
           valueRenderOption: "FORMATTED_VALUE",
           dateTimeRenderOption: "FORMATTED_STRING",
         });
-        rows = response.data.values as string[][] | undefined;
-        usedName = name;
-        break;
-      } catch {
-        // Try next name
+
+        const rows = response.data.values as string[][] | undefined;
+        if (!rows || rows.length <= 1) {
+          debug.emptySheet = true;
+          debug.rowCount = rows?.length || 0;
+          return { pericias: [], headers: rows?.[0] || [], columnMap: {}, debug };
+        }
+
+        // Detect columns from header
+        const headerRow = rows[0];
+        const columnMap = detectColumns(headerRow);
+        debug.detectedColumns = columnMap;
+        debug.headerRow = headerRow;
+
+        // If no columns detected, fall back to positional mapping
+        if (Object.keys(columnMap).length === 0) {
+          const defaultMap: Record<string, number> = {
+            data: 0, horario: 1, reclamante: 2, reclamada: 3,
+            processo: 4, tipo: 5, perito: 6, local: 7, advogado: 8, observacao: 9,
+          };
+          Object.assign(columnMap, defaultMap);
+          debug.usingDefaultMap = true;
+        }
+
+        const pericias = rows
+          .slice(1)
+          .map((row) => rowToPericia(row, columnMap))
+          .filter((p) => p.data.trim() !== "" || p.reclamante.trim() !== "");
+
+        // Cache
+        periciasCache = { data: pericias, timestamp: Date.now() };
+        debug.totalRows = rows.length - 1;
+        debug.validPericias = pericias.length;
+
+        console.log(`[Pericias Sheet] Loaded ${pericias.length} rows from "${periciaTab}" tab in ${label}`);
+
+        return { pericias, headers: headerRow, columnMap, debug };
+      } catch (err) {
+        debug[`error_${label}`] = err instanceof Error ? err.message : String(err);
       }
     }
 
-    if (!rows || rows.length <= 1) {
-      return { pericias: [], headers: [], columnMap: {} };
-    }
-
-    // Detect columns from header
-    const headerRow = rows[0];
-    const columnMap = detectColumns(headerRow);
-
-    // If no columns detected, fall back to positional mapping
-    if (Object.keys(columnMap).length === 0) {
-      // Assume: A=Data, B=Horário, C=Reclamante, D=Reclamada, E=Processo, F=Tipo, G=Perito, H=Local
-      const defaultMap: Record<string, number> = {
-        data: 0, horario: 1, reclamante: 2, reclamada: 3,
-        processo: 4, tipo: 5, perito: 6, local: 7, advogado: 8, observacao: 9,
-      };
-      Object.assign(columnMap, defaultMap);
-    }
-
-    const pericias = rows
-      .slice(1)
-      .map((row) => rowToPericia(row, columnMap))
-      .filter((p) => p.data.trim() !== "" || p.reclamante.trim() !== "");
-
-    // Cache
-    periciasCache = { data: pericias, timestamp: Date.now() };
-
-    console.log(`[Pericias Sheet] Loaded ${pericias.length} rows from "${usedName}" tab. Columns: ${JSON.stringify(columnMap)}`);
-
-    return { pericias, headers: headerRow, columnMap };
+    // No spreadsheet worked
+    return { pericias: [], headers: [], columnMap: {}, debug };
   } catch (error) {
     console.error("Error fetching pericias spreadsheet:", error);
-    return { pericias: [], headers: [], columnMap: {} };
+    debug.fatalError = error instanceof Error ? error.message : String(error);
+    return { pericias: [], headers: [], columnMap: {}, debug };
   }
 }

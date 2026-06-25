@@ -112,6 +112,7 @@ export async function GET(req: Request) {
       periciaDebug.mergedTotal = pericias.length;
       periciaDebug.columns = sheetResult.columnMap;
       periciaDebug.headers = sheetResult.headers;
+      periciaDebug.sheetDebug = sheetResult.debug;
 
     } catch (err) {
       console.error('Pericia fetch error in agenda:', err);
