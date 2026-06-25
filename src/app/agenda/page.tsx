@@ -87,6 +87,7 @@ export default function AgendaPage() {
 
   const fetchHearings = useCallback(async () => {
     setIsLoading(true);
+    setPericiasLoading(true);
     try {
       const params = new URLSearchParams();
       if (selectedAdvogado) params.set('advogado', selectedAdvogado);
@@ -95,36 +96,23 @@ export default function AgendaPage() {
         const data = await res.json();
         setHearings(data.hearings || []);
         setAdvogados(data.advogados || []);
+        // Perícias come from the same API now
+        setPericias(data.pericias || []);
+        if (data.periciaDebug) {
+          console.log('Perícia debug:', data.periciaDebug);
+        }
       }
     } catch (err) {
       console.error('Error loading agenda:', err);
     } finally {
       setIsLoading(false);
+      setPericiasLoading(false);
     }
   }, [selectedAdvogado]);
 
   useEffect(() => {
     fetchHearings();
   }, [fetchHearings]);
-
-  // Fetch perícias
-  useEffect(() => {
-    const fetchPericias = async () => {
-      setPericiasLoading(true);
-      try {
-        const res = await fetch('/api/pericias');
-        if (res.ok) {
-          const data = await res.json();
-          setPericias(data.pericias || []);
-        }
-      } catch (err) {
-        console.error('Error loading pericias:', err);
-      } finally {
-        setPericiasLoading(false);
-      }
-    };
-    fetchPericias();
-  }, []);
 
   // Group hearings by day of the week
   const weekDays: Date[] = [];

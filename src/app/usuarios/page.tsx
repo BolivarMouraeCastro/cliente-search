@@ -33,6 +33,8 @@ export default function UsuariosPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [showToken, setShowToken] = useState(false);
   const [tokenCopied, setTokenCopied] = useState(false);
+  const [periciaDebug, setPericiaDebug] = useState<string>('');
+  const [periciaLoading, setPericiaLoading] = useState(false);
 
   const isAuthenticated = status === 'authenticated';
 
@@ -174,6 +176,56 @@ export default function UsuariosPage() {
               </button>
             )}
           </div>
+        )}
+      </div>
+
+      {/* Perícia Debug */}
+      <div style={{ padding: '0 1.5rem', marginBottom: '1rem' }}>
+        <button
+          onClick={async () => {
+            setPericiaLoading(true);
+            setPericiaDebug('');
+            try {
+              const res = await fetch('/api/agenda');
+              const data = await res.json();
+              setPericiaDebug(JSON.stringify({
+                periciaDebug: data.periciaDebug,
+                totalPericias: data.pericias?.length || 0,
+                pericias: data.pericias?.slice(0, 5),
+              }, null, 2));
+            } catch (err: any) {
+              setPericiaDebug(`Erro: ${err.message}`);
+            } finally {
+              setPericiaLoading(false);
+            }
+          }}
+          disabled={periciaLoading}
+          style={{
+            padding: '0.5rem 1rem',
+            borderRadius: '0.5rem',
+            border: '1px solid rgba(99,102,241,0.3)',
+            background: 'rgba(99,102,241,0.1)',
+            color: '#818cf8',
+            cursor: 'pointer',
+            fontSize: '0.8rem',
+          }}
+        >
+          {periciaLoading ? '⏳ Buscando...' : '🔍 Debug Perícias (Gmail)'}
+        </button>
+        {periciaDebug && (
+          <pre style={{
+            marginTop: '0.75rem',
+            background: 'rgba(0,0,0,0.3)',
+            borderRadius: '0.5rem',
+            padding: '0.75rem',
+            fontSize: '0.65rem',
+            fontFamily: 'monospace',
+            color: '#4ade80',
+            maxHeight: '300px',
+            overflow: 'auto',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-all',
+          }}>{periciaDebug}</pre>
         )}
       </div>
 
