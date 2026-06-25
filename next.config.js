@@ -1,14 +1,2 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  images: {
-    remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "lh3.googleusercontent.com",
-        pathname: "/**",
-      },
-    ],
-  },
-};
-
-module.exports = nextConfig;
+// This file is intentionally left as a redirect to next.config.ts
+// DO NOT USE - see next.config.ts for actual configuration

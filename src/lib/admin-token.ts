@@ -1,9 +1,25 @@
+import getConfig from 'next/config';
+
+function getRuntimeEnv(key: string): string | undefined {
+  // Try process.env first (works in most cases)
+  if (process.env[key]) return process.env[key];
+  
+  // Fallback: try Next.js serverRuntimeConfig
+  try {
+    const { serverRuntimeConfig } = getConfig() || {};
+    if (serverRuntimeConfig?.[key]) return serverRuntimeConfig[key];
+  } catch {
+    // getConfig might not be available in all contexts
+  }
+  
+  return undefined;
+}
+
 /**
  * Gets an admin access token using the stored refresh token.
- * Uses direct OAuth2 token refresh via fetch (no googleapis dependency needed).
  */
 export async function getAdminAccessToken(): Promise<string> {
-  const refreshToken = process.env.ADMIN_REFRESH_TOKEN;
+  const refreshToken = getRuntimeEnv('ADMIN_REFRESH_TOKEN');
   
   if (!refreshToken) {
     throw new Error("ADMIN_REFRESH_TOKEN não configurado nas variáveis de ambiente");
@@ -58,10 +74,9 @@ export async function getEffectiveAccessToken(
 
 /**
  * Gets an access token for the perícia Gmail account (periciajjs@gmail.com).
- * Uses PERICIA_REFRESH_TOKEN env var.
  */
 export async function getPericiaAccessToken(): Promise<string> {
-  const refreshToken = process.env.PERICIA_REFRESH_TOKEN;
+  const refreshToken = getRuntimeEnv('PERICIA_REFRESH_TOKEN');
   
   if (!refreshToken) {
     throw new Error("PERICIA_REFRESH_TOKEN não configurado");
