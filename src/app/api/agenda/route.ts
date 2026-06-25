@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth-options';
 import { getAllHearings } from '@/lib/hearings';
 import { getEffectiveAccessToken, getPericiaAccessToken } from '@/lib/admin-token';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/agenda — Returns ALL hearings + pericias.
  * Optional query param: advogado (filter by lawyer name)
