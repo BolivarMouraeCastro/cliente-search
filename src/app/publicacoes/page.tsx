@@ -502,9 +502,17 @@ export default function AtaAudienciaPage() {
 
       {/* Loading */}
       {loading && (
-        <div style={{ textAlign: 'center', padding: '3rem' }}>
-          <div className="spinner" style={{ margin: '0 auto 1rem' }} />
-          <p style={{ color: 'var(--text-muted)' }}>Processando PDFs das ATAs...</p>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem 1rem', gap: '1.5rem' }}>
+          <div style={{
+            width: '48px', height: '48px', borderRadius: '50%',
+            border: '2px solid var(--border-color)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            animation: 'spin 2s linear infinite',
+          }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--accent-gold, #d4af37)', letterSpacing: '-0.5px' }}>BM&C</span>
+          </div>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Processando PDFs das ATAs...</p>
+          <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
         </div>
       )}
 
