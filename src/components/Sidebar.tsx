@@ -127,7 +127,7 @@ export default function Sidebar() {
     },
     {
       href: '/publicacoes',
-      label: 'Publicações',
+      label: 'ATA Audiência',
 
       icon: (
         <svg className="sidebar-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

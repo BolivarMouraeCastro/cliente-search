@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { getDriveService } from '@/lib/google-auth';
 
-const PUBLICACOES_FOLDER_ID = '1qWdLkoxe_g2iTkp1b2O6OFfkcwGP11NW';
+const PUBLICACOES_FOLDER_ID = '14elDXNKAWZKHVEbMPREa9hVkAYgovCKB';
 
 export async function GET() {
   try {
