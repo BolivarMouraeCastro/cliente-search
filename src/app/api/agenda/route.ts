@@ -311,59 +311,94 @@ async function gmailGet(token: string, endpoint: string) {
 async function fetchPericias(): Promise<{ pericias: any[], emailsSearched: number, total: number }> {
   const token = await getPericiaAccessToken();
 
-  const keywords = ['perícia', 'pericia', 'perito', 'pericial', 'diligência pericial'];
+  // Single broad query to get ALL perícia-related emails with pagination
+  const query = 'subject:(perícia OR pericia OR perito OR pericial OR "diligência pericial" OR agendamento)';
   const allIds = new Map<string, boolean>();
   
-  for (const kw of keywords) {
+  // Paginate through results to get ALL matching emails
+  let pageToken = '';
+  for (let page = 0; page < 10; page++) {
     try {
-      const data = await gmailGet(token, `messages?q=${encodeURIComponent(kw)}&maxResults=30&includeSpamTrash=true`);
+      const url = `messages?q=${encodeURIComponent(query)}&maxResults=100&includeSpamTrash=true${pageToken ? `&pageToken=${pageToken}` : ''}`;
+      const data = await gmailGet(token, url);
       for (const msg of (data.messages || [])) allIds.set(msg.id, true);
-    } catch (e) { console.error(`Gmail search "${kw}":`, e); }
+      
+      if (data.nextPageToken) {
+        pageToken = data.nextPageToken;
+      } else {
+        break; // No more pages
+      }
+    } catch (e) { 
+      console.error(`Gmail search page ${page}:`, e); 
+      break;
+    }
   }
+
+  // Also search body content for emails that might not have perícia in subject
+  const bodyQuery = 'agendamento perícia';
+  try {
+    const data = await gmailGet(token, `messages?q=${encodeURIComponent(bodyQuery)}&maxResults=100&includeSpamTrash=true`);
+    for (const msg of (data.messages || [])) allIds.set(msg.id, true);
+  } catch (e) { console.error('Gmail body search:', e); }
 
   const pericias: any[] = [];
   const ids = [...allIds.keys()];
 
-  for (const id of ids.slice(0, 60)) {
-    try {
-      const msg = await gmailGet(token, `messages/${id}?format=full`);
-      const headers = msg.payload?.headers || [];
-      const subject = getHeaderVal(headers, 'subject');
-      const emailDate = getHeaderVal(headers, 'date');
-      const body = getBody(msg.payload);
-      const fullText = `${subject}\n${body}`;
+  // Process ALL found emails (batch in parallel for speed)
+  const batchSize = 10;
+  for (let i = 0; i < ids.length; i += batchSize) {
+    const batch = ids.slice(i, i + batchSize);
+    const results = await Promise.allSettled(
+      batch.map(async (id) => {
+        const msg = await gmailGet(token, `messages/${id}?format=full`);
+        const headers = msg.payload?.headers || [];
+        const subject = getHeaderVal(headers, 'subject');
+        const emailDate = getHeaderVal(headers, 'date');
+        const body = getBody(msg.payload);
+        const fullText = `${subject}\n${body}`;
 
-      if (!/per[íi]cia|perito|pericial/i.test(fullText)) continue;
+        if (!/per[íi]cia|perito|pericial|agendamento/i.test(fullText)) return null;
 
-      const data = extractPericiaDate(body) || extractPericiaDate(subject);
-      if (!data) continue;
+        const data = extractPericiaDate(body) || extractPericiaDate(subject);
+        if (!data) return null;
 
-      const subjectInfo = extractFromSubject(subject);
+        const subjectInfo = extractFromSubject(subject);
 
-      const pericia = {
-        data,
-        horario: extractPericiaTime(body) || '',
-        reclamante: extractReclamante(body) || extractReclamante(subject) || subjectInfo.reclamante || '',
-        reclamada: extractReclamada(body) || '',
-        processo: fullText.match(/(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/)?.[1] || subjectInfo.processo || '',
-        tipo: extractTipo(fullText),
-        perito: extractPerito(body) || '',
-        local: extractLocal(body) || '',
-        emailSubject: subject.substring(0, 100),
-        emailDate,
-      };
+        const pericia = {
+          data,
+          horario: extractPericiaTime(body) || '',
+          reclamante: extractReclamante(body) || extractReclamante(subject) || subjectInfo.reclamante || '',
+          reclamada: extractReclamada(body) || '',
+          processo: fullText.match(/(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/)?.[1] || subjectInfo.processo || '',
+          tipo: extractTipo(fullText),
+          perito: extractPerito(body) || '',
+          local: extractLocal(body) || '',
+          emailSubject: subject.substring(0, 100),
+          emailDate,
+        };
 
-      // If no reclamante found, use subject but clean it
-      if (!pericia.reclamante) {
-        let cleanSubject = subject.replace(/^(Re:|Fwd:|Fw:|RE:|FW:)\s*/gi, '').trim();
-        cleanSubject = cleanSubject.replace(/agendamento\s+de\s+(?:per[íi]cia|dilig[êe]ncia)\s*(?:t[ée]cnica|pericial|judicial)?/gi, '').trim();
-        cleanSubject = cleanSubject.replace(/^[\s\-–|/]+|[\s\-–|/]+$/g, '').trim();
-        pericia.reclamante = cleanSubject.substring(0, 60) || subject.substring(0, 60);
+        // If no reclamante found, use subject but clean it
+        if (!pericia.reclamante) {
+          let cleanSubject = subject.replace(/^(Re:|Fwd:|Fw:|RE:|FW:)\s*/gi, '').trim();
+          cleanSubject = cleanSubject.replace(/agendamento\s+de\s+(?:per[íi]cia|dilig[êe]ncia)\s*(?:t[ée]cnica|pericial|judicial)?/gi, '').trim();
+          cleanSubject = cleanSubject.replace(/^[\s\-–|/]+|[\s\-–|/]+$/g, '').trim();
+          pericia.reclamante = cleanSubject.substring(0, 60) || subject.substring(0, 60);
+        }
+
+        return pericia;
+      })
+    );
+
+    for (const result of results) {
+      if (result.status === 'fulfilled' && result.value) {
+        const pericia = result.value;
+        const isDup = pericias.some(p => 
+          (pericia.processo && p.processo === pericia.processo) || 
+          (p.data === pericia.data && p.reclamante === pericia.reclamante)
+        );
+        if (!isDup) pericias.push(pericia);
       }
-
-      const isDup = pericias.some(p => (pericia.processo && p.processo === pericia.processo) || (p.data === pericia.data && p.reclamante === pericia.reclamante));
-      if (!isDup) pericias.push(pericia);
-    } catch (e) { console.error(`Pericia email ${id}:`, e); }
+    }
   }
 
   pericias.sort((a, b) => {
