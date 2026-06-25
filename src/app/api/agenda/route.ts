@@ -76,16 +76,38 @@ export async function GET(req: Request) {
         source: 'planilha' as const,
       }));
 
-      // 2. Try to also load from email for enrichment/additional entries
+      // 2. Load from BOTH email accounts for enrichment
       let emailPericias: any[] = [];
+      let emailDebug: any = {};
+      
+      // 2a. Search advogadosjjs@gmail.com (admin token)
       try {
-        const emailResult = await fetchPericias(accessToken);
-        emailPericias = emailResult.pericias;
-        periciaDebug.emailsSearched = emailResult.emailsSearched;
-        periciaDebug.emailTotal = emailResult.total;
-      } catch (emailErr) {
-        periciaDebug.emailError = emailErr instanceof Error ? emailErr.message : String(emailErr);
+        const adminResult = await fetchPericias(accessToken);
+        emailPericias.push(...adminResult.pericias);
+        emailDebug.advogados = { searched: adminResult.emailsSearched, found: adminResult.total };
+      } catch (err) {
+        emailDebug.advogadosError = err instanceof Error ? err.message : String(err);
       }
+
+      // 2b. Search periciajjs@gmail.com (pericia token)
+      try {
+        const periciaToken = await getPericiaAccessToken();
+        const periciaResult = await fetchPericias(periciaToken);
+        // Add only emails not already found via admin account
+        for (const ep of periciaResult.pericias) {
+          const isDup = emailPericias.some(existing =>
+            (ep.processo && existing.processo && ep.processo === existing.processo) ||
+            (ep.data === existing.data && ep.reclamante === existing.reclamante)
+          );
+          if (!isDup) emailPericias.push(ep);
+        }
+        emailDebug.pericia = { searched: periciaResult.emailsSearched, found: periciaResult.total };
+      } catch (err) {
+        emailDebug.periciaError = err instanceof Error ? err.message : String(err);
+      }
+
+      periciaDebug.emailsTotal = emailPericias.length;
+      periciaDebug.emailDebug = emailDebug;
 
       // 3. Merge: mark entries found in both sources as 'ambas'
       // First, check which sheet entries also exist in email
