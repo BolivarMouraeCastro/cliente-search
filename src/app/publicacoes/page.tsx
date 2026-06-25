@@ -33,48 +33,49 @@ interface AcordoForm {
 
 // ── ATA Classification by Keywords ───────────────────────────────────
 function classificarAta(texto: string): string[] {
-  const t = texto.toLowerCase();
+  const t = texto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const classes: string[] = [];
 
+  // ACORDO (check FIRST — if acordo, process ends)
+  if ((t.includes('acordo') || t.includes('conciliacao') || t.includes('transacao') || t.includes('avenca')) &&
+      (t.includes('homolog') || t.includes('pagara') || t.includes('pagar') || t.includes('parcela') ||
+       t.includes('quantia') || t.includes('r$') || t.includes('quitacao'))) {
+    classes.push('ACORDO');
+  }
+
   // RÉPLICA / RAZÕES
-  if (t.includes('prazo para réplica') || t.includes('prazo para replica') ||
-      t.includes('razões finais') || t.includes('razoes finais') ||
-      t.includes('prazo de réplica') || t.includes('prazo de replica') ||
-      t.includes('manifestação sobre') || t.includes('manifeste-se')) {
+  if (t.includes('prazo para replica') || t.includes('prazo de replica') ||
+      t.includes('razoes finais') || t.includes('contrarrazoes') ||
+      t.includes('prazo para manifestacao') || t.includes('manifeste-se') ||
+      t.includes('prazo para razoes') || t.includes('impugnacao') ||
+      t.includes('prazo para se manifestar') || t.includes('prazo de 5') || t.includes('prazo de 10') || t.includes('prazo de 15')) {
     classes.push('RÉPLICA');
   }
 
   // PERÍCIA
-  if (t.includes('designo perícia') || t.includes('designo pericia') ||
-      t.includes('nomeio perito') || t.includes('perícia técnica') || t.includes('pericia tecnica') ||
-      t.includes('perícia médica') || t.includes('pericia medica') ||
-      t.includes('perito nomeado') || t.includes('exame pericial') ||
+  if (t.includes('pericia') || t.includes('perito') || t.includes('pericial') ||
       t.includes('insalubridade') || t.includes('periculosidade') ||
-      t.includes('laudo pericial')) {
+      t.includes('laudo') || t.includes('exame')) {
     classes.push('PERÍCIA');
   }
 
   // JULGAMENTO ANTECIPADO
-  if (t.includes('julgamento antecipado') || t.includes('súmula 197') || t.includes('sumula 197') ||
-      t.includes('dispensada instrução') || t.includes('dispensada a instrução') ||
-      t.includes('dispensada a oitiva') || t.includes('dispensado o depoimento')) {
+  if (t.includes('julgamento antecipado') || t.includes('sumula 197') ||
+      t.includes('dispensada instrucao') || t.includes('dispensada a instrucao') ||
+      t.includes('dispensada a oitiva') || t.includes('dispensado o depoimento') ||
+      t.includes('julgo antecipadamente') || t.includes('sentenca')) {
     classes.push('JULGAMENTO');
   }
 
-  // ACORDO
-  if (t.includes('acordo') && (t.includes('homolog') || t.includes('transação') ||
-      t.includes('conciliação') || t.includes('avença') || t.includes('parcela'))) {
-    classes.push('ACORDO');
-  }
-
-  // PRÓXIMA AUDIÊNCIA
-  if (t.includes('designo audiência') || t.includes('designo audiencia') ||
-      t.includes('fica designada') || t.includes('nova audiência') ||
-      t.includes('redesignada') || t.includes('remarcada') ||
-      t.includes('audiência de instrução') || t.includes('audiência inicial') ||
-      t.includes('audiencia de instrução') || t.includes('audiencia inicial') ||
-      t.includes('audiência de prosseguimento') || t.includes('una')) {
-    classes.push('AUDIÊNCIA');
+  // PRÓXIMA AUDIÊNCIA — only if NOT acordo (acordo = process over)
+  if (!classes.includes('ACORDO')) {
+    if (t.includes('designo audiencia') || t.includes('fica designada') ||
+        t.includes('nova audiencia') || t.includes('redesignada') || t.includes('remarcada') ||
+        t.includes('audiencia de instrucao') || t.includes('audiencia inicial') ||
+        t.includes('audiencia de prosseguimento') || t.includes('audiencia una') ||
+        t.includes('proxima audiencia')) {
+      classes.push('AUDIÊNCIA');
+    }
   }
 
   if (classes.length === 0) classes.push('OUTROS');
@@ -82,40 +83,59 @@ function classificarAta(texto: string): string[] {
 }
 
 // ── Extract structured data from ATA text ────────────────────────────
-function extrairDadosAta(texto: string): Partial<AtaItem> {
+function extrairDadosAta(texto: string, classificacoes: string[]): Partial<AtaItem> {
   const result: Partial<AtaItem> = {};
+  const isAcordo = classificacoes.includes('ACORDO');
 
-  // Extract próxima audiência date/time
-  const datePatterns = [
-    /(?:designo|fica designada|redesigno|remarcada)[^.]*?(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4})[^.]*?(?:às|as)\s+(\d{1,2}[h:]\d{2})/i,
-    /audiência[^.]*?(?:dia|data)\s+(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4})[^.]*?(?:às|as)\s+(\d{1,2}[h:]\d{2})/i,
-    /(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4})[^.]*?(?:às|as)\s+(\d{1,2}[h:]\d{2})[^.]*?audiência/i,
-  ];
+  // Extract próxima audiência date/time — ONLY if NOT acordo
+  if (!isAcordo) {
+    const datePatterns = [
+      /(?:designo|fica designada|redesigno|remarcada)[^.]*?(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4})[^.]*?(?:às|as)\s+(\d{1,2}[h:]\d{2})/i,
+      /audiência[^.]*?(?:dia|data)\s+(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4})[^.]*?(?:às|as)\s+(\d{1,2}[h:]\d{2})/i,
+      /(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4})[^.]*?(?:às|as)\s+(\d{1,2}[h:]\d{2})[^.]*?audiência/i,
+    ];
 
-  for (const pat of datePatterns) {
-    const m = texto.match(pat);
-    if (m) {
-      const modalidade = /(?:telepresencial|videoconfer|plataforma|virtual|online|teams|zoom|google\s*meet)/i.test(texto)
-        ? 'online'
-        : /(?:julgamento antecipado|súmula 197|sumula 197)/i.test(texto)
-          ? 'julgamento'
-          : 'presencial';
+    for (const pat of datePatterns) {
+      const m = texto.match(pat);
+      if (m) {
+        // Parse the date and check if it's in the future
+        const dateStr = m[1].replace(/\./g, '/');
+        const parts = dateStr.split('/');
+        if (parts.length === 3) {
+          const day = parseInt(parts[0]);
+          const month = parseInt(parts[1]) - 1;
+          let year = parseInt(parts[2]);
+          if (year < 100) year += 2000;
+          const dateObj = new Date(year, month, day, 23, 59, 59);
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
 
-      let tipo = 'Audiência';
-      if (/instrução/i.test(texto)) tipo = 'Instrução';
-      if (/inicial/i.test(texto)) tipo = 'Inicial';
-      if (/una/i.test(texto)) tipo = 'Una';
-      if (/prosseguimento/i.test(texto)) tipo = 'Prosseguimento';
-      if (/julgamento/i.test(texto)) tipo = 'Julgamento';
-      if (/conciliação/i.test(texto)) tipo = 'Conciliação';
+          // Only show FUTURE audiências
+          if (dateObj > today) {
+            const modalidade = /(?:telepresencial|videoconfer|plataforma|virtual|online|teams|zoom|google\s*meet)/i.test(texto)
+              ? 'online'
+              : /(?:julgamento antecipado|súmula 197|sumula 197)/i.test(texto)
+                ? 'julgamento'
+                : 'presencial';
 
-      result.proximaAudiencia = {
-        data: m[1].replace(/\./g, '/'),
-        horario: m[2].replace('h', ':'),
-        modalidade,
-        tipo,
-      };
-      break;
+            let tipo = 'Audiência';
+            if (/instrução/i.test(texto)) tipo = 'Instrução';
+            if (/inicial/i.test(texto)) tipo = 'Inicial';
+            if (/una/i.test(texto)) tipo = 'Una';
+            if (/prosseguimento/i.test(texto)) tipo = 'Prosseguimento';
+            if (/julgamento/i.test(texto)) tipo = 'Julgamento';
+            if (/conciliação/i.test(texto)) tipo = 'Conciliação';
+
+            result.proximaAudiencia = {
+              data: dateStr,
+              horario: m[2].replace('h', ':'),
+              modalidade,
+              tipo,
+            };
+          }
+        }
+        break;
+      }
     }
   }
 
@@ -135,10 +155,27 @@ function extrairDadosAta(texto: string): Partial<AtaItem> {
     };
   }
 
-  // Extract acordo text
-  const acordoMatch = texto.match(/(?:acordo|transação|conciliação|avença)[^.]*?R\$\s*([\d.,]+)/i);
-  if (acordoMatch) {
-    result.acordo = { textoAcordo: `Valor: R$ ${acordoMatch[1]}` };
+  // Extract acordo value — multiple patterns, get the actual R$ value
+  if (isAcordo) {
+    const acordoPatterns = [
+      // "pagará ... quantia líquida de R$2.500,00"
+      /pagar[áa][^.]*?(?:quantia|valor|import[âa]ncia)[^.]*?R\$\s*([\d.,]+)/i,
+      // "valor de R$2.500,00"
+      /valor\s+(?:de\s+)?R\$\s*([\d.,]+)/i,
+      // "R$2.500,00" after conciliação/acordo
+      /(?:concilia[çc][ãa]o|acordo)[^.]*?R\$\s*([\d.,]+)/i,
+      // Any R$ amount near "pagará"
+      /pagar[áa][^.]*?R\$\s*([\d.,]+)/i,
+      // Generic R$ in the text
+      /R\$\s*([\d.,]+)/i,
+    ];
+    for (const pat of acordoPatterns) {
+      const m = texto.match(pat);
+      if (m) {
+        result.acordo = { textoAcordo: `R$ ${m[1]}` };
+        break;
+      }
+    }
   }
 
   return result;
@@ -151,23 +188,41 @@ function extrairPartesAta(texto: string): { reclamante: string; reclamada: strin
   const procMatch = texto.match(/(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/);
   if (procMatch) processo = procMatch[1];
 
+  // Reclamante extraction — many patterns
   const rectePatterns = [
-    /reclamante[:\s]+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ\s.]+?)(?:\s*(?:reclamad|advers|r[ée]u|versus|x\s|v\s|vs))/i,
-    /autor[:\s]+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ\s.]+?)(?:\s*(?:reclamad|advers|r[ée]u))/i,
-    /periciand[oa][:\s]+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ\s.]+?)(?:\s*(?:reclamad|advers|versus|r[ée]u))/i,
+    // "Reclamante: NOME" or "Reclamante NOME"
+    /reclamante[:\s]+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇa-záéíóúâêôãõç\s.]+?)(?:\s*(?:,|reclamad|advers|r[ée]u|versus|x\s|v\.?\s|vs\.?\s|\.|\n))/i,
+    // "Autor(a): NOME"
+    /autor(?:a)?[:\s]+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇa-záéíóúâêôãõç\s.]+?)(?:\s*(?:,|reclamad|advers|r[ée]u|\.|\n))/i,
+    // "NOME, reclamante" or "NOME (reclamante)"
+    /([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ\s.]{5,40})(?:,?\s*(?:reclamante|autor|periciand))/i,
+    // "o(a) reclamante NOME"
+    /[oa]\s+reclamante\s+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇa-záéíóúâêôãõç\s.]+?)(?:\s*(?:,|\.|concorda|dará|receberá|pagará))/i,
+    // "à reclamante ... quantia" — for acordo text like "pagará à reclamante"
+    /[àa]\s+reclamante\s+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇa-záéíóúâêôãõç\s.]+?)(?:\s*(?:a\s+quantia|o\s+valor|,))/i,
+    // Between process number and "Vara" or "reclamada"
+    /\d{4}\s+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ\s.]{5,40})(?:\s*(?:x\s|v\.?\s|vs\.?\s))/i,
+    // Periciando(a)
+    /periciand[oa][:\s]+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇa-záéíóúâêôãõç\s.]+?)(?:\s*(?:,|reclamad|advers|r[ée]u))/i,
   ];
   for (const p of rectePatterns) {
     const m = texto.match(p);
-    if (m && m[1].trim().length > 3) { reclamante = m[1].trim(); break; }
+    if (m && m[1].trim().length > 3 && m[1].trim().split(/\s+/).length >= 2) {
+      reclamante = m[1].trim().replace(/\s+/g, ' ');
+      break;
+    }
   }
 
+  // Reclamada extraction
   const recdaPatterns = [
-    /reclamad[ao][:\s]+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ\s.&]+?)(?:\s*(?:\.|Processo|autos|vara|CNPJ|,\s*inscrit))/i,
-    /r[ée]u?[:\s]+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ\s.&]+?)(?:\s*(?:\.|Processo|CNPJ))/i,
+    /reclamad[ao][:\s]+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ\s.&]+?)(?:\s*(?:\.|Processo|autos|vara|CNPJ|,\s*inscrit|pagará|\n))/i,
+    /r[ée]u?[:\s]+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ\s.&]+?)(?:\s*(?:\.|Processo|CNPJ|\n))/i,
+    // "EMPRESA LTDA" or "EMPRESA S/A" or "EMPRESA S.A" patterns
+    /(?:x|vs?\.?)\s+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ\s.&\/]+?(?:LTDA|S\.?A\.?|EIRELI|ME|EPP|LTDA\.))/i,
   ];
   for (const p of recdaPatterns) {
     const m = texto.match(p);
-    if (m && m[1].trim().length > 3) { reclamada = m[1].trim(); break; }
+    if (m && m[1].trim().length > 3) { reclamada = m[1].trim().replace(/\s+/g, ' '); break; }
   }
 
   const varaMatch = texto.match(/(\d+[ªa]\s*Vara\s+(?:do\s+)?Trabalho[^,\n]*)/i);
@@ -249,6 +304,7 @@ export default function AtaAudienciaPage() {
 
       const processados = getProcessados();
       const allAtas: AtaItem[] = [];
+      const acordoFormsInit: Record<string, AcordoForm> = {};
 
       for (const pdf of data.pdfs) {
         const binary = atob(pdf.base64);
@@ -269,7 +325,7 @@ export default function AtaAudienciaPage() {
 
           const classificacoes = classificarAta(block);
           const partes = extrairPartesAta(block);
-          const dados = extrairDadosAta(block);
+          const dados = extrairDadosAta(block, classificacoes);
           const ataId = `${pdf.id}-${idx}`;
 
           allAtas.push({
@@ -289,11 +345,26 @@ export default function AtaAudienciaPage() {
             pdfId: pdf.id,
             processado: processados[ataId] === true,
           });
+
+          // Pre-fill acordo form with extracted value
+          if (dados.acordo?.textoAcordo) {
+            const valMatch = dados.acordo.textoAcordo.match(/R\$\s*([\d.,]+)/);
+            if (valMatch) {
+              acordoFormsInit[ataId] = {
+                valorAcordo: valMatch[1],
+                parcelas: '1',
+                dataUltimaParcela: '',
+                fgtsLiberado: false,
+                seguroDesemprego: false,
+              };
+            }
+          }
         }
       }
 
       if (allAtas.length === 0) setError('PDFs encontrados, mas nenhuma ATA de audiência reconhecida.');
       setAtas(allAtas);
+      if (Object.keys(acordoFormsInit).length > 0) setAcordoForms(acordoFormsInit);
     } catch (err) { setError(`Erro: ${err instanceof Error ? err.message : String(err)}`); }
     finally { setLoading(false); }
   }, []);
