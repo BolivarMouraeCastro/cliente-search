@@ -311,53 +311,43 @@ export default function AtaAudienciaPage() {
         const bytes = new Uint8Array(binary.length);
         for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
         const text = await extractTextFromPDF(bytes.buffer);
+        if (text.trim().length < 30) continue;
 
-        // Split ATA text into blocks by process number
-        const blocks = text.split(/(?=\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/);
-        
-        // If no process number found, treat entire text as one block
-        const processableBlocks = blocks.filter(b => /\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/.test(b));
-        const finalBlocks = processableBlocks.length > 0 ? processableBlocks : [text];
+        // 1 PDF = 1 ATA (no splitting — each document is a single ATA)
+        const classificacoes = classificarAta(text);
+        const partes = extrairPartesAta(text);
+        const dados = extrairDadosAta(text, classificacoes);
+        const ataId = pdf.id;
 
-        for (let idx = 0; idx < finalBlocks.length; idx++) {
-          const block = finalBlocks[idx];
-          if (block.trim().length < 30) continue;
+        allAtas.push({
+          id: ataId,
+          reclamante: partes.reclamante,
+          reclamada: partes.reclamada,
+          processo: partes.processo,
+          vara: partes.vara,
+          descricaoCompleta: text.substring(0, 2000),
+          classificacoes,
+          proximaAudiencia: dados.proximaAudiencia,
+          prazoReplica: dados.prazoReplica,
+          prazoPericia: dados.prazoPericia,
+          acordo: dados.acordo,
+          julgamento: dados.julgamento,
+          pdfName: pdf.name || 'ATA',
+          pdfId: pdf.id,
+          processado: processados[ataId] === true,
+        });
 
-          const classificacoes = classificarAta(block);
-          const partes = extrairPartesAta(block);
-          const dados = extrairDadosAta(block, classificacoes);
-          const ataId = `${pdf.id}-${idx}`;
-
-          allAtas.push({
-            id: ataId,
-            reclamante: partes.reclamante,
-            reclamada: partes.reclamada,
-            processo: partes.processo,
-            vara: partes.vara,
-            descricaoCompleta: block.substring(0, 1500),
-            classificacoes,
-            proximaAudiencia: dados.proximaAudiencia,
-            prazoReplica: dados.prazoReplica,
-            prazoPericia: dados.prazoPericia,
-            acordo: dados.acordo,
-            julgamento: dados.julgamento,
-            pdfName: pdf.name || 'ATA',
-            pdfId: pdf.id,
-            processado: processados[ataId] === true,
-          });
-
-          // Pre-fill acordo form with extracted value
-          if (dados.acordo?.textoAcordo) {
-            const valMatch = dados.acordo.textoAcordo.match(/R\$\s*([\d.,]+)/);
-            if (valMatch) {
-              acordoFormsInit[ataId] = {
-                valorAcordo: valMatch[1],
-                parcelas: '1',
-                dataUltimaParcela: '',
-                fgtsLiberado: false,
-                seguroDesemprego: false,
-              };
-            }
+        // Pre-fill acordo form with extracted value
+        if (dados.acordo?.textoAcordo) {
+          const valMatch = dados.acordo.textoAcordo.match(/R\$\s*([\d.,]+)/);
+          if (valMatch) {
+            acordoFormsInit[ataId] = {
+              valorAcordo: valMatch[1],
+              parcelas: '1',
+              dataUltimaParcela: '',
+              fgtsLiberado: false,
+              seguroDesemprego: false,
+            };
           }
         }
       }
