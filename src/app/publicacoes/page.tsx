@@ -502,17 +502,25 @@ export default function AtaAudienciaPage() {
 
       {/* Loading */}
       {loading && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem 1rem', gap: '1.5rem' }}>
+        <div style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          minHeight: '60vh', gap: '1rem',
+          position: 'relative', zIndex: 2,
+        }}>
           <div style={{
-            width: '48px', height: '48px', borderRadius: '50%',
-            border: '2px solid var(--border-color)',
+            width: '56px', height: '56px', borderRadius: '50%',
+            border: '2px solid rgba(212,175,55,0.3)',
+            borderTopColor: '#d4af37',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            animation: 'spin 2s linear infinite',
+            animation: 'bmcSpin 1.2s linear infinite',
           }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--accent-gold, #d4af37)', letterSpacing: '-0.5px' }}>BM&C</span>
+            <span style={{
+              fontSize: '0.65rem', fontWeight: 800, color: '#d4af37',
+              letterSpacing: '-0.5px', animation: 'bmcSpin 1.2s linear infinite reverse',
+            }}>BM&amp;C</span>
           </div>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Processando PDFs das ATAs...</p>
-          <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+          <style>{`@keyframes bmcSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
         </div>
       )}
 
