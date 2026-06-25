@@ -48,7 +48,21 @@ export async function GET(req: Request) {
     try {
       // 1. Load from spreadsheet (primary source - reliable data)
       const sheetResult = await getAllPericiasFromSheet(accessToken);
-      const sheetPericias = sheetResult.pericias.map(p => ({
+      
+      // Filter to only recent + future perícias (last 3 months + all future)
+      const threeMonthsAgo = new Date();
+      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+      threeMonthsAgo.setHours(0, 0, 0, 0);
+      
+      const relevantPericias = sheetResult.pericias.filter(p => {
+        if (!p.data) return false;
+        const parts = p.data.split('/');
+        if (parts.length !== 3) return false;
+        const d = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+        return d >= threeMonthsAgo;
+      });
+
+      const sheetPericias = relevantPericias.map(p => ({
         data: p.data,
         horario: p.horario,
         reclamante: p.reclamante,
