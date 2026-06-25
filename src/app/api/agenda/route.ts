@@ -128,21 +128,145 @@ function extractPericiaDate(text: string): string | null {
 }
 
 function extractPericiaTime(text: string): string | null {
-  let match = text.match(/(\d{1,2})\s*h\s*(\d{2})/i);
-  if (match) { const h = parseInt(match[1]); if (h <= 23) return `${String(h).padStart(2, '0')}:${match[2]}`; }
-  match = text.match(/(\d{1,2})[:\.](\d{2})\s*(?:h(?:oras?)?)?/i);
-  if (match) { const h = parseInt(match[1]); if (h <= 23) return `${String(h).padStart(2, '0')}:${match[2]}`; }
-  match = text.match(/(\d{1,2})\s*h(?:oras?)?\b/i);
-  if (match) { const h = parseInt(match[1]); if (h >= 6 && h <= 23) return `${String(h).padStart(2, '0')}:00`; }
+  // Only extract time from labeled fields, NOT random times in the text
+  const patterns = [
+    // "Horário: 15h30" or "Horário: 08:00 horas"
+    /hor[áa]rio[:\s]+(\d{1,2})\s*h\s*(\d{2})/i,
+    /hor[áa]rio[:\s]+(\d{1,2})[:\.](\d{2})\s*(?:h(?:oras?)?)?/i,
+    /hor[áa]rio[:\s]+(\d{1,2})\s*h(?:oras?)?\b/i,
+    // "às 13h", "às 10:40 horas" (with context)
+    /[àa]s\s+(\d{1,2})\s*h\s*(\d{2})/i,
+    /[àa]s\s+(\d{1,2})[:\.](\d{2})\s*(?:h(?:oras?)?)?/i,
+    /[àa]s\s+(\d{1,2})\s*h(?:oras?)?\b/i,
+    // "ter início às 10:40"
+    /in[íi]cio\s+[àa]s?\s+(\d{1,2})[:\.](\d{2})/i,
+    /in[íi]cio\s+[àa]s?\s+(\d{1,2})\s*h\s*(\d{2})/i,
+  ];
+  
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const h = parseInt(match[1]);
+      const m = match[2] ? parseInt(match[2]) : 0;
+      if (h >= 6 && h <= 20) {
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      }
+    }
+  }
   return null;
 }
 
-function extractField(text: string, ...patterns: RegExp[]): string | null {
+function extractReclamante(text: string): string | null {
+  const patterns = [
+    // "RECLAMANTE: NOME COMPLETO" (labeled)
+    /reclamante[:\s]+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ\s.]+)/i,
+    // "Periciando: NOME"
+    /periciand[oa][:\s]+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ\s.]+)/i,
+  ];
   for (const pattern of patterns) {
     const match = text.match(pattern);
-    if (match && match[1]?.trim().length > 3) return match[1].trim().substring(0, 100);
+    if (match) {
+      let name = match[1].trim();
+      // Remove trailing junk
+      name = name.replace(/\s*(reclamad|processo|local|data|hor[áa]rio|prezad|vs\s|,\s*$).*/i, '').trim();
+      // Remove trailing dots
+      name = name.replace(/\.+$/, '').trim();
+      if (name.length > 3 && name.split(/\s+/).length >= 2) return name.substring(0, 80);
+    }
   }
   return null;
+}
+
+function extractReclamada(text: string): string | null {
+  const patterns = [
+    /reclamad[oa]\(?s?\)?[:\s]+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ\s&.,/()+-]+)/i,
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) {
+      let name = match[1].trim();
+      name = name.replace(/\s*(prezad|reclamante|local|data|hor[áa]rio|venho|comunic).*/i, '').trim();
+      name = name.replace(/^[-\s*]+/, '').replace(/[.\s]+$/, '').trim();
+      if (name.length > 3) return name.substring(0, 120);
+    }
+  }
+  return null;
+}
+
+function extractPerito(text: string): string | null {
+  const patterns = [
+    // "Eng. Ricardo Grimaldi Barbosa – Perito Judicial"  
+    /(?:eng[ºo]?\.?\s+)([A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]+(?:\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]+){1,4})\s*[–\-,]\s*perito/i,
+    // "Perito Judicial: Dr. NOME" or "Perito: NOME"
+    /perito\s*(?:judicial|nomeado)?[:\s,]+(?:dr\.?\s*|dra\.?\s*|eng[ºo]?\.?\s*)?([A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]+(?:\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]+){1,4})/i,
+    // "NOME, perito nomeado"
+    /([A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]+(?:\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]+){1,4})\s*,\s*(?:engenheiro|perit[oa])/i,
+    // "NOME COMPLETO, Engenheiro de Segurança do Trabalho, perito" (ALL CAPS names)
+    /([A-ZÁÉÍÓÚÂÊÔÃÕÇ]{2,}(?:\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ]{2,}){1,5})\s*,\s*(?:engenheiro|perit[oa])/i,
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) {
+      let name = match[1].trim().replace(/\s+/g, ' ');
+      // Filter out junk
+      if (name.length > 5 && name.split(' ').length >= 2 && name.split(' ').length <= 6) {
+        if (!/CREA|OAB|será|porém|favor|exatamente/i.test(name)) {
+          return name.substring(0, 60);
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function extractLocal(text: string): string | null {
+  const patterns = [
+    // "Local: Rua ..." (labeled field, must start with address-like content)
+    /local[:\s]+(?:INDIRETA\.?\s*)?(?:da per[íi]cia[:\s]*)?([A-Z][^\n\r]{10,})/i,
+    // "Endereço: ..."
+    /endere[çc]o[:\s]+([^\n\r]{10,})/i,
+    // "na Rua ...", "no endereço"
+    /(?:realizar-se-[áa]|realizada|ser realizada)\s+(?:no?|em)\s+([^\n\r]{10,})/i,
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) {
+      let local = match[1].trim();
+      // Must look like an address (contain typical address words)
+      if (/rua|av\.|avenida|rod|alameda|pra[çc]a|km|n[ºo°]|bairro|cep|centro|\d{3,}/i.test(local)) {
+        // Clean up
+        local = local.replace(/\s*(solicito|dever[áa]|cabe|esclarec|qualquer|favor).*/i, '').trim();
+        if (local.length > 10) return local.substring(0, 150);
+      }
+    }
+  }
+  return null;
+}
+
+function extractFromSubject(subject: string): { reclamante: string, processo: string } {
+  // Try to get reclamante from subject patterns like:
+  // "AGENDAMENTO DE PERÍCIA - Processo_1000762... / RECLAMANTE"
+  // "AGENDAMENTO DE PERÍCIA TÉCNICA - COMPANHIA/ PAMELA - 1000408..."
+  let reclamante = '';
+  let processo = '';
+  
+  const procMatch = subject.match(/(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/);
+  if (procMatch) processo = procMatch[1];
+  
+  // Try patterns in subject
+  const subPatterns = [
+    /reclamante[:\s]+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ\s]+)/i,
+    /per[íi]cia[^/\n]*\/\s*([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ\s]+?)(?:\s*[-–]\s*\d|$)/i,
+  ];
+  for (const p of subPatterns) {
+    const m = subject.match(p);
+    if (m && m[1].trim().length > 3) {
+      reclamante = m[1].trim();
+      break;
+    }
+  }
+  
+  return { reclamante, processo };
 }
 
 function extractTipo(text: string): string {
@@ -214,25 +338,28 @@ async function fetchPericias(): Promise<{ pericias: any[], emailsSearched: numbe
       const data = extractPericiaDate(body) || extractPericiaDate(subject);
       if (!data) continue;
 
+      const subjectInfo = extractFromSubject(subject);
+
       const pericia = {
         data,
-        horario: extractPericiaTime(body) || extractPericiaTime(subject) || '',
-        reclamante: extractField(fullText, /reclamante[:\s]+([^\n\r]+)/i, /periciand[oa][:\s]+([^\n\r]+)/i) || subject.substring(0, 60),
-        reclamada: extractField(fullText, /reclamad[oa]\(?s?\)?[:\s]+([^\n\r]+)/i) || '',
-        processo: fullText.match(/(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/)?.[1] || '',
+        horario: extractPericiaTime(body) || '',
+        reclamante: extractReclamante(body) || extractReclamante(subject) || subjectInfo.reclamante || '',
+        reclamada: extractReclamada(body) || '',
+        processo: fullText.match(/(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/)?.[1] || subjectInfo.processo || '',
         tipo: extractTipo(fullText),
-        perito: extractField(fullText,
-          /(?:eng\.?\s+)([A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõçA-Z\s]+?)\s*[–\-]\s*perito/i,
-          /perito\s*(?:judicial)?[:\s,]+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõçA-Z\s]+)/i,
-        ) || '',
-        local: extractField(fullText, /local[:\s]+(?:INDIRETA\.?\s*)?([^\n\r]+)/i, /endere[çc]o[:\s]+([^\n\r]+)/i) || '',
+        perito: extractPerito(body) || '',
+        local: extractLocal(body) || '',
         emailSubject: subject.substring(0, 100),
         emailDate,
       };
 
-      // Clean reclamante (remove trailing keywords)
-      pericia.reclamante = pericia.reclamante.replace(/\s*(reclamad|processo|local|data|hor[áa]rio|prezad).*/i, '').trim();
-      if (pericia.reclamada) pericia.reclamada = pericia.reclamada.replace(/\s*(prezad|reclamante|local|data|hor[áa]rio).*/i, '').trim();
+      // If no reclamante found, use subject but clean it
+      if (!pericia.reclamante) {
+        let cleanSubject = subject.replace(/^(Re:|Fwd:|Fw:|RE:|FW:)\s*/gi, '').trim();
+        cleanSubject = cleanSubject.replace(/agendamento\s+de\s+(?:per[íi]cia|dilig[êe]ncia)\s*(?:t[ée]cnica|pericial|judicial)?/gi, '').trim();
+        cleanSubject = cleanSubject.replace(/^[\s\-–|/]+|[\s\-–|/]+$/g, '').trim();
+        pericia.reclamante = cleanSubject.substring(0, 60) || subject.substring(0, 60);
+      }
 
       const isDup = pericias.some(p => (pericia.processo && p.processo === pericia.processo) || (p.data === pericia.data && p.reclamante === pericia.reclamante));
       if (!isDup) pericias.push(pericia);
