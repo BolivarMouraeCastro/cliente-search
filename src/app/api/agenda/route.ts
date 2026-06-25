@@ -80,35 +80,32 @@ export async function GET(req: Request) {
       let emailPericias: any[] = [];
       try {
         const emailResult = await fetchPericias();
-        emailPericias = emailResult.pericias.map((p: any) => ({ ...p, source: 'email' }));
+        emailPericias = emailResult.pericias;
         periciaDebug.emailsSearched = emailResult.emailsSearched;
         periciaDebug.emailTotal = emailResult.total;
       } catch (emailErr) {
         periciaDebug.emailError = emailErr instanceof Error ? emailErr.message : String(emailErr);
       }
 
-      // 3. Merge: sheet data is authoritative, email adds missing entries
-      pericias = [...sheetPericias];
+      // 3. Merge: mark entries found in both sources as 'ambas'
+      // First, check which sheet entries also exist in email
+      pericias = sheetPericias.map(sp => {
+        const inEmail = emailPericias.some(ep => 
+          (sp.processo && ep.processo && sp.processo === ep.processo) ||
+          (sp.data === ep.data && sp.reclamante && ep.reclamante && 
+           sp.reclamante.toLowerCase().includes(ep.reclamante.substring(0, 10).toLowerCase()))
+        );
+        return { ...sp, source: inEmail ? 'ambas' as const : 'planilha' as const };
+      });
       
-      // Add email-only entries that don't exist in sheet (by process number)
+      // Add email-only entries that don't exist in sheet
       const sheetProcessos = new Set(sheetPericias.map(p => p.processo).filter(Boolean));
       for (const ep of emailPericias) {
-        if (ep.processo && !sheetProcessos.has(ep.processo)) {
-          // Check no date+name duplicate either
-          const isDup = pericias.some(p => 
-            p.data === ep.data && p.reclamante === ep.reclamante
-          );
-          if (!isDup) {
-            pericias.push({ ...ep, source: 'email' });
-          }
-        } else if (!ep.processo) {
-          // No process number - check by date + reclamante
-          const isDup = pericias.some(p => 
-            p.data === ep.data && p.reclamante === ep.reclamante
-          );
-          if (!isDup) {
-            pericias.push({ ...ep, source: 'email' });
-          }
+        const matchesSheet = (ep.processo && sheetProcessos.has(ep.processo)) ||
+          pericias.some(p => p.data === ep.data && p.reclamante === ep.reclamante);
+        
+        if (!matchesSheet) {
+          pericias.push({ ...ep, source: 'email' });
         }
       }
 

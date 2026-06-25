@@ -25,7 +25,7 @@ interface Pericia {
   local: string;
   advogado?: string;
   observacao?: string;
-  source?: 'planilha' | 'email';
+  source?: 'planilha' | 'email' | 'ambas';
   emailSubject?: string;
   emailDate?: string;
 }
@@ -432,72 +432,88 @@ export default function AgendaPage() {
                     {dayPericias.length === 0 && (
                       <div className="agenda-empty-day">—</div>
                     )}
-                    {dayPericias.map((p, j) => (
-                      <div
-                        key={j}
-                        className="agenda-card"
-                        style={{ borderLeftColor: '#818cf8' }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          {p.horario && (
-                            <div className="agenda-card-time">{p.horario}</div>
+                    {dayPericias.map((p, j) => {
+                      const isEmailOnly = p.source === 'email';
+                      const borderColor = isEmailOnly ? '#f59e0b' : '#818cf8';
+                      const sourceBadge = (() => {
+                        if (p.source === 'ambas') return { bg: 'linear-gradient(135deg, rgba(16,185,129,0.15), rgba(99,102,241,0.15))', color: '#10b981', text: '📋+📧', label: '' };
+                        if (p.source === 'email') return { bg: 'rgba(245,158,11,0.15)', color: '#f59e0b', text: '📧', label: '' };
+                        return { bg: 'rgba(16,185,129,0.15)', color: '#10b981', text: '📋', label: '' };
+                      })();
+
+                      return (
+                        <div
+                          key={j}
+                          className="agenda-card"
+                          style={{ 
+                            borderLeftColor: borderColor,
+                            ...(isEmailOnly ? { background: 'rgba(245,158,11,0.04)' } : {}),
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            {p.horario && (
+                              <div className="agenda-card-time">{p.horario}</div>
+                            )}
+                            {p.source && (
+                              <span style={{
+                                fontSize: '0.6rem',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                background: sourceBadge.bg,
+                                color: sourceBadge.color,
+                                letterSpacing: '0.3px',
+                                fontWeight: 600,
+                              }}>
+                                {sourceBadge.text}
+                              </span>
+                            )}
+                          </div>
+                          <div className="agenda-card-name">{p.reclamante || 'Sem nome'}</div>
+                          {p.reclamada && (
+                            <div className="agenda-card-company">vs {p.reclamada}</div>
                           )}
-                          {p.source && (
-                            <span style={{
-                              fontSize: '0.55rem',
-                              padding: '1px 5px',
-                              borderRadius: '3px',
-                              background: p.source === 'planilha' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(99, 102, 241, 0.15)',
-                              color: p.source === 'planilha' ? '#10b981' : '#818cf8',
-                              textTransform: 'uppercase',
-                              letterSpacing: '0.5px',
+                          {p.tipo && (
+                            <div className="agenda-card-type" style={{ 
+                              background: isEmailOnly ? 'rgba(245,158,11,0.15)' : 'rgba(99, 102, 241, 0.15)', 
+                              color: isEmailOnly ? '#f59e0b' : '#818cf8' 
                             }}>
-                              {p.source === 'planilha' ? '📋' : '📧'} {p.source}
-                            </span>
+                              {p.tipo}
+                            </div>
+                          )}
+                          {p.perito && (
+                            <div className="agenda-card-advogado">
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                                <circle cx="12" cy="7" r="4" />
+                              </svg>
+                              Perito: {p.perito}
+                            </div>
+                          )}
+                          {p.advogado && (
+                            <div className="agenda-card-lawyer">
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                                <circle cx="12" cy="7" r="4" />
+                              </svg>
+                              Adv: {p.advogado}
+                            </div>
+                          )}
+                          {p.local && (
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                              📍 {p.local}
+                            </div>
+                          )}
+                          {p.observacao && (
+                            <div style={{ fontSize: '0.7rem', color: '#f59e0b', marginTop: '0.25rem', fontStyle: 'italic' }}>
+                              💬 {p.observacao}
+                            </div>
+                          )}
+                          {p.processo && (
+                            <div className="agenda-card-process">{p.processo}</div>
                           )}
                         </div>
-                        <div className="agenda-card-name">{p.reclamante || 'Sem nome'}</div>
-                        {p.reclamada && (
-                          <div className="agenda-card-company">vs {p.reclamada}</div>
-                        )}
-                        {p.tipo && (
-                          <div className="agenda-card-type" style={{ background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8' }}>
-                            {p.tipo}
-                          </div>
-                        )}
-                        {p.perito && (
-                          <div className="agenda-card-advogado">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                              <circle cx="12" cy="7" r="4" />
-                            </svg>
-                            Perito: {p.perito}
-                          </div>
-                        )}
-                        {p.advogado && (
-                          <div className="agenda-card-lawyer">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                              <circle cx="12" cy="7" r="4" />
-                            </svg>
-                            Adv: {p.advogado}
-                          </div>
-                        )}
-                        {p.local && (
-                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                            📍 {p.local}
-                          </div>
-                        )}
-                        {p.observacao && (
-                          <div style={{ fontSize: '0.7rem', color: '#f59e0b', marginTop: '0.25rem', fontStyle: 'italic' }}>
-                            💬 {p.observacao}
-                          </div>
-                        )}
-                        {p.processo && (
-                          <div className="agenda-card-process">{p.processo}</div>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               );
