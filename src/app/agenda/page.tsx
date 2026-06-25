@@ -18,8 +18,11 @@ interface Pericia {
   data: string;
   horario: string;
   reclamante: string;
+  reclamada: string;
+  processo: string;
   tipo: string;
   perito: string;
+  local: string;
   emailSubject: string;
   emailDate: string;
 }
@@ -448,6 +451,9 @@ export default function AgendaPage() {
                           <div className="agenda-card-time">{p.horario}</div>
                         )}
                         <div className="agenda-card-name">{p.reclamante}</div>
+                        {p.reclamada && (
+                          <div className="agenda-card-company">vs {p.reclamada}</div>
+                        )}
                         {p.tipo && (
                           <div className="agenda-card-type" style={{ background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8' }}>
                             {p.tipo}
@@ -461,6 +467,14 @@ export default function AgendaPage() {
                             </svg>
                             {p.perito}
                           </div>
+                        )}
+                        {p.local && (
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                            📍 {p.local}
+                          </div>
+                        )}
+                        {p.processo && (
+                          <div className="agenda-card-process">{p.processo}</div>
                         )}
                       </div>
                     ))}
