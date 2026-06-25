@@ -48,7 +48,17 @@ export async function GET(req: Request) {
       periciaDebug = { emailsSearched: periciaResult.emailsSearched, total: periciaResult.total };
     } catch (err) {
       console.error('Pericia fetch error in agenda:', err);
-      periciaDebug = { error: err instanceof Error ? err.message : String(err) };
+      // Diagnostic: check which env vars exist
+      const envCheck = {
+        PERICIA_REFRESH_TOKEN: !!process.env.PERICIA_REFRESH_TOKEN,
+        PERICIA_REFRESH_TOKEN_length: process.env.PERICIA_REFRESH_TOKEN?.length || 0,
+        PERICIA_REFRESH_TOKEN_start: process.env.PERICIA_REFRESH_TOKEN?.substring(0, 8) || 'MISSING',
+        ADMIN_REFRESH_TOKEN: !!process.env.ADMIN_REFRESH_TOKEN,
+        GOOGLE_CLIENT_ID: !!process.env.GOOGLE_CLIENT_ID,
+        GOOGLE_CLIENT_SECRET: !!process.env.GOOGLE_CLIENT_SECRET,
+        allEnvKeys: Object.keys(process.env).filter(k => k.includes('PERICIA') || k.includes('ADMIN') || k.includes('GOOGLE')).sort(),
+      };
+      periciaDebug = { error: err instanceof Error ? err.message : String(err), envCheck };
     }
 
     return NextResponse.json({
