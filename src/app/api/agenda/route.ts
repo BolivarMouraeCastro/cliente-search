@@ -79,7 +79,7 @@ export async function GET(req: Request) {
       // 2. Try to also load from email for enrichment/additional entries
       let emailPericias: any[] = [];
       try {
-        const emailResult = await fetchPericias();
+        const emailResult = await fetchPericias(accessToken);
         emailPericias = emailResult.pericias;
         periciaDebug.emailsSearched = emailResult.emailsSearched;
         periciaDebug.emailTotal = emailResult.total;
@@ -385,8 +385,9 @@ async function gmailGet(token: string, endpoint: string) {
   return res.json();
 }
 
-async function fetchPericias(): Promise<{ pericias: any[], emailsSearched: number, total: number }> {
-  const token = await getPericiaAccessToken();
+async function fetchPericias(adminToken: string): Promise<{ pericias: any[], emailsSearched: number, total: number }> {
+  // Use admin token (advogadosjjs@gmail.com) to search for perícia emails
+  const token = adminToken;
 
   // Single broad query to get ALL perícia-related emails with pagination
   const query = 'subject:(perícia OR pericia OR perito OR pericial OR "diligência pericial" OR agendamento)';
