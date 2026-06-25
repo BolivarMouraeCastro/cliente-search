@@ -55,3 +55,35 @@ export async function getEffectiveAccessToken(
     throw error;
   }
 }
+
+/**
+ * Gets an access token for the perícia Gmail account (periciajjs@gmail.com).
+ * Uses PERICIA_REFRESH_TOKEN env var.
+ */
+export async function getPericiaAccessToken(): Promise<string> {
+  const refreshToken = process.env.PERICIA_REFRESH_TOKEN;
+  
+  if (!refreshToken) {
+    throw new Error("PERICIA_REFRESH_TOKEN não configurado");
+  }
+
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: process.env.GOOGLE_CLIENT_ID!,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+    }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok || !data.access_token) {
+    console.error("Failed to refresh pericia token:", data);
+    throw new Error("Falha ao obter token da conta de perícia");
+  }
+
+  return data.access_token;
+}

@@ -14,6 +14,16 @@ interface Hearing {
   isFuture: boolean;
 }
 
+interface Pericia {
+  data: string;
+  horario: string;
+  reclamante: string;
+  tipo: string;
+  perito: string;
+  emailSubject: string;
+  emailDate: string;
+}
+
 function parseDateBR(dateStr: string): Date | null {
   const parts = dateStr.split('/');
   if (parts.length !== 3) return null;
@@ -60,9 +70,16 @@ export default function AgendaPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [weekStart, setWeekStart] = useState(() => getMonday(new Date()));
   const [collapsedDays, setCollapsedDays] = useState<Record<number, boolean>>({});
+  const [pericias, setPericias] = useState<Pericia[]>([]);
+  const [periciasLoading, setPericiasLoading] = useState(true);
+  const [collapsedPericiaDays, setCollapsedPericiaDays] = useState<Record<number, boolean>>({});
 
   const toggleDay = (dayIndex: number) => {
     setCollapsedDays(prev => ({ ...prev, [dayIndex]: !prev[dayIndex] }));
+  };
+
+  const togglePericiaDay = (dayIndex: number) => {
+    setCollapsedPericiaDays(prev => ({ ...prev, [dayIndex]: !prev[dayIndex] }));
   };
 
   const fetchHearings = useCallback(async () => {
@@ -87,6 +104,25 @@ export default function AgendaPage() {
     fetchHearings();
   }, [fetchHearings]);
 
+  // Fetch perícias
+  useEffect(() => {
+    const fetchPericias = async () => {
+      setPericiasLoading(true);
+      try {
+        const res = await fetch('/api/pericias');
+        if (res.ok) {
+          const data = await res.json();
+          setPericias(data.pericias || []);
+        }
+      } catch (err) {
+        console.error('Error loading pericias:', err);
+      } finally {
+        setPericiasLoading(false);
+      }
+    };
+    fetchPericias();
+  }, []);
+
   // Group hearings by day of the week
   const weekDays: Date[] = [];
   for (let i = 0; i < 5; i++) {
@@ -108,6 +144,21 @@ export default function AgendaPage() {
   });
 
   const totalWeek = hearingsByDay.reduce((sum, d) => sum + d.length, 0);
+
+  // Group perícias by day of the week
+  const periciasByDay: Pericia[][] = weekDays.map((day) => {
+    return pericias.filter((p) => {
+      const pDate = parseDateBR(p.data);
+      if (!pDate) return false;
+      return (
+        pDate.getDate() === day.getDate() &&
+        pDate.getMonth() === day.getMonth() &&
+        pDate.getFullYear() === day.getFullYear()
+      );
+    });
+  });
+
+  const totalPericiaWeek = periciasByDay.reduce((sum, d) => sum + d.length, 0);
 
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekEnd.getDate() + 4);
@@ -306,6 +357,136 @@ export default function AgendaPage() {
           </div>
         </div>
       )}
+
+      {/* ========== PERÍCIA SECTION ========== */}
+      <div style={{ marginTop: '2.5rem', borderTop: '1px solid var(--border)', paddingTop: '1.5rem' }}>
+        <div className="agenda-header">
+          <h1 className="agenda-title">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline', verticalAlign: 'middle', marginRight: '0.5rem' }}>
+              <path d="M9 2h6v2H9z" />
+              <rect x="4" y="4" width="16" height="18" rx="2" />
+              <path d="M9 14l2 2 4-4" />
+            </svg>
+            Agenda de Perícias
+          </h1>
+          {totalPericiaWeek > 0 && (
+            <span className="agenda-week-total" style={{ background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8' }}>
+              {totalPericiaWeek} perícia{totalPericiaWeek !== 1 ? 's' : ''} na semana
+            </span>
+          )}
+        </div>
+
+        {periciasLoading && (
+          <div className="agenda-loading">
+            <div className="upload-spinner" style={{ width: 32, height: 32 }} />
+            <p style={{ color: 'var(--text-muted)', marginTop: '1rem' }}>Carregando perícias...</p>
+          </div>
+        )}
+
+        {!periciasLoading && (
+          <div className="agenda-grid">
+            {weekDays.map((day, i) => {
+              const dayPericias = periciasByDay[i];
+              const isToday =
+                day.getDate() === new Date().getDate() &&
+                day.getMonth() === new Date().getMonth() &&
+                day.getFullYear() === new Date().getFullYear();
+
+              return (
+                <div key={i} className={`agenda-day ${isToday ? 'today' : ''} ${dayPericias.length === 0 ? 'empty' : ''}`}>
+                  <div
+                    className="agenda-day-header"
+                    onClick={() => togglePericiaDay(i)}
+                    style={{ cursor: 'pointer', userSelect: 'none' }}
+                  >
+                    <span className="agenda-day-name">{DAYS[i]}</span>
+                    <span className={`agenda-day-number ${isToday ? 'today' : ''}`}>
+                      {day.getDate()}
+                    </span>
+                    <span className="agenda-day-month">{formatDateBR(day)}</span>
+                    {dayPericias.length > 0 && (
+                      <svg
+                        width="14" height="14" viewBox="0 0 24 24" fill="none"
+                        stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                        style={{
+                          marginLeft: 'auto',
+                          transition: 'transform 0.2s',
+                          transform: collapsedPericiaDays[i] ? 'rotate(-90deg)' : 'rotate(0deg)',
+                        }}
+                      >
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    )}
+                  </div>
+
+                  {dayPericias.length > 0 && (
+                    <div
+                      className="agenda-day-count"
+                      onClick={() => togglePericiaDay(i)}
+                      style={{ cursor: 'pointer', background: 'rgba(99, 102, 241, 0.1)', color: '#818cf8' }}
+                    >
+                      {dayPericias.length} perícia{dayPericias.length !== 1 ? 's' : ''}
+                    </div>
+                  )}
+
+                  <div className="agenda-day-cards" style={{
+                    maxHeight: collapsedPericiaDays[i] ? '0px' : '2000px',
+                    overflow: 'hidden',
+                    transition: 'max-height 0.3s ease',
+                    opacity: collapsedPericiaDays[i] ? 0 : 1,
+                  }}>
+                    {dayPericias.length === 0 && (
+                      <div className="agenda-empty-day">—</div>
+                    )}
+                    {dayPericias.map((p, j) => (
+                      <div
+                        key={j}
+                        className="agenda-card"
+                        style={{ borderLeftColor: '#818cf8' }}
+                      >
+                        {p.horario && (
+                          <div className="agenda-card-time">{p.horario}</div>
+                        )}
+                        <div className="agenda-card-name">{p.reclamante}</div>
+                        {p.tipo && (
+                          <div className="agenda-card-type" style={{ background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8' }}>
+                            {p.tipo}
+                          </div>
+                        )}
+                        {p.perito && (
+                          <div className="agenda-card-advogado">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                              <circle cx="12" cy="7" r="4" />
+                            </svg>
+                            {p.perito}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {!periciasLoading && totalPericiaWeek === 0 && (
+          <div className="empty-state" style={{ marginTop: '1rem' }}>
+            <div className="empty-state-icon">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 2h6v2H9z" />
+                <rect x="4" y="4" width="16" height="18" rx="2" />
+                <path d="M9 14l2 2 4-4" />
+              </svg>
+            </div>
+            <div className="empty-state-title">Nenhuma perícia nesta semana</div>
+            <div className="empty-state-desc">
+              Perícias são extraídas automaticamente do email periciajjs@gmail.com
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
