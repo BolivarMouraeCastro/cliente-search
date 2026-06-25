@@ -31,6 +31,8 @@ export default function UsuariosPage() {
   const [activeTab, setActiveTab] = useState<'usuarios' | 'atividades'>('usuarios');
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showToken, setShowToken] = useState(false);
+  const [tokenCopied, setTokenCopied] = useState(false);
 
   const isAuthenticated = status === 'authenticated';
 
@@ -117,6 +119,63 @@ export default function UsuariosPage() {
         <h1 className="hero-title" style={{ fontSize: '1.8rem' }}>👥 Usuários</h1>
         <p className="hero-subtitle">Cadastre colaboradores e acompanhe atividades</p>
       </section>
+
+      {/* Token Section */}
+      <div style={{ padding: '0 1.5rem', marginBottom: '1rem' }}>
+        <button
+          onClick={() => setShowToken(!showToken)}
+          style={{
+            padding: '0.5rem 1rem',
+            borderRadius: '0.5rem',
+            border: '1px solid var(--border)',
+            background: 'var(--bg-card)',
+            color: 'var(--text-muted)',
+            cursor: 'pointer',
+            fontSize: '0.8rem',
+          }}
+        >
+          🔑 {showToken ? 'Esconder' : 'Ver'} Token ({session?.user?.email})
+        </button>
+        {showToken && (
+          <div style={{
+            marginTop: '0.75rem',
+            background: 'rgba(0,0,0,0.3)',
+            borderRadius: '0.5rem',
+            padding: '0.75rem',
+            wordBreak: 'break-all',
+            fontSize: '0.7rem',
+            fontFamily: 'monospace',
+            color: '#4ade80',
+            maxHeight: '150px',
+            overflow: 'auto',
+          }}>
+            {(session as any)?.refreshToken || '⚠️ Token não encontrado. Faça logout e login novamente.'}
+            {(session as any)?.refreshToken && (
+              <button
+                onClick={async () => {
+                  await navigator.clipboard.writeText((session as any).refreshToken);
+                  setTokenCopied(true);
+                  setTimeout(() => setTokenCopied(false), 3000);
+                }}
+                style={{
+                  display: 'block',
+                  marginTop: '0.5rem',
+                  padding: '0.4rem 1rem',
+                  borderRadius: '0.4rem',
+                  border: 'none',
+                  background: tokenCopied ? '#22c55e' : 'var(--accent-gold)',
+                  color: '#000',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  fontSize: '0.8rem',
+                }}
+              >
+                {tokenCopied ? '✅ Copiado!' : '📋 Copiar Token'}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
 
       {error && (
         <div style={{ padding: '0.75rem 1rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '0.75rem', color: '#ef4444', fontSize: '0.85rem', marginBottom: '1rem', cursor: 'pointer' }} onClick={() => setError('')}>
