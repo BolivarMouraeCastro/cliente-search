@@ -118,13 +118,19 @@ function extrairDadosAta(texto: string, classificacoes: string[]): Partial<AtaIt
                 ? 'julgamento'
                 : 'presencial';
 
+            // Extract tipo from the SPECIFIC sentence near the date match, not the full text
+            // Get context: 200 chars before and after the match
+            const matchIdx = texto.search(pat);
+            const context = texto.substring(Math.max(0, matchIdx - 200), matchIdx + 300).toLowerCase();
+            
             let tipo = 'Audiência';
-            if (/instrução/i.test(texto)) tipo = 'Instrução';
-            if (/inicial/i.test(texto)) tipo = 'Inicial';
-            if (/una/i.test(texto)) tipo = 'Una';
-            if (/prosseguimento/i.test(texto)) tipo = 'Prosseguimento';
-            if (/julgamento/i.test(texto)) tipo = 'Julgamento';
-            if (/conciliação/i.test(texto)) tipo = 'Conciliação';
+            // Check specific phrases in order of specificity (most specific first)
+            if (/audiência\s+una|audiencia\s+una|tipo\s+una/i.test(context)) tipo = 'Una';
+            else if (/instrução|instrucao/i.test(context)) tipo = 'Instrução';
+            else if (/prosseguimento/i.test(context)) tipo = 'Prosseguimento';
+            else if (/conciliação|conciliacao/i.test(context)) tipo = 'Conciliação';
+            else if (/inicial/i.test(context)) tipo = 'Inicial';
+            else if (/julgamento/i.test(context)) tipo = 'Julgamento';
 
             result.proximaAudiencia = {
               data: dateStr,
