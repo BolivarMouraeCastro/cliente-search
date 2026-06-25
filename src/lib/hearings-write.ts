@@ -36,8 +36,9 @@ export async function appendHearing(
 
   await sheets.spreadsheets.values.append({
     spreadsheetId: HEARINGS_SPREADSHEET_ID,
-    range: 'AUDIÊNCIA!A:H',
-    valueInputOption: 'RAW',
+    range: 'AUDIÊNCIA!A:A',
+    valueInputOption: 'USER_ENTERED',
+    insertDataOption: 'INSERT_ROWS',
     requestBody: { values: [row] },
   });
 
