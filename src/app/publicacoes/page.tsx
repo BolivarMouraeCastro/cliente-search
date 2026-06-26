@@ -34,12 +34,33 @@ interface AcordoForm {
 // ── ATA Classification by Keywords ───────────────────────────────────
 function classificarAta(texto: string): string[] {
   const t = texto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const original = texto; // keep original for case-sensitive checks
   const classes: string[] = [];
 
-  // ACORDO (check FIRST — if acordo, process ends)
-  if ((t.includes('acordo') || t.includes('conciliacao') || t.includes('transacao') || t.includes('avenca')) &&
-      (t.includes('homolog') || t.includes('pagara') || t.includes('pagar') || t.includes('parcela') ||
-       t.includes('quantia') || t.includes('r$') || t.includes('quitacao'))) {
+  // ACORDO — STRICT detection
+  // Must have "CONCILIAÇÃO:" as a section header with "pagará" in nearby text,
+  // OR "acordo homologado" / "homologo o acordo" / "transação homologada"
+  const isRealAcordo = (() => {
+    // Pattern 1: "CONCILIAÇÃO:" (uppercase section header) + "pagará" nearby
+    const concIdx = original.search(/CONCILIA[CÇ][AÃ]O\s*:/i);
+    if (concIdx >= 0) {
+      // Check for "pagará" within 500 chars after CONCILIAÇÃO:
+      const afterConc = original.substring(concIdx, concIdx + 500).toLowerCase();
+      if (afterConc.includes('pagar') && /r\$/.test(afterConc)) return true;
+    }
+    // Pattern 2: "homologo o acordo" / "acordo homologado" / "transação homologada"
+    if (/homologo\s+o\s+acordo|acordo\s+homologado|transa[cç][aã]o\s+homologada/i.test(t)) return true;
+    // Pattern 3: "as partes transacionam" / "celebram acordo"
+    if (/partes\s+transacion|celebra[mr]\s+acordo/i.test(t)) return true;
+    return false;
+  })();
+
+  // If "instrução processual encerrada" or "razões finais" is present,
+  // it means there was a hearing, NOT an acordo — override
+  const hasInstrucao = t.includes('instrucao processual') || t.includes('encerrada a instrucao') || t.includes('fica encerrada a instrucao');
+  const hasRazoes = t.includes('razoes finais');
+
+  if (isRealAcordo && !hasInstrucao && !hasRazoes) {
     classes.push('ACORDO');
   }
 
@@ -48,7 +69,7 @@ function classificarAta(texto: string): string[] {
       t.includes('razoes finais') || t.includes('contrarrazoes') ||
       t.includes('prazo para manifestacao') || t.includes('manifeste-se') ||
       t.includes('prazo para razoes') || t.includes('impugnacao') ||
-      t.includes('prazo para se manifestar') || t.includes('prazo de 5') || t.includes('prazo de 10') || t.includes('prazo de 15')) {
+      t.includes('prazo para se manifestar')) {
     classes.push('RÉPLICA');
   }
 
@@ -147,9 +168,16 @@ function extrairDadosAta(texto: string, classificacoes: string[]): Partial<AtaIt
 
   // Extract réplica prazo — ONLY if NOT acordo
   if (!isAcordo) {
+    // Pattern 1: "prazo de X dias para réplica/razões"
     const replicaMatch = texto.match(/prazo\s+(?:de\s+)?(\d+)\s*(?:dias?)?\s*(?:para|para\s+(?:réplica|replica|razões|razoes|manifestação))/i);
-    if (replicaMatch) {
-      result.prazoReplica = { prazo: `${replicaMatch[1]} dias`, descricao: 'Prazo para réplica/razões finais' };
+    // Pattern 2: "razões finais no prazo de X dias"
+    const razoesMatch = texto.match(/raz[õo]es\s+finais\s+(?:no\s+)?prazo\s+(?:de\s+)?(\d+)\s*dias?/i);
+    // Pattern 3: "prazo de X dias" right after "instrução encerrada" (implied razões finais)
+    const prazoMatch = texto.match(/(?:encerrada\s+a\s+instrução|instrução\s+processual)[^.]*?prazo\s+(?:de\s+)?(\d+)\s*dias?/i);
+    
+    const days = replicaMatch?.[1] || razoesMatch?.[1] || prazoMatch?.[1];
+    if (days) {
+      result.prazoReplica = { prazo: `${days} dias`, descricao: 'Prazo para réplica/razões finais' };
     }
   }
 
