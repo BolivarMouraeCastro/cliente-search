@@ -358,9 +358,15 @@ export default function AtaAudienciaPage() {
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Erro'); return; }
       
-      // New folder-based API response
-      const folders = data.folders || [];
-      if (folders.length === 0) { setError('Nenhuma pasta de data encontrada no Drive.'); return; }
+      // Support both old format (flat pdfs) and new format (folders with pdfs)
+      let folders = data.folders || [];
+      
+      // Backwards compat: if old API returns flat pdfs array, wrap it
+      if (folders.length === 0 && data.pdfs && data.pdfs.length > 0) {
+        folders = [{ folderName: 'Sem Pasta', folderId: 'direct', pdfs: data.pdfs }];
+      }
+      
+      if (folders.length === 0) { setError('Nenhum PDF de ATA encontrado na pasta do Drive. Crie subpastas com datas (ex: 25.06.2026) e coloque os PDFs dentro.'); return; }
 
       const processados = getProcessados();
       const allAtas: AtaItem[] = [];
