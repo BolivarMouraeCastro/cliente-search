@@ -15,7 +15,7 @@ interface AtaItem {
   proximaAudiencia?: { data: string; horario: string; modalidade: 'online' | 'presencial' | 'julgamento'; tipo: string };
   prazoReplica?: { prazo: string; descricao: string };
   prazoPericia?: { prazo: string; perito?: string; tipo?: string };
-  acordo?: { textoAcordo: string; dataPagamento?: string };
+  acordo?: { textoAcordo: string; dataPagamento?: string; parcelas?: string };
   julgamento?: { descricao: string };
   // Source
   pdfName: string;
@@ -64,13 +64,15 @@ function classificarAta(texto: string): string[] {
     classes.push('ACORDO');
   }
 
-  // RÉPLICA / RAZÕES
-  if (t.includes('prazo para replica') || t.includes('prazo de replica') ||
-      t.includes('razoes finais') || t.includes('contrarrazoes') ||
-      t.includes('prazo para manifestacao') || t.includes('manifeste-se') ||
-      t.includes('prazo para razoes') || t.includes('impugnacao') ||
-      t.includes('prazo para se manifestar')) {
-    classes.push('RÉPLICA');
+  // RÉPLICA / RAZÕES — NEVER when ACORDO (acordo = process ends, no reply needed)
+  if (!classes.includes('ACORDO')) {
+    if (t.includes('prazo para replica') || t.includes('prazo de replica') ||
+        t.includes('razoes finais') || t.includes('contrarrazoes') ||
+        t.includes('prazo para manifestacao') || t.includes('manifeste-se') ||
+        t.includes('prazo para razoes') || t.includes('impugnacao') ||
+        t.includes('prazo para se manifestar')) {
+      classes.push('RÉPLICA');
+    }
   }
 
   // PERÍCIA
@@ -191,33 +193,32 @@ function extrairDadosAta(texto: string, classificacoes: string[]): Partial<AtaIt
     };
   }
 
-  // Extract acordo value — multiple patterns, get the actual R$ value
+  // Extract acordo value — from the CONCILIAÇÃO: section specifically
   if (isAcordo) {
-    const acordoPatterns = [
-      // "pagará ... quantia líquida de R$2.500,00"
-      /pagar[áa][^.]*?(?:quantia|valor|import[âa]ncia)[^.]*?R\$\s*([\d.,]+)/i,
-      // "valor de R$2.500,00"
-      /valor\s+(?:de\s+)?R\$\s*([\d.,]+)/i,
-      // "R$2.500,00" after conciliação/acordo
-      /(?:concilia[çc][ãa]o|acordo)[^.]*?R\$\s*([\d.,]+)/i,
-      // Any R$ amount near "pagará"
-      /pagar[áa][^.]*?R\$\s*([\d.,]+)/i,
-      // Generic R$ in the text
-      /R\$\s*([\d.,]+)/i,
-    ];
-    for (const pat of acordoPatterns) {
-      const m = texto.match(pat);
-      if (m) {
-        // Clean the value by removing trailing dots/commas
-        const cleanValue = m[1].replace(/[.,\s]+$/, '');
-        result.acordo = { textoAcordo: `R$ ${cleanValue}` };
-        
-        // Try to extract payment date
-        const dateMatch = texto.match(/(?:dia|data|em|até o dia)\s+(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4})/i);
-        if (dateMatch) {
-          result.acordo.dataPagamento = dateMatch[1].replace(/\./g, '/');
-        }
-        break;
+    // Find the CONCILIAÇÃO: section and extract from there
+    const concMatch = texto.match(/CONCILIA[CÇ][AÃ]O\s*:(.*?)(?:documento assinado|faculta-se|cumprido o acordo|DISCRIMINA[CÇ][AÃ]O|$)/is);
+    const concSection = concMatch ? concMatch[1] : texto;
+    
+    // Extract R$ value from conciliação section
+    const valorMatch = concSection.match(/R\$\s*([\d.,]+)/i);
+    if (valorMatch) {
+      const cleanValue = valorMatch[1].replace(/[.,\s]+$/, '');
+      result.acordo = { textoAcordo: `R$ ${cleanValue}` };
+      
+      // Extract payment date from conciliação section
+      // Patterns: "no dia 25/07/2026", "dia 22/07/2026", "até 25/07/2026", "em 25/07/2026"
+      const dateMatch = concSection.match(/(?:no\s+dia|dia|em|até\s+o?\s*dia|até)\s+(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4})/i);
+      if (dateMatch) {
+        result.acordo.dataPagamento = dateMatch[1].replace(/\./g, '/');
+      }
+      
+      // Extract parcelas count
+      // Patterns: "4 parcelas de R$750", "em 4 parcelas", "04 parcelas", "dividido em 4"
+      const parcelasMatch = concSection.match(/(\d+)\s*parcela/i)
+        || concSection.match(/dividid[oa]\s+em\s+(\d+)/i)
+        || texto.match(/(\d+)\s*parcelas?\s+de\s+R\$/i);
+      if (parcelasMatch) {
+        result.acordo.parcelas = parcelasMatch[1];
       }
     }
   }
@@ -381,13 +382,13 @@ export default function AtaAudienciaPage() {
           processado: processados[ataId] === true,
         });
 
-        // Pre-fill acordo form with extracted value and date
+        // Pre-fill acordo form with extracted value, date, and parcelas
         if (dados.acordo?.textoAcordo) {
           const valMatch = dados.acordo.textoAcordo.match(/R\$\s*([\d.,]+)/);
           if (valMatch) {
             acordoFormsInit[ataId] = {
               valorAcordo: valMatch[1],
-              parcelas: '1',
+              parcelas: dados.acordo.parcelas || '1',
               dataUltimaParcela: dados.acordo.dataPagamento || '',
               fgtsLiberado: false,
               seguroDesemprego: false,
