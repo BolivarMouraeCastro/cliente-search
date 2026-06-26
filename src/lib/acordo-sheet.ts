@@ -14,7 +14,7 @@ const HEADERS = [
   'VALOR BRUTO (70%)',
   'VALOR LÍQUIDO (30%)',
   'PARCELAS',
-  'DATA ÚLTIMA PARCELA',
+  'DATA 1ª PARCELA',
   'FGTS LIBERADO',
   'SEGURO DESEMPREGO',
   'ADVOGADO',
@@ -27,7 +27,7 @@ export interface AcordoInput {
   vara: string;
   valorAcordo: number;
   parcelas: number;
-  dataUltimaParcela: string;
+  dataPrimeiraParcela: string;
   fgtsLiberado: boolean;
   seguroDesemprego: boolean;
   advogado: string;
@@ -66,6 +66,10 @@ export async function appendAcordo(
     });
   }
 
+  // Format valor for Brazilian display
+  const formatBRL = (v: number) =>
+    v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
   // Append the row
   const row = [
     acordo.dataAcordo,
@@ -73,11 +77,11 @@ export async function appendAcordo(
     acordo.reclamada,
     acordo.processo,
     acordo.vara,
-    acordo.valorAcordo,
-    valorBruto,
-    valorLiquido,
+    `R$ ${formatBRL(acordo.valorAcordo)}`,
+    `R$ ${formatBRL(valorBruto)}`,
+    `R$ ${formatBRL(valorLiquido)}`,
     acordo.parcelas,
-    acordo.dataUltimaParcela,
+    acordo.dataPrimeiraParcela,
     acordo.fgtsLiberado ? 'SIM' : 'NÃO',
     acordo.seguroDesemprego ? 'SIM' : 'NÃO',
     acordo.advogado,

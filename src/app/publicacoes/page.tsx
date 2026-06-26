@@ -28,7 +28,7 @@ interface AtaItem {
 interface AcordoForm {
   valorAcordo: string;
   parcelas: string;
-  dataUltimaParcela: string;
+  dataPrimeiraParcela: string;
   fgtsLiberado: boolean;
   seguroDesemprego: boolean;
 }
@@ -439,10 +439,18 @@ export default function AtaAudienciaPage() {
           if (dados.acordo?.textoAcordo) {
             const valMatch = dados.acordo.textoAcordo.match(/R\$\s*([\d.,]+)/);
             if (valMatch) {
+              // Convert date from dd/mm/yyyy to yyyy-mm-dd for input[type=date]
+              let dateForInput = '';
+              if (dados.acordo.dataPagamento) {
+                const parts = dados.acordo.dataPagamento.split('/');
+                if (parts.length === 3) {
+                  dateForInput = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                }
+              }
               acordoFormsInit[ataId] = {
                 valorAcordo: valMatch[1],
                 parcelas: dados.acordo.parcelas || '1',
-                dataUltimaParcela: dados.acordo.dataPagamento || '',
+                dataPrimeiraParcela: dateForInput,
                 fgtsLiberado: false,
                 seguroDesemprego: false,
               };
@@ -518,7 +526,10 @@ export default function AtaAudienciaPage() {
               vara: ata.vara,
               valorAcordo: valor,
               parcelas: parseInt(form.parcelas || '1'),
-              dataUltimaParcela: form.dataUltimaParcela,
+              dataPrimeiraParcela: form.dataPrimeiraParcela ? (() => {
+                const p = form.dataPrimeiraParcela.split('-');
+                return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : form.dataPrimeiraParcela;
+              })() : '',
               fgtsLiberado: form.fgtsLiberado,
               seguroDesemprego: form.seguroDesemprego,
               advogado: '',
@@ -546,7 +557,7 @@ export default function AtaAudienciaPage() {
   const updateAcordoForm = (ataId: string, field: keyof AcordoForm, value: any) => {
     setAcordoForms(prev => ({
       ...prev,
-      [ataId]: { ...(prev[ataId] || { valorAcordo: '', parcelas: '1', dataUltimaParcela: '', fgtsLiberado: false, seguroDesemprego: false }), [field]: value },
+      [ataId]: { ...(prev[ataId] || { valorAcordo: '', parcelas: '1', dataPrimeiraParcela: '', fgtsLiberado: false, seguroDesemprego: false }), [field]: value },
     }));
   };
 
@@ -921,11 +932,11 @@ export default function AtaAudienciaPage() {
                             />
                           </div>
                           <div>
-                            <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '0.25rem' }}>DATA ÚLTIMA PARCELA</label>
+                            <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '0.25rem' }}>DATA 1ª PARCELA</label>
                             <input
                               type="date"
-                              value={form.dataUltimaParcela}
-                              onChange={e => updateAcordoForm(ata.id, 'dataUltimaParcela', e.target.value)}
+                              value={form.dataPrimeiraParcela}
+                              onChange={e => updateAcordoForm(ata.id, 'dataPrimeiraParcela', e.target.value)}
                               style={{ width: '100%', padding: '0.5rem', borderRadius: '0.5rem', border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
                             />
                           </div>
