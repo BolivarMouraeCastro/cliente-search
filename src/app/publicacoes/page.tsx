@@ -285,18 +285,30 @@ function extrairPartesAta(texto: string): { reclamante: string; reclamada: strin
 
   // Reclamada extraction
   const recdaPatterns = [
+    // "RECLAMADO(A): NOME..." — stop at ATA, Processo, etc.
+    /reclamad[oa]\s*\(?[ao]?\)?\s*[:\s]+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ\s.&\-\/]+?)(?:\s*(?:ATA\s+DE|E\s+OUTROS|\.\s|\n|Processo|CNPJ|pagará))/i,
     /reclamad[ao][:\s]+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ\s.&]+?)(?:\s*(?:\.|Processo|autos|vara|CNPJ|,\s*inscrit|pagará|\n))/i,
     /r[ée]u?[:\s]+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ\s.&]+?)(?:\s*(?:\.|Processo|CNPJ|\n))/i,
-    // "EMPRESA LTDA" or "EMPRESA S/A" or "EMPRESA S.A" patterns
+    // "EMPRESA LTDA" or "EMPRESA S/A" patterns
     /(?:x|vs?\.?)\s+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ\s.&\/]+?(?:LTDA|S\.?A\.?|EIRELI|ME|EPP|LTDA\.))/i,
   ];
   for (const p of recdaPatterns) {
     const m = texto.match(p);
-    if (m && m[1].trim().length > 3) { reclamada = m[1].trim().replace(/\s+/g, ' '); break; }
+    if (m && m[1].trim().length > 3) {
+      reclamada = m[1].trim().replace(/\s+/g, ' ').replace(/\s*-\s*$/, '');
+      break;
+    }
   }
 
-  const varaMatch = texto.match(/(\d+[ªa]\s*Vara\s+(?:do\s+)?Trabalho[^,\n]*)/i);
-  if (varaMatch) vara = varaMatch[1].trim();
+  // Extract vara — stop at common boundaries (ATOrd, ATSum, Processo, RECLAMANTE, etc.)
+  const varaMatch = texto.match(/(\d+[ªa]\s*Vara\s+(?:do\s+)?Trabalho\s+de\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇa-záéíóúâêôãõç\s]+?)(?:\s+AT|,|\s+Processo|\s+RECLAMANTE|\s+\d{7}|\s+Ato)/i);
+  if (varaMatch) {
+    vara = varaMatch[1].trim().replace(/\s+/g, ' ');
+  } else {
+    // Fallback: just capture "Xª Vara do Trabalho de CIDADE"
+    const varaSimple = texto.match(/(\d+[ªa]\s*Vara\s+(?:do\s+)?Trabalho\s+(?:de\s+)?[A-ZÁÉÍÓÚÂÊÔÃÕÇa-záéíóúâêôãõç]+(?:\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇa-záéíóúâêôãõç]+)?)/i);
+    if (varaSimple) vara = varaSimple[1].trim().replace(/\s+/g, ' ');
+  }
 
   return { reclamante, reclamada, processo, vara };
 }
