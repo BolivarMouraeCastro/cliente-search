@@ -352,6 +352,16 @@ function saveProcessado(id: string) {
   const m = getProcessados(); m[id] = true;
   localStorage.setItem('ata_processados', JSON.stringify(m));
 }
+function getConcluidos(): Record<string, boolean> {
+  if (typeof window === 'undefined') return {};
+  try { return JSON.parse(localStorage.getItem('ata_concluidos') || '{}'); } catch { return {}; }
+}
+function toggleConcluido(id: string): boolean {
+  const m = getConcluidos();
+  m[id] = !m[id];
+  localStorage.setItem('ata_concluidos', JSON.stringify(m));
+  return m[id];
+}
 
 // ── Component ─────────────────────────────────────────────────────────
 export default function AtaAudienciaPage() {
