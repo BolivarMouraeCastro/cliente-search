@@ -196,7 +196,7 @@ function extrairDadosAta(texto: string, classificacoes: string[]): Partial<AtaIt
   // Extract acordo value — from the CONCILIAÇÃO: section specifically
   if (isAcordo) {
     // Find the CONCILIAÇÃO: section and extract from there
-    const concMatch = texto.match(/CONCILIA[CÇ][AÃ]O\s*:(.*?)(?:documento assinado|faculta-se|cumprido o acordo|DISCRIMINA[CÇ][AÃ]O|$)/is);
+    const concMatch = texto.match(/CONCILIA[CÇ][AÃ]O\s*:([\s\S]*?)(?:documento assinado|faculta-se|cumprido o acordo|DISCRIMINA[CÇ][AÃ]O|$)/i);
     const concSection = concMatch ? concMatch[1] : texto;
     
     // Extract R$ value from conciliação section
