@@ -38,29 +38,38 @@ function classificarAta(texto: string): string[] {
   const classes: string[] = [];
 
   // ACORDO — STRICT detection
-  // Must have "CONCILIAÇÃO:" as a section header with "pagará" in nearby text,
-  // OR "acordo homologado" / "homologo o acordo" / "transação homologada"
+  // Detect real agreements using multiple reliable signals
   const isRealAcordo = (() => {
-    // Pattern 1: "CONCILIAÇÃO:" (uppercase section header) + "pagará" nearby
+    // STRONG SIGNAL: Bank account of the law firm (always present in acordos)
+    if (t.includes('19225822-2') || t.includes('19225822') || t.includes('bolivar, moura e castro')) return true;
+    
+    // Pattern 1: "CONCILIAÇÃO:" section header + "pagará" + R$ nearby
     const concIdx = original.search(/CONCILIA[CÇ][AÃ]O\s*:/i);
     if (concIdx >= 0) {
-      // Check for "pagará" within 500 chars after CONCILIAÇÃO:
       const afterConc = original.substring(concIdx, concIdx + 500).toLowerCase();
       if (afterConc.includes('pagar') && /r\$/.test(afterConc)) return true;
     }
-    // Pattern 2: "homologo o acordo" / "acordo homologado" / "transação homologada"
+    
+    // Pattern 2: "composição" + "acordo" + R$ (like THAIS case)
+    if ((t.includes('composicao') || t.includes('composicoes')) && 
+        (t.includes('acordo') || t.includes('quitacao')) && t.includes('r$')) return true;
+    
+    // Pattern 3: "homologo o acordo" / "acordo homologado" / "transação homologada"
     if (/homologo\s+o\s+acordo|acordo\s+homologado|transa[cç][aã]o\s+homologada/i.test(t)) return true;
-    // Pattern 3: "as partes transacionam" / "celebram acordo"
-    if (/partes\s+transacion|celebra[mr]\s+acordo/i.test(t)) return true;
+    
+    // Pattern 4: "as partes transacionam" / "celebram acordo" / "registram que o acordo"
+    if (/partes\s+transacion|celebra[mr]\s+acordo|registram\s+que\s+o\s+acordo/i.test(t)) return true;
+    
     return false;
   })();
 
-  // If "instrução processual encerrada" or "razões finais" is present,
-  // it means there was a hearing, NOT an acordo — override
-  const hasInstrucao = t.includes('instrucao processual') || t.includes('encerrada a instrucao') || t.includes('fica encerrada a instrucao');
-  const hasRazoes = t.includes('razoes finais');
+  // If "instrução processual encerrada" AND "razões finais" together,
+  // it means there was a hearing with deadline, NOT an acordo
+  const hasInstrucaoAndRazoes = 
+    (t.includes('encerrada a instrucao') || t.includes('fica encerrada a instrucao')) && 
+    t.includes('razoes finais');
 
-  if (isRealAcordo && !hasInstrucao && !hasRazoes) {
+  if (isRealAcordo && !hasInstrucaoAndRazoes) {
     classes.push('ACORDO');
   }
 
@@ -170,12 +179,12 @@ function extrairDadosAta(texto: string, classificacoes: string[]): Partial<AtaIt
 
   // Extract réplica prazo — ONLY if NOT acordo
   if (!isAcordo) {
-    // Pattern 1: "prazo de X dias para réplica/razões"
-    const replicaMatch = texto.match(/prazo\s+(?:de\s+)?(\d+)\s*(?:dias?)?\s*(?:para|para\s+(?:réplica|replica|razões|razoes|manifestação))/i);
+    // Pattern 1: "prazo de X dias para réplica/razões/manifestação" (MUST have specific keyword after 'para')
+    const replicaMatch = texto.match(/prazo\s+(?:de\s+)?(\d+)\s*dias?\s+para\s+(?:réplica|replica|razões|razoes|manifestação|manifestacao|contrarrazões|contrarrazoes)/i);
     // Pattern 2: "razões finais no prazo de X dias"
     const razoesMatch = texto.match(/raz[õo]es\s+finais\s+(?:no\s+)?prazo\s+(?:de\s+)?(\d+)\s*dias?/i);
     // Pattern 3: "prazo de X dias" right after "instrução encerrada" (implied razões finais)
-    const prazoMatch = texto.match(/(?:encerrada\s+a\s+instrução|instrução\s+processual)[^.]*?prazo\s+(?:de\s+)?(\d+)\s*dias?/i);
+    const prazoMatch = texto.match(/(?:encerrada\s+a\s+instrução|instrução\s+processual)[\s\S]{0,100}?prazo\s+(?:de\s+)?(\d+)\s*dias?/i);
     
     const days = replicaMatch?.[1] || razoesMatch?.[1] || prazoMatch?.[1];
     if (days) {
@@ -195,8 +204,8 @@ function extrairDadosAta(texto: string, classificacoes: string[]): Partial<AtaIt
 
   // Extract acordo value — from the CONCILIAÇÃO: section specifically
   if (isAcordo) {
-    // Find the CONCILIAÇÃO: section and extract from there
-    const concMatch = texto.match(/CONCILIA[CÇ][AÃ]O\s*:([\s\S]*?)(?:documento assinado|faculta-se|cumprido o acordo|DISCRIMINA[CÇ][AÃ]O|$)/i);
+    // Find the CONCILIAÇÃO: or composição section and extract from there
+    const concMatch = texto.match(/(?:CONCILIA[CÇ][AÃ]O\s*:|composi[cç][aã]o[,.]?\s+nos\s+seguintes|alcancaram\s+uma\s+composi[cç][aã]o)([\s\S]*?)(?:documento assinado|faculta-se|cumprido o acordo|DISCRIMINA[CÇ][AÃ]O|Cientes\s+as\s+partes|$)/i);
     const concSection = concMatch ? concMatch[1] : texto;
     
     // Extract R$ value from conciliação section
