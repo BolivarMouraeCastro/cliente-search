@@ -1,8 +1,6 @@
 import { getSheetsService } from '@/lib/google-auth';
 
-const SPREADSHEET_ID =
-  process.env.HEARINGS_SPREADSHEET_ID ??
-  '1eXJz8UCQImJIqaEHe8V8cwuuJ0YkABviUzz7wOQdFVA';
+const SPREADSHEET_ID = '11ni1pXu0QbPQ_QmMGxdqdT4PsDNz6Z0ITBUW-E1ogMM';
 
 const ACORDO_TAB = 'ACORDO';
 
