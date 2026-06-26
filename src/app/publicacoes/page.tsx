@@ -21,6 +21,7 @@ interface AtaItem {
   pdfName: string;
   pdfId: string;
   processado: boolean;
+  folderDate: string; // "25.06.2026" or "Sem Pasta"
 }
 
 interface AcordoForm {
@@ -347,6 +348,8 @@ export default function AtaAudienciaPage() {
   const [acordoForms, setAcordoForms] = useState<Record<string, AcordoForm>>({});
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
+  const [availableDates, setAvailableDates] = useState<string[]>([]);
+  const [selectedDate, setSelectedDate] = useState<string>('TODAS');
 
   const loadAtas = useCallback(async () => {
     setLoading(true); setError('');
@@ -354,58 +357,71 @@ export default function AtaAudienciaPage() {
       const res = await fetch('/api/publicacoes');
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Erro'); return; }
-      if (!data.pdfs || data.pdfs.length === 0) { setError('Nenhum PDF de ATA encontrado na pasta do Drive.'); return; }
+      
+      // New folder-based API response
+      const folders = data.folders || [];
+      if (folders.length === 0) { setError('Nenhuma pasta de data encontrada no Drive.'); return; }
 
       const processados = getProcessados();
       const allAtas: AtaItem[] = [];
       const acordoFormsInit: Record<string, AcordoForm> = {};
+      const dates: string[] = [];
 
-      for (const pdf of data.pdfs) {
-        const binary = atob(pdf.base64);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        const text = await extractTextFromPDF(bytes.buffer);
-        if (text.trim().length < 30) continue;
+      for (const folder of folders) {
+        dates.push(folder.folderName);
+        
+        for (const pdf of folder.pdfs) {
+          const binary = atob(pdf.base64);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          const text = await extractTextFromPDF(bytes.buffer);
+          if (text.trim().length < 30) continue;
 
-        // 1 PDF = 1 ATA (no splitting — each document is a single ATA)
-        const classificacoes = classificarAta(text);
-        const partes = extrairPartesAta(text);
-        const dados = extrairDadosAta(text, classificacoes);
-        const ataId = pdf.id;
+          // 1 PDF = 1 ATA (no splitting — each document is a single ATA)
+          const classificacoes = classificarAta(text);
+          const partes = extrairPartesAta(text);
+          const dados = extrairDadosAta(text, classificacoes);
+          const ataId = pdf.id;
 
-        allAtas.push({
-          id: ataId,
-          reclamante: partes.reclamante,
-          reclamada: partes.reclamada,
-          processo: partes.processo,
-          vara: partes.vara,
-          descricaoCompleta: text.substring(0, 2000),
-          classificacoes,
-          proximaAudiencia: dados.proximaAudiencia,
-          prazoReplica: dados.prazoReplica,
-          prazoPericia: dados.prazoPericia,
-          acordo: dados.acordo,
-          julgamento: dados.julgamento,
-          pdfName: pdf.name || 'ATA',
-          pdfId: pdf.id,
-          processado: processados[ataId] === true,
-        });
+          allAtas.push({
+            id: ataId,
+            reclamante: partes.reclamante,
+            reclamada: partes.reclamada,
+            processo: partes.processo,
+            vara: partes.vara,
+            descricaoCompleta: text.substring(0, 2000),
+            classificacoes,
+            proximaAudiencia: dados.proximaAudiencia,
+            prazoReplica: dados.prazoReplica,
+            prazoPericia: dados.prazoPericia,
+            acordo: dados.acordo,
+            julgamento: dados.julgamento,
+            pdfName: pdf.name || 'ATA',
+            pdfId: pdf.id,
+            processado: processados[ataId] === true,
+            folderDate: folder.folderName,
+          });
 
-        // Pre-fill acordo form with extracted value, date, and parcelas
-        if (dados.acordo?.textoAcordo) {
-          const valMatch = dados.acordo.textoAcordo.match(/R\$\s*([\d.,]+)/);
-          if (valMatch) {
-            acordoFormsInit[ataId] = {
-              valorAcordo: valMatch[1],
-              parcelas: dados.acordo.parcelas || '1',
-              dataUltimaParcela: dados.acordo.dataPagamento || '',
-              fgtsLiberado: false,
-              seguroDesemprego: false,
-            };
+          // Pre-fill acordo form with extracted value, date, and parcelas
+          if (dados.acordo?.textoAcordo) {
+            const valMatch = dados.acordo.textoAcordo.match(/R\$\s*([\d.,]+)/);
+            if (valMatch) {
+              acordoFormsInit[ataId] = {
+                valorAcordo: valMatch[1],
+                parcelas: dados.acordo.parcelas || '1',
+                dataUltimaParcela: dados.acordo.dataPagamento || '',
+                fgtsLiberado: false,
+                seguroDesemprego: false,
+              };
+            }
           }
         }
       }
 
+      setAvailableDates(dates);
+      if (dates.length > 0 && selectedDate === 'TODAS') {
+        setSelectedDate(dates[0]); // Auto-select the most recent date
+      }
       if (allAtas.length === 0) setError('PDFs encontrados, mas nenhuma ATA de audiência reconhecida.');
       setAtas(allAtas);
       if (Object.keys(acordoFormsInit).length > 0) setAcordoForms(acordoFormsInit);
@@ -498,13 +514,38 @@ export default function AtaAudienciaPage() {
   };
 
   // ── Filtered ATAs ──────────────────────────────────────────────────
-  const filteredAtas = filterClass === 'TODOS'
+  const dateFilteredAtas = selectedDate === 'TODAS'
     ? atas
-    : atas.filter(a => a.classificacoes.includes(filterClass));
+    : atas.filter(a => a.folderDate === selectedDate);
 
-  const classCount = (c: string) => atas.filter(a => a.classificacoes.includes(c)).length;
+  const filteredAtas = filterClass === 'TODOS'
+    ? dateFilteredAtas
+    : dateFilteredAtas.filter(a => a.classificacoes.includes(filterClass));
 
-  // ── Render ─────────────────────────────────────────────────────────
+  const classCount = (c: string) => dateFilteredAtas.filter(a => a.classificacoes.includes(c)).length;
+
+  // Format folder date for display: "25.06.2026" -> "25 Jun"
+  const formatDateTab = (folderName: string) => {
+    if (folderName === 'Sem Pasta') return 'Sem Data';
+    const parts = folderName.split('.');
+    if (parts.length !== 3) return folderName;
+    const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    const day = parts[0];
+    const monthIdx = parseInt(parts[1]) - 1;
+    return `${day} ${months[monthIdx] || parts[1]}`;
+  };
+
+  // Get weekday name
+  const getWeekday = (folderName: string) => {
+    if (folderName === 'Sem Pasta') return '';
+    const parts = folderName.split('.');
+    if (parts.length !== 3) return '';
+    const date = new Date(+parts[2], +parts[1] - 1, +parts[0]);
+    const days = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+    return days[date.getDay()];
+  };
+
+  // ── Render ───────────────────────────────────────────────────────
   return (
     <div className="main-content" style={{ padding: '1.5rem' }}>
       <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -521,11 +562,82 @@ export default function AtaAudienciaPage() {
         </div>
       )}
 
-      {/* Filter Bar */}
-      {!loading && atas.length > 0 && (
+      {/* Date Calendar Tabs */}
+      {!loading && availableDates.length > 0 && (
+        <div style={{ marginBottom: '1.25rem' }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
+            📅 Data da ATA
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'stretch' }}>
+            {/* "Todas" button */}
+            <button
+              onClick={() => setSelectedDate('TODAS')}
+              style={{
+                padding: '0.5rem 1rem',
+                borderRadius: '0.75rem',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                border: '1px solid',
+                borderColor: selectedDate === 'TODAS' ? '#d4af37' : 'var(--border-color)',
+                background: selectedDate === 'TODAS' ? 'rgba(212,175,55,0.15)' : 'rgba(14,14,20,0.5)',
+                color: selectedDate === 'TODAS' ? '#d4af37' : 'var(--text-muted)',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                minWidth: '64px',
+              }}
+            >
+              <span>Todas</span>
+              <span style={{ fontSize: '0.65rem', opacity: 0.7 }}>{atas.length} ATAs</span>
+            </button>
+
+            {availableDates.map(date => {
+              const count = atas.filter(a => a.folderDate === date).length;
+              const isSelected = selectedDate === date;
+              return (
+                <button
+                  key={date}
+                  onClick={() => setSelectedDate(date)}
+                  style={{
+                    padding: '0.5rem 0.75rem',
+                    borderRadius: '0.75rem',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    border: '2px solid',
+                    borderColor: isSelected ? '#d4af37' : 'var(--border-color)',
+                    background: isSelected
+                      ? 'linear-gradient(135deg, rgba(212,175,55,0.2), rgba(197,160,89,0.1))'
+                      : 'rgba(14,14,20,0.5)',
+                    color: isSelected ? '#f3e5ab' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center',
+                    minWidth: '64px',
+                    position: 'relative',
+                    boxShadow: isSelected ? '0 0 12px rgba(212,175,55,0.2)' : 'none',
+                  }}
+                >
+                  <span style={{ fontSize: '0.6rem', textTransform: 'uppercase', opacity: 0.6, marginBottom: '2px' }}>
+                    {getWeekday(date)}
+                  </span>
+                  <span style={{ fontSize: '0.95rem', fontWeight: 800 }}>
+                    {formatDateTab(date)}
+                  </span>
+                  <span style={{ fontSize: '0.6rem', opacity: 0.6, marginTop: '2px' }}>
+                    {count} {count === 1 ? 'ata' : 'atas'}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Classification Filter Bar */}
+      {!loading && dateFilteredAtas.length > 0 && (
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
           {[
-            { key: 'TODOS', label: 'Todos', count: atas.length },
+            { key: 'TODOS', label: 'Todos', count: dateFilteredAtas.length },
             { key: 'RÉPLICA', label: '📝 Réplica', count: classCount('RÉPLICA') },
             { key: 'PERÍCIA', label: '🔬 Perícia', count: classCount('PERÍCIA') },
             { key: 'JULGAMENTO', label: '⚖️ Julgamento', count: classCount('JULGAMENTO') },

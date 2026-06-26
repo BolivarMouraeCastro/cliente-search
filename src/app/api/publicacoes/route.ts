@@ -16,39 +16,120 @@ export async function GET() {
 
     const drive = getDriveService(accessToken);
 
-    // List all PDF files in the publications folder
-    const response = await drive.files.list({
+    // Step 1: List subfolders (date folders like "25.06.2026") inside the parent folder
+    const foldersResponse = await drive.files.list({
+      q: `'${PUBLICACOES_FOLDER_ID}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+      fields: 'files(id, name)',
+      pageSize: 100,
+      orderBy: 'name desc',
+    });
+
+    const dateFolders = foldersResponse.data.files || [];
+
+    // Step 2: Also list PDFs directly in the parent folder (legacy/ungrouped)
+    const directPdfsResponse = await drive.files.list({
       q: `'${PUBLICACOES_FOLDER_ID}' in parents and mimeType = 'application/pdf' and trashed = false`,
       fields: 'files(id, name, modifiedTime)',
       pageSize: 50,
       orderBy: 'modifiedTime desc',
     });
 
-    const files = response.data.files || [];
+    const directPdfs = directPdfsResponse.data.files || [];
 
-    // Download and return the content of each PDF as base64
-    const pdfs: { id: string; name: string; date: string; base64: string }[] = [];
+    // Step 3: For each date folder, list its PDFs
+    const folders: {
+      folderName: string;
+      folderId: string;
+      pdfs: { id: string; name: string; date: string; base64: string }[];
+    }[] = [];
 
-    for (const file of files) {
-      if (!file.id) continue;
-      try {
-        const fileResponse = await drive.files.get(
-          { fileId: file.id, alt: 'media' },
-          { responseType: 'arraybuffer' }
-        );
-        const buffer = Buffer.from(fileResponse.data as ArrayBuffer);
-        pdfs.push({
-          id: file.id,
-          name: file.name || '',
-          date: file.modifiedTime || '',
-          base64: buffer.toString('base64'),
+    for (const folder of dateFolders) {
+      if (!folder.id || !folder.name) continue;
+
+      const pdfResponse = await drive.files.list({
+        q: `'${folder.id}' in parents and mimeType = 'application/pdf' and trashed = false`,
+        fields: 'files(id, name, modifiedTime)',
+        pageSize: 50,
+        orderBy: 'name asc',
+      });
+
+      const pdfFiles = pdfResponse.data.files || [];
+      const pdfs: { id: string; name: string; date: string; base64: string }[] = [];
+
+      for (const file of pdfFiles) {
+        if (!file.id) continue;
+        try {
+          const fileResponse = await drive.files.get(
+            { fileId: file.id, alt: 'media' },
+            { responseType: 'arraybuffer' }
+          );
+          const buffer = Buffer.from(fileResponse.data as ArrayBuffer);
+          pdfs.push({
+            id: file.id,
+            name: file.name || '',
+            date: file.modifiedTime || '',
+            base64: buffer.toString('base64'),
+          });
+        } catch (err) {
+          console.error(`Error downloading PDF ${file.name}:`, err);
+        }
+      }
+
+      if (pdfs.length > 0) {
+        folders.push({
+          folderName: folder.name,
+          folderId: folder.id,
+          pdfs,
         });
-      } catch (err) {
-        console.error(`Error downloading PDF ${file.name}:`, err);
       }
     }
 
-    return NextResponse.json({ pdfs, total: pdfs.length });
+    // Step 4: If there are direct PDFs (not in date folders), add them as "Sem Pasta"
+    if (directPdfs.length > 0) {
+      const pdfs: { id: string; name: string; date: string; base64: string }[] = [];
+      for (const file of directPdfs) {
+        if (!file.id) continue;
+        try {
+          const fileResponse = await drive.files.get(
+            { fileId: file.id, alt: 'media' },
+            { responseType: 'arraybuffer' }
+          );
+          const buffer = Buffer.from(fileResponse.data as ArrayBuffer);
+          pdfs.push({
+            id: file.id,
+            name: file.name || '',
+            date: file.modifiedTime || '',
+            base64: buffer.toString('base64'),
+          });
+        } catch (err) {
+          console.error(`Error downloading PDF ${file.name}:`, err);
+        }
+      }
+      if (pdfs.length > 0) {
+        folders.push({
+          folderName: 'Sem Pasta',
+          folderId: 'direct',
+          pdfs,
+        });
+      }
+    }
+
+    // Sort folders by date (newest first) — parse folder name as dd.mm.yyyy
+    folders.sort((a, b) => {
+      if (a.folderName === 'Sem Pasta') return 1;
+      if (b.folderName === 'Sem Pasta') return -1;
+      const partsA = a.folderName.split('.');
+      const partsB = b.folderName.split('.');
+      if (partsA.length === 3 && partsB.length === 3) {
+        const dateA = new Date(+partsA[2], +partsA[1] - 1, +partsA[0]);
+        const dateB = new Date(+partsB[2], +partsB[1] - 1, +partsB[0]);
+        return dateB.getTime() - dateA.getTime();
+      }
+      return b.folderName.localeCompare(a.folderName);
+    });
+
+    const totalPdfs = folders.reduce((sum, f) => sum + f.pdfs.length, 0);
+    return NextResponse.json({ folders, total: totalPdfs });
   } catch (err) {
     console.error('Publicacoes API error:', err);
     return NextResponse.json(
