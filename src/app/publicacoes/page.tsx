@@ -21,6 +21,7 @@ interface AtaItem {
   pdfName: string;
   pdfId: string;
   processado: boolean;
+  concluido: boolean;
   folderDate: string; // "25.06.2026" or "Sem Pasta"
 }
 
@@ -383,6 +384,7 @@ export default function AtaAudienciaPage() {
       if (folders.length === 0) { setError('Nenhum PDF de ATA encontrado na pasta do Drive. Crie subpastas com datas (ex: 25.06.2026) e coloque os PDFs dentro.'); return; }
 
       const processados = getProcessados();
+      const concluidos = getConcluidos();
       const allAtas: AtaItem[] = [];
       const acordoFormsInit: Record<string, AcordoForm> = {};
       const dates: string[] = [];
@@ -419,6 +421,7 @@ export default function AtaAudienciaPage() {
             pdfName: pdf.name || 'ATA',
             pdfId: pdf.id,
             processado: processados[ataId] === true,
+            concluido: concluidos[ataId] === true,
             folderDate: folder.folderName,
           });
 
@@ -711,12 +714,12 @@ export default function AtaAudienciaPage() {
               <div
                 key={ata.id}
                 style={{
-                  background: 'var(--card-bg)',
+                  background: ata.concluido ? 'rgba(220,38,38,0.04)' : 'var(--card-bg)',
                   borderRadius: '1rem',
-                  border: '1px solid var(--border-color)',
+                  border: ata.concluido ? '1px solid rgba(220,38,38,0.3)' : '1px solid var(--border-color)',
                   overflow: 'hidden',
                   transition: 'all 0.2s',
-                  opacity: ata.processado ? 0.6 : 1,
+                  opacity: ata.concluido ? 0.5 : (ata.processado ? 0.7 : 1),
                 }}
               >
                 {/* Header */}
@@ -726,8 +729,10 @@ export default function AtaAudienciaPage() {
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        {ata.reclamante || 'Reclamante não identificado'}
+                      <div style={{ fontWeight: 700, fontSize: '0.95rem', color: ata.concluido ? '#ef4444' : 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ textDecoration: ata.concluido ? 'line-through' : 'none' }}>
+                          {ata.reclamante || 'Reclamante não identificado'}
+                        </span>
                         <a
                           href={`https://drive.google.com/file/d/${ata.pdfId}/view`}
                           target="_blank"
@@ -755,7 +760,24 @@ export default function AtaAudienciaPage() {
                         </div>
                       )}
                     </div>
-                    <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center' }}>
+                      {/* Concluir button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const newState = toggleConcluido(ata.id);
+                          setAtas(prev => prev.map(a => a.id === ata.id ? { ...a, concluido: newState } : a));
+                        }}
+                        style={{
+                          fontSize: '0.65rem', padding: '2px 10px', borderRadius: '1rem',
+                          fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s',
+                          border: ata.concluido ? '1px solid rgba(16,185,129,0.3)' : '1px solid rgba(220,38,38,0.3)',
+                          background: ata.concluido ? 'rgba(16,185,129,0.12)' : 'rgba(220,38,38,0.1)',
+                          color: ata.concluido ? '#10b981' : '#ef4444',
+                        }}
+                      >
+                        {ata.concluido ? '↩ Reabrir' : '✓ Concluir'}
+                      </button>
                       {ata.classificacoes.map(c => {
                         const b = getClassBadge(c);
                         return (
@@ -767,6 +789,11 @@ export default function AtaAudienciaPage() {
                       {ata.processado && (
                         <span style={{ fontSize: '0.65rem', padding: '2px 8px', borderRadius: '1rem', background: 'rgba(16,185,129,0.15)', color: '#10b981', fontWeight: 600 }}>
                           ✅ Processado
+                        </span>
+                      )}
+                      {ata.concluido && (
+                        <span style={{ fontSize: '0.65rem', padding: '2px 8px', borderRadius: '1rem', background: 'rgba(220,38,38,0.15)', color: '#ef4444', fontWeight: 600 }}>
+                          🔴 Concluído
                         </span>
                       )}
                     </div>
