@@ -726,8 +726,28 @@ export default function AtaAudienciaPage() {
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
+                      <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         {ata.reclamante || 'Reclamante não identificado'}
+                        <a
+                          href={`https://drive.google.com/file/d/${ata.pdfId}/view`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          title="Ver ATA original no Drive"
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '4px',
+                            fontSize: '0.65rem', fontWeight: 600,
+                            padding: '2px 8px', borderRadius: '0.5rem',
+                            background: 'rgba(59,130,246,0.1)', color: '#60a5fa',
+                            border: '1px solid rgba(59,130,246,0.2)',
+                            textDecoration: 'none',
+                            transition: 'all 0.2s',
+                            cursor: 'pointer',
+                            flexShrink: 0,
+                          }}
+                        >
+                          📥 Ver ATA
+                        </a>
                       </div>
                       {ata.reclamada && (
                         <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
