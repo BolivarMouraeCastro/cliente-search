@@ -87,8 +87,9 @@ export async function appendAcordo(
 
   await sheets.spreadsheets.values.append({
     spreadsheetId: SPREADSHEET_ID,
-    range: `${ACORDO_TAB}!A:M`,
-    valueInputOption: 'RAW',
+    range: `${ACORDO_TAB}!A:A`,
+    valueInputOption: 'USER_ENTERED',
+    insertDataOption: 'INSERT_ROWS',
     requestBody: { values: [row] },
   });
 

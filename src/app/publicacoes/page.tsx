@@ -77,6 +77,7 @@ function classificarAta(texto: string): string[] {
   // RÉPLICA / RAZÕES — NEVER when ACORDO (acordo = process ends, no reply needed)
   if (!classes.includes('ACORDO')) {
     if (t.includes('prazo para replica') || t.includes('prazo de replica') ||
+        t.includes('replica no prazo') || t.includes('replica em') ||
         t.includes('razoes finais') || t.includes('contrarrazoes') ||
         t.includes('prazo para manifestacao') || t.includes('manifeste-se') ||
         t.includes('prazo para razoes') || t.includes('impugnacao') ||
@@ -180,15 +181,28 @@ function extrairDadosAta(texto: string, classificacoes: string[]): Partial<AtaIt
 
   // Extract réplica prazo — ONLY if NOT acordo
   if (!isAcordo) {
-    // Pattern 1: "prazo de X dias para réplica/razões/manifestação" (MUST have specific keyword after 'para')
-    const replicaMatch = texto.match(/prazo\s+(?:de\s+)?(\d+)\s*dias?\s+para\s+(?:réplica|replica|razões|razoes|manifestação|manifestacao|contrarrazões|contrarrazoes)/i);
-    // Pattern 2: "razões finais no prazo de X dias"
-    const razoesMatch = texto.match(/raz[õo]es\s+finais\s+(?:no\s+)?prazo\s+(?:de\s+)?(\d+)\s*dias?/i);
-    // Pattern 3: "prazo de X dias" right after "instrução encerrada" (implied razões finais)
-    const prazoMatch = texto.match(/(?:encerrada\s+a\s+instrução|instrução\s+processual)[\s\S]{0,100}?prazo\s+(?:de\s+)?(\d+)\s*dias?/i);
+    // Helper: convert written numbers to digits
+    const writtenToNum: Record<string, string> = {
+      'um': '1', 'dois': '2', 'tres': '3', 'três': '3', 'quatro': '4',
+      'cinco': '5', 'seis': '6', 'sete': '7', 'oito': '8', 'nove': '9',
+      'dez': '10', 'onze': '11', 'doze': '12', 'treze': '13', 'quatorze': '14',
+      'quinze': '15', 'vinte': '20', 'trinta': '30',
+    };
+    const numPattern = '(?:\\d+|um|dois|tr[eê]s|quatro|cinco|seis|sete|oito|nove|dez|onze|doze|treze|quatorze|quinze|vinte|trinta)';
+    const parseNum = (val: string) => writtenToNum[val.toLowerCase()] || val;
     
-    const days = replicaMatch?.[1] || razoesMatch?.[1] || prazoMatch?.[1];
-    if (days) {
+    // Pattern 1: "prazo de X dias para réplica/razões" 
+    const replicaMatch = texto.match(new RegExp(`prazo\\s+(?:de\\s+)?(${numPattern})\\s*dias?\\s+para\\s+(?:réplica|replica|razões|razoes|manifestação|manifestacao|contrarrazões|contrarrazoes)`, 'i'));
+    // Pattern 2: "razões finais no prazo de X dias"
+    const razoesMatch = texto.match(new RegExp(`raz[õo]es\\s+finais\\s+(?:no\\s+)?prazo\\s+(?:de\\s+)?(${numPattern})\\s*dias?`, 'i'));
+    // Pattern 3: "Réplica no prazo de X dias" (LUCIANA case)
+    const replicaNoMatch = texto.match(new RegExp(`[Rr][ée]plica\\s+(?:no\\s+)?prazo\\s+(?:de\\s+)?(${numPattern})\\s*dias?`, 'i'));
+    // Pattern 4: "prazo de X dias" right after "instrução encerrada"
+    const prazoMatch = texto.match(new RegExp(`(?:encerrada\\s+a\\s+instrução|instrução\\s+processual)[\\s\\S]{0,100}?prazo\\s+(?:de\\s+)?(${numPattern})\\s*dias?`, 'i'));
+    
+    const rawDays = replicaMatch?.[1] || razoesMatch?.[1] || replicaNoMatch?.[1] || prazoMatch?.[1];
+    if (rawDays) {
+      const days = parseNum(rawDays);
       result.prazoReplica = { prazo: `${days} dias`, descricao: 'Prazo para réplica/razões finais' };
     }
   }
@@ -507,6 +521,10 @@ export default function AtaAudienciaPage() {
         const liquido = (valor * 0.30).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         setSuccessMsg(`✅ Acordo salvo! Bruto: ${bruto} | Líquido: ${liquido}`);
         setTimeout(() => setSuccessMsg(''), 5000);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        setSuccessMsg(`❌ Erro ao salvar acordo: ${errData.error || res.statusText}`);
+        setTimeout(() => setSuccessMsg(''), 6000);
       }
     } catch (err) { console.error(err); }
     finally { setProcessingId(null); }
@@ -568,74 +586,50 @@ export default function AtaAudienciaPage() {
         </div>
       )}
 
-      {/* Date Calendar Tabs */}
+      {/* Date Tabs - Simple pills */}
       {!loading && availableDates.length > 0 && (
-        <div style={{ marginBottom: '1.25rem' }}>
-          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
-            📅 Data da ATA
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'stretch' }}>
-            {/* "Todas" button */}
-            <button
-              onClick={() => setSelectedDate('TODAS')}
-              style={{
-                padding: '0.5rem 1rem',
-                borderRadius: '0.75rem',
-                fontSize: '0.8rem',
-                fontWeight: 600,
-                border: '1px solid',
-                borderColor: selectedDate === 'TODAS' ? '#d4af37' : 'var(--border-color)',
-                background: selectedDate === 'TODAS' ? 'rgba(212,175,55,0.15)' : 'rgba(14,14,20,0.5)',
-                color: selectedDate === 'TODAS' ? '#d4af37' : 'var(--text-muted)',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                minWidth: '64px',
-              }}
-            >
-              <span>Todas</span>
-              <span style={{ fontSize: '0.65rem', opacity: 0.7 }}>{atas.length} ATAs</span>
-            </button>
-
-            {availableDates.map(date => {
-              const count = atas.filter(a => a.folderDate === date).length;
-              const isSelected = selectedDate === date;
-              return (
-                <button
-                  key={date}
-                  onClick={() => setSelectedDate(date)}
-                  style={{
-                    padding: '0.5rem 0.75rem',
-                    borderRadius: '0.75rem',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    border: '2px solid',
-                    borderColor: isSelected ? '#d4af37' : 'var(--border-color)',
-                    background: isSelected
-                      ? 'linear-gradient(135deg, rgba(212,175,55,0.2), rgba(197,160,89,0.1))'
-                      : 'rgba(14,14,20,0.5)',
-                    color: isSelected ? '#f3e5ab' : 'var(--text-secondary)',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center',
-                    minWidth: '64px',
-                    position: 'relative',
-                    boxShadow: isSelected ? '0 0 12px rgba(212,175,55,0.2)' : 'none',
-                  }}
-                >
-                  <span style={{ fontSize: '0.6rem', textTransform: 'uppercase', opacity: 0.6, marginBottom: '2px' }}>
-                    {getWeekday(date)}
-                  </span>
-                  <span style={{ fontSize: '0.95rem', fontWeight: 800 }}>
-                    {formatDateTab(date)}
-                  </span>
-                  <span style={{ fontSize: '0.6rem', opacity: 0.6, marginTop: '2px' }}>
-                    {count} {count === 1 ? 'ata' : 'atas'}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '1rem', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginRight: '0.25rem' }}>📅</span>
+          <button
+            onClick={() => setSelectedDate('TODAS')}
+            style={{
+              padding: '0.35rem 0.75rem',
+              borderRadius: '2rem',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              border: 'none',
+              background: selectedDate === 'TODAS' ? '#d4af37' : 'rgba(255,255,255,0.06)',
+              color: selectedDate === 'TODAS' ? '#0a0a0f' : 'var(--text-muted)',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+            }}
+          >
+            Todas ({atas.length})
+          </button>
+          {availableDates.map(date => {
+            const count = atas.filter(a => a.folderDate === date).length;
+            const isSelected = selectedDate === date;
+            const label = date === 'Sem Pasta' ? 'Sem Data' : date.replace(/\.(\d{4})$/, '');
+            return (
+              <button
+                key={date}
+                onClick={() => setSelectedDate(date)}
+                style={{
+                  padding: '0.35rem 0.75rem',
+                  borderRadius: '2rem',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  border: 'none',
+                  background: isSelected ? '#d4af37' : 'rgba(255,255,255,0.06)',
+                  color: isSelected ? '#0a0a0f' : 'var(--text-muted)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+              >
+                {label} ({count})
+              </button>
+            );
+          })}
         </div>
       )}
 
