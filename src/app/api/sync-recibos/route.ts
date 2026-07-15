@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { getClients, writeProcessNumber, updateClientStatus, searchClients } from "@/lib/sheets";
+// @ts-ignore
 import pdf from "pdf-parse";
 
 // Evita que o Next.js faça cache agressivo desta rota
