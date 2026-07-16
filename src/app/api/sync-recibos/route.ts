@@ -6,106 +6,109 @@ import { getClients, writeProcessNumber, updateClientStatus, searchClients } fro
 import pdf from "pdf-parse";
 
 export const dynamic = "force-dynamic";
-// Aumenta o timeout para 60 segundos (máximo Vercel Pro)
 export const maxDuration = 60;
 
 const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID ?? "";
 
-// IDs das pastas de "Distribuídos" onde os recibos ficam
-// Inclui TODAS as subpastas: #avisar audiencia, #SO MANDAR EMAIL, não jogar, etc.
-const DISTRIBUIDOS_PARENT_IDS = [
-  '16HzOQdcORS4vwPaaVDSEh7nZEVOOMhkE',
-  '1DfJ7CZIHw4kEfGM7ooVdW1nH-YeEgvEx',
-  '1yyO-0H6-DJc6p4mx_ez3JhRJTRb-HoYD',
-  '1ByXb7PttqXCrlkINlDSN23SRkG5lw4Mv',
-  '1204Yh3nKmJY80xY4jG5imJSjMoBcjn2q'
-];
-
 /**
- * Busca recursiva de TODOS os IDs de subpastas dentro das pastas de Distribuídos.
- * Isso garante que subpastas como "#avisar audiencia", "#SO MANDAR EMAIL",
- * "não jogar" sejam incluídas na busca.
+ * Busca TODOS os PDFs com "RECIBO" no nome em TODO o Drive (incluindo Shared Drives),
+ * criados no ano especificado, com paginação completa.
+ * Isso garante que nenhuma subpasta seja ignorada, independente do nome:
+ * "#AVISAR AUDIÊNCIA", "##AVISADO DA AUDIÊNCIA (OK)", "#SÓ MANDAR EMAIL",
+ * "#SÓ PLANILHAR", "não jogar", etc.
  */
-async function getAllSubfolderIds(accessToken: string, parentIds: string[]): Promise<string[]> {
-  const allIds = [...parentIds];
-  const queue = [...parentIds];
+async function fetchAllRecibosGlobal(accessToken: string, year: string): Promise<any[]> {
+  let allFiles: any[] = [];
+  let pageToken: string | undefined = undefined;
 
-  while (queue.length > 0) {
-    const currentId = queue.shift()!;
+  const q = `name contains 'RECIBO' and mimeType = 'application/pdf' and trashed = false and createdTime >= '${year}-01-01T00:00:00' and createdTime < '${parseInt(year) + 1}-01-01T00:00:00'`;
+
+  do {
+    const params = new URLSearchParams({
+      q,
+      fields: 'nextPageToken, files(id, name, parents, createdTime)',
+      pageSize: '1000',
+      orderBy: 'createdTime desc',
+      supportsAllDrives: 'true',
+      includeItemsFromAllDrives: 'true',
+      corpora: 'allDrives',
+    });
+    if (pageToken) params.append('pageToken', pageToken);
+
     try {
-      const q = `'${currentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
-      const params = new URLSearchParams({
-        q,
-        fields: 'files(id, name)',
-        pageSize: '1000',
-        supportsAllDrives: 'true',
-        includeItemsFromAllDrives: 'true'
-      });
-
       const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
-        headers: { Authorization: `Bearer ${accessToken}` }
+        headers: { Authorization: `Bearer ${accessToken}` },
+        signal: AbortSignal.timeout(12000),
       });
 
       if (res.ok) {
         const data = await res.json();
-        for (const folder of (data.files || [])) {
-          allIds.push(folder.id);
-          queue.push(folder.id); // Busca recursiva nas subpastas
-        }
+        if (data.files) allFiles = allFiles.concat(data.files);
+        pageToken = data.nextPageToken;
+      } else {
+        console.error('Drive search failed:', await res.text());
+        pageToken = undefined;
       }
     } catch (e) {
-      // Ignora erros de subpastas individuais
+      console.error('Drive search error:', e);
+      pageToken = undefined;
     }
-  }
+  } while (pageToken);
 
-  return allIds;
+  return allFiles;
 }
 
 /**
- * Busca TODOS os PDFs com "RECIBO" no nome dentro de uma lista de pastas,
- * com paginação completa (sem perder arquivos).
+ * Sobe na hierarquia de pastas para encontrar o nome do cliente.
+ * Tenta subir até 3 níveis para pegar o nome correto,
+ * ignorando subpastas como "#AVISAR AUDIÊNCIA", "#SÓ MANDAR EMAIL", etc.
  */
-async function fetchAllRecibos(accessToken: string, folderIds: string[], yearFilter: string): Promise<any[]> {
-  let allFiles: any[] = [];
+async function getClientFolderName(accessToken: string, fileParentId: string): Promise<string> {
+  const SUBFOLDERS_TO_SKIP = [
+    '#avisar audiência', '#avisar audiencia',
+    '##avisado da audiência (ok)', '##avisado da audiencia (ok)',
+    '#só mandar email', '#so mandar email',
+    '#só planilhar', '#so planilhar',
+    'não jogar', 'nao jogar',
+    'não mexer', 'nao mexer',
+    'protocolo ok', 'nova pasta', 'new folder',
+  ];
 
-  for (const folderId of folderIds) {
-    let pageToken: string | undefined = undefined;
-    do {
-      const q = `'${folderId}' in parents and name contains 'RECIBO' and mimeType = 'application/pdf' and trashed = false and createdTime >= '${yearFilter}-01-01T00:00:00'`;
-      const params = new URLSearchParams({
-        q,
-        fields: 'nextPageToken, files(id, name, parents, createdTime)',
-        pageSize: '1000',
-        supportsAllDrives: 'true',
-        includeItemsFromAllDrives: 'true'
-      });
-      if (pageToken) params.append('pageToken', pageToken);
+  let currentId = fileParentId;
 
-      try {
-        const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
-          headers: { Authorization: `Bearer ${accessToken}` }
-        });
+  // Sobe até 3 níveis na hierarquia de pastas
+  for (let level = 0; level < 3; level++) {
+    try {
+      const res = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${currentId}?fields=name,parents&supportsAllDrives=true`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
 
-        if (res.ok) {
-          const data = await res.json();
-          if (data.files) allFiles = allFiles.concat(data.files);
-          pageToken = data.nextPageToken;
-        } else {
-          pageToken = undefined;
-        }
-      } catch (e) {
-        pageToken = undefined;
+      if (!res.ok) return "Desconhecido";
+
+      const data = await res.json();
+      const folderName = (data.name || "").trim();
+      const lowerName = folderName.toLowerCase();
+
+      // Se o nome da pasta NÃO é uma subpasta conhecida, é o nome do cliente
+      const isSubfolder = SUBFOLDERS_TO_SKIP.some(skip => lowerName.includes(skip));
+
+      if (!isSubfolder && folderName.length > 0) {
+        return folderName;
       }
-    } while (pageToken);
+
+      // Se é uma subpasta, sobe mais um nível
+      if (data.parents && data.parents.length > 0) {
+        currentId = data.parents[0];
+      } else {
+        return folderName; // Não tem mais pai, retorna o que tem
+      }
+    } catch (e) {
+      return "Desconhecido";
+    }
   }
 
-  // Remove duplicatas por ID
-  const seen = new Set<string>();
-  return allFiles.filter(f => {
-    if (seen.has(f.id)) return false;
-    seen.add(f.id);
-    return true;
-  });
+  return "Desconhecido";
 }
 
 export async function GET(req: NextRequest) {
@@ -118,22 +121,16 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const isTest = searchParams.get("test") === "true";
     const limitParam = searchParams.get("limit");
-    const limit = limitParam ? parseInt(limitParam, 10) : 20;
+    const limit = limitParam ? parseInt(limitParam, 10) : 15;
     const offsetParam = searchParams.get("offset");
     const offset = offsetParam ? parseInt(offsetParam, 10) : 0;
     const year = searchParams.get("year") || "2026";
 
-    // ETAPA 1: Descobrir TODAS as subpastas recursivamente (inclui #avisar audiencia, não jogar, etc.)
-    const allFolderIds = await getAllSubfolderIds(session.accessToken, DISTRIBUIDOS_PARENT_IDS);
+    // ETAPA 1: Busca GLOBAL — todos os RECIBOs de 2026 em TODO o Drive
+    const allRecibos = await fetchAllRecibosGlobal(session.accessToken, year);
 
-    // ETAPA 2: Buscar TODOS os recibos de 2026 em TODAS as pastas e subpastas
-    const allRecibos = await fetchAllRecibos(session.accessToken, allFolderIds, year);
-
-    // ETAPA 3: Aplicar offset e limit para processar em lotes
+    // ETAPA 2: Aplicar offset e limit para processar em lotes
     const batch = allRecibos.slice(offset, offset + limit);
-
-    // ETAPA 4: Carregar todos os clientes da planilha uma única vez
-    const allClients = await getClients(session.accessToken, SPREADSHEET_ID);
 
     const logs = [];
     let updated = 0;
@@ -144,24 +141,18 @@ export async function GET(req: NextRequest) {
       const logEntry: any = { fileId: file.id, fileName: file.name };
 
       try {
-        // Obter nome da pasta pai (nome do cliente no Drive)
-        let parentName = "Desconhecido";
+        // Subir na hierarquia de pastas para encontrar o nome do cliente
+        let clientFolderName = "Desconhecido";
         if (file.parents && file.parents.length > 0) {
-          const parentId = file.parents[0];
-          const parentRes = await fetch(`https://www.googleapis.com/drive/v3/files/${parentId}?fields=name&supportsAllDrives=true`, {
-            headers: { Authorization: `Bearer ${session.accessToken}` }
-          });
-          if (parentRes.ok) {
-            const parentData = await parentRes.json();
-            parentName = parentData.name || parentName;
-          }
+          clientFolderName = await getClientFolderName(session.accessToken, file.parents[0]);
         }
-        logEntry.parentFolder = parentName;
+        logEntry.parentFolder = clientFolderName;
 
         // Baixar o PDF
-        const fileContentRes = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media&supportsAllDrives=true`, {
-          headers: { Authorization: `Bearer ${session.accessToken}` }
-        });
+        const fileContentRes = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media&supportsAllDrives=true`,
+          { headers: { Authorization: `Bearer ${session.accessToken}` } }
+        );
 
         if (!fileContentRes.ok) {
           logEntry.status = "Erro";
@@ -193,12 +184,12 @@ export async function GET(req: NextRequest) {
         const cnj = match[0];
         logEntry.extractedCNJ = cnj;
 
-        // Match com a planilha pelo nome da pasta pai
-        const matchedClients = await searchClients(session.accessToken, SPREADSHEET_ID, parentName);
+        // Match com a planilha pelo nome da pasta do cliente
+        const matchedClients = await searchClients(session.accessToken, SPREADSHEET_ID, clientFolderName);
 
         if (matchedClients.length === 0) {
           logEntry.status = "Sem Match";
-          logEntry.message = `CNJ ${cnj} extraído, mas pasta "${parentName}" não bate com nenhum cliente.`;
+          logEntry.message = `CNJ ${cnj} extraído, mas "${clientFolderName}" não bate com nenhum cliente.`;
           logs.push(logEntry);
           skipped++;
           continue;
@@ -211,13 +202,13 @@ export async function GET(req: NextRequest) {
         // Pular se já tem CNJ preenchido
         if (client.numeroProcesso && client.numeroProcesso.includes(cnj)) {
           logEntry.status = "Já Preenchido";
-          logEntry.message = `Cliente ${client.nome} já tem CNJ ${cnj}.`;
+          logEntry.message = `${client.nome} já tem CNJ ${cnj}.`;
           logs.push(logEntry);
           skipped++;
           continue;
         }
 
-        // Atualizar planilha (ou simular em modo teste)
+        // Atualizar planilha
         if (isTest) {
           logEntry.status = "Teste OK";
           logEntry.message = `[DRY RUN] Linha ${client.id} → CNJ ${cnj}, Status → DISTRIBUÍDO`;
@@ -246,7 +237,6 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Calcular próximo lote
     const nextOffset = offset + limit;
     const hasMore = nextOffset < allRecibos.length;
 
@@ -255,7 +245,6 @@ export async function GET(req: NextRequest) {
         isTestMode: isTest,
         year,
         totalRecibosFound: allRecibos.length,
-        totalFoldersScanned: allFolderIds.length,
         batchProcessed: batch.length,
         offset,
         nextOffset: hasMore ? nextOffset : null,
