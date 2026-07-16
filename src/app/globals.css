@@ -231,18 +231,17 @@ img { max-width: 100%; display: block; }
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.15);
+  background: rgba(212, 175, 55, 0.35); /* Dourado BM&C */
   border-radius: var(--radius-full);
 }
-
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.25);
+  background: rgba(212, 175, 55, 0.6);
 }
 
 /* Firefox */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(148, 163, 184, 0.15) transparent;
+  scrollbar-color: rgba(212, 175, 55, 0.35) transparent;
 }
 
 /* ── Layout ────────────────────────────────────────────────────────────── */
@@ -1813,6 +1812,9 @@ img { max-width: 100%; display: block; }
   border-radius: var(--radius-xl);
   padding: 1rem;
   min-height: 200px;
+  max-height: 75vh;
+  display: flex;
+  flex-direction: column;
   transition: all 0.2s;
 }
 
@@ -1877,6 +1879,12 @@ img { max-width: 100%; display: block; }
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(212, 175, 55, 0.45) transparent;
 }
 
 .agenda-empty-day {

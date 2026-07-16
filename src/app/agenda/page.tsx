@@ -283,12 +283,10 @@ export default function AgendaPage() {
                 )}
 
                 {/* Hearing cards - collapsible */}
-                <div className="agenda-day-cards" style={{
-                  maxHeight: collapsedDays[i] ? '0px' : '2000px',
-                  overflow: 'hidden',
-                  transition: 'max-height 0.3s ease',
-                  opacity: collapsedDays[i] ? 0 : 1,
-                }}>
+                <div
+                  className="agenda-day-cards"
+                  style={{ display: collapsedDays[i] ? 'none' : 'flex' }}
+                >
                   {dayHearings.length === 0 && (
                     <div className="agenda-empty-day">—</div>
                   )}
@@ -423,12 +421,10 @@ export default function AgendaPage() {
                     </div>
                   )}
 
-                  <div className="agenda-day-cards" style={{
-                    maxHeight: collapsedPericiaDays[i] ? '0px' : '2000px',
-                    overflow: 'hidden',
-                    transition: 'max-height 0.3s ease',
-                    opacity: collapsedPericiaDays[i] ? 0 : 1,
-                  }}>
+                  <div
+                    className="agenda-day-cards"
+                    style={{ display: collapsedPericiaDays[i] ? 'none' : 'flex' }}
+                  >
                     {dayPericias.length === 0 && (
                       <div className="agenda-empty-day">—</div>
                     )}

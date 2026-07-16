@@ -8,17 +8,12 @@ interface ClientCardProps {
   client: Client;
 }
 
-function getStatusBadgeClass(status: string): string {
-  const s = status.toLowerCase().trim();
-  if (s.includes('ativo') || s.includes('active') || s.includes('em andamento'))
-    return 'badge-ativo';
-  if (s.includes('pendente') || s.includes('pending') || s.includes('aguardando'))
-    return 'badge-pendente';
-  if (s.includes('encerrado') || s.includes('closed') || s.includes('finalizado') || s.includes('arquivado'))
-    return 'badge-encerrado';
-  if (s.includes('urgente') || s.includes('urgent'))
-    return 'badge-urgente';
-  return 'badge-default';
+function getStatusBadgeClass(status?: string): string {
+  const s = status?.toUpperCase().trim() || '';
+  if (s === 'DISTRIBUÍDO' || s === 'DISTRIBUIDO') return 'bg-green-100 text-green-800 border-green-300 border';
+  if (s === 'A FAZER' || s === 'FAZER INICIAL') return 'bg-yellow-100 text-yellow-800 border-yellow-300 border';
+  if (s === 'BOLIVAR') return 'bg-blue-100 text-blue-800 border-blue-300 border';
+  return 'bg-gray-100 text-gray-800 border-gray-300 border';
 }
 
 interface ReportData {

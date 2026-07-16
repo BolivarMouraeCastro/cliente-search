@@ -413,7 +413,7 @@ export default function DashboardPage() {
                       });
                     })()}
                     <text x="90" y="85" textAnchor="middle" fill="var(--text-primary)" fontSize="28" fontWeight="800">
-                      {totalClients}
+                      {metricsData?.distribuidosAno?.count || 0}
                     </text>
                     <text x="90" y="105" textAnchor="middle" fill="var(--text-muted)" fontSize="10">
                       clientes
