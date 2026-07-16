@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 interface LogEntry {
   fileId: string;
@@ -42,8 +42,17 @@ export default function SyncPage() {
   const [statusMessage, setStatusMessage] = useState('Pronto para iniciar');
   const [isFinished, setIsFinished] = useState(false);
   const stopRef = useRef(false);
+  const hasStarted = useRef(false);
 
   const BATCH_SIZE = 10;
+
+  // Auto-start: roda automaticamente ao abrir a página
+  useEffect(() => {
+    if (!hasStarted.current) {
+      hasStarted.current = true;
+      runSync();
+    }
+  }, []);
 
   async function runSync() {
     setIsRunning(true);
