@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { getClients } from '@/lib/sheets';
+import { getAllHearings } from '@/lib/hearings';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,17 +26,20 @@ export async function GET(req: NextRequest) {
     startOfWeekDate.setHours(0, 0, 0, 0);
 
     // =====================================================================
-    // FONTE DE VERDADE: A PLANILHA
-    // Em vez de depender da estrutura de pastas do Drive (que ignora subpastas),
-    // usamos a planilha diretamente. Todo processo com data de entrada no ano
-    // é contado, independente de status, matéria ou pasta do Drive.
+    // Buscar dados em paralelo: Planilha de Clientes + Planilha de Audiências
     // =====================================================================
-    const allClients = await getClients(session.accessToken, SPREADSHEET_ID);
+    const [allClients, allHearings] = await Promise.all([
+      getClients(session.accessToken, SPREADSHEET_ID),
+      getAllHearings(session.accessToken),
+    ]);
 
-    // Helper: converte "DD/MM/YYYY" para Date
-    const parseEntrada = (entrada: string): Date | null => {
-      if (!entrada) return null;
-      const parts = entrada.split('/');
+    // =====================================================================
+    // DISTRIBUÍDOS: Conta processos ÚNICOS da planilha de audiências
+    // Cada número de processo (CNJ) diferente que tenha data em 2026 = 1 processo
+    // =====================================================================
+    const parseDateBR = (dateStr: string): Date | null => {
+      if (!dateStr) return null;
+      const parts = dateStr.split('/');
       if (parts.length !== 3) return null;
       const day = parseInt(parts[0], 10);
       const month = parseInt(parts[1], 10) - 1;
@@ -44,6 +48,64 @@ export async function GET(req: NextRequest) {
       return new Date(year, month, day);
     };
 
+    // Filtrar audiências do ano corrente
+    const hearingsThisYear = allHearings.filter(h => {
+      return h.dataAudiencia.endsWith(`/${currentYearStr}`);
+    });
+
+    // Extrair números de processo ÚNICOS (cada processo conta 1x, mesmo com várias audiências)
+    const uniqueProcessosAno = new Map<string, { name: string; date: string }>();
+    for (const h of hearingsThisYear) {
+      const num = h.numeroProcesso.trim();
+      if (num && !uniqueProcessosAno.has(num)) {
+        uniqueProcessosAno.set(num, { name: h.reclamante, date: h.dataAudiencia });
+      }
+    }
+
+    // Processos do mês corrente
+    const uniqueProcessosMes = new Map<string, { name: string; date: string }>();
+    for (const h of hearingsThisYear) {
+      const num = h.numeroProcesso.trim();
+      if (num && h.dataAudiencia.includes(`/${currentMonthStr}/${currentYearStr}`)) {
+        if (!uniqueProcessosMes.has(num)) {
+          uniqueProcessosMes.set(num, { name: h.reclamante, date: h.dataAudiencia });
+        }
+      }
+    }
+
+    // Processos da semana corrente
+    const uniqueProcessosSemana = new Map<string, { name: string; date: string }>();
+    for (const h of hearingsThisYear) {
+      const num = h.numeroProcesso.trim();
+      if (num) {
+        const date = parseDateBR(h.dataAudiencia);
+        if (date && date >= startOfWeekDate) {
+          if (!uniqueProcessosSemana.has(num)) {
+            uniqueProcessosSemana.set(num, { name: h.reclamante, date: h.dataAudiencia });
+          }
+        }
+      }
+    }
+
+    // Converter Maps para arrays de items (para o frontend exibir)
+    const mapToItems = (map: Map<string, { name: string; date: string }>) => {
+      return Array.from(map.entries()).map(([processo, info]) => {
+        const parts = info.date.split('/');
+        let isoDate = new Date().toISOString();
+        if (parts.length === 3) {
+          isoDate = `${parts[2]}-${parts[1]}-${parts[0]}T12:00:00.000Z`;
+        }
+        return {
+          id: processo,
+          name: info.name || 'Cliente S/N',
+          createdTime: isoDate,
+        };
+      });
+    };
+
+    // =====================================================================
+    // NOVOS CLIENTES: Conta pela planilha de entrada (como antes)
+    // =====================================================================
     const formatClientToItem = (c: any) => {
       const parts = c.entrada.split('/');
       let isoDate = new Date().toISOString();
@@ -53,36 +115,19 @@ export async function GET(req: NextRequest) {
       return {
         id: c.id || Math.random().toString(),
         name: c.nome || c.empresa || 'Cliente S/N',
-        createdTime: isoDate
+        createdTime: isoDate,
       };
     };
 
-    // ── Distribuídos: TODOS os processos com entrada no ano corrente ──
-    // Não filtra por status, pasta ou matéria. Se tem data de entrada no ano, conta.
-    const distribuidosAnoClients = allClients.filter(c => c.entrada.endsWith(`/${currentYearStr}`));
-
-    const distribuidosMesClients = distribuidosAnoClients.filter(c =>
-      c.entrada.includes(`/${currentMonthStr}/${currentYearStr}`)
-    );
-
-    const distribuidosSemanaClients = distribuidosAnoClients.filter(c => {
-      const date = parseEntrada(c.entrada);
-      return date && date >= startOfWeekDate;
-    });
-
-    // ── Novos Clientes (mesma lógica de antes) ──
     const novosClientesAnoItems = allClients.filter(c => c.entrada.endsWith(`/${currentYearStr}`));
     const novosClientesMesItems = novosClientesAnoItems.filter(c => c.entrada.includes(`/${currentMonthStr}/`));
 
-    const validNovosClientes = novosClientesAnoItems.map(formatClientToItem);
-    const novosClientesMes = novosClientesMesItems.map(formatClientToItem);
-
     return NextResponse.json({
-      novosClientesMes: { count: novosClientesMes.length, items: novosClientesMes },
-      novosClientesAno: { count: validNovosClientes.length, items: validNovosClientes },
-      distribuidosAno: { count: distribuidosAnoClients.length, items: distribuidosAnoClients.map(formatClientToItem) },
-      distribuidosMes: { count: distribuidosMesClients.length, items: distribuidosMesClients.map(formatClientToItem) },
-      distribuidosSemana: { count: distribuidosSemanaClients.length, items: distribuidosSemanaClients.map(formatClientToItem) }
+      novosClientesMes: { count: novosClientesMesItems.length, items: novosClientesMesItems.map(formatClientToItem) },
+      novosClientesAno: { count: novosClientesAnoItems.length, items: novosClientesAnoItems.map(formatClientToItem) },
+      distribuidosAno: { count: uniqueProcessosAno.size, items: mapToItems(uniqueProcessosAno) },
+      distribuidosMes: { count: uniqueProcessosMes.size, items: mapToItems(uniqueProcessosMes) },
+      distribuidosSemana: { count: uniqueProcessosSemana.size, items: mapToItems(uniqueProcessosSemana) },
     });
 
   } catch (error: unknown) {
