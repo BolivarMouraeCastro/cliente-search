@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 
 interface LogEntry {
   fileId: string;
@@ -13,24 +13,6 @@ interface LogEntry {
   message: string;
 }
 
-interface SyncResult {
-  summary: {
-    isTestMode: boolean;
-    year: string;
-    totalRecibosFound: number;
-    totalFoldersScanned: number;
-    batchProcessed: number;
-    offset: number;
-    nextOffset: number | null;
-    hasMoreBatches: boolean;
-    updated: number;
-    skipped: number;
-    errors: number;
-    nextUrl: string | null;
-  };
-  logs: LogEntry[];
-}
-
 export default function SyncPage() {
   const [isRunning, setIsRunning] = useState(false);
   const [allLogs, setAllLogs] = useState<LogEntry[]>([]);
@@ -39,22 +21,14 @@ export default function SyncPage() {
   const [totalUpdated, setTotalUpdated] = useState(0);
   const [totalSkipped, setTotalSkipped] = useState(0);
   const [totalErrors, setTotalErrors] = useState(0);
-  const [statusMessage, setStatusMessage] = useState('Pronto para iniciar');
+  const [statusMessage, setStatusMessage] = useState('🚀 Iniciando automaticamente...');
   const [isFinished, setIsFinished] = useState(false);
   const stopRef = useRef(false);
   const hasStarted = useRef(false);
 
   const BATCH_SIZE = 10;
 
-  // Auto-start: roda automaticamente ao abrir a página
-  useEffect(() => {
-    if (!hasStarted.current) {
-      hasStarted.current = true;
-      runSync();
-    }
-  }, []);
-
-  async function runSync() {
+  const runSync = useCallback(async () => {
     setIsRunning(true);
     setIsFinished(false);
     setAllLogs([]);
@@ -81,12 +55,16 @@ export default function SyncPage() {
 
         const res = await fetch(url);
         if (!res.ok) {
-          const err = await res.json();
-          setStatusMessage(`❌ Erro: ${err.error || 'Falha na requisição'}`);
+          let errMsg = 'Falha na requisição';
+          try {
+            const err = await res.json();
+            errMsg = err.error || errMsg;
+          } catch (_e) { /* ignore */ }
+          setStatusMessage(`❌ Erro: ${errMsg}`);
           break;
         }
 
-        const data: SyncResult = await res.json();
+        const data = await res.json();
 
         setTotalFound(data.summary.totalRecibosFound);
         processedTotal += data.summary.batchProcessed;
@@ -104,11 +82,11 @@ export default function SyncPage() {
         offset = data.summary.nextOffset || 0;
 
         if (hasMore) {
-          // Pequena pausa entre lotes para não sobrecarregar
           await new Promise(r => setTimeout(r, 1000));
         }
-      } catch (err: any) {
-        setStatusMessage(`❌ Erro de rede: ${err.message}`);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Erro desconhecido';
+        setStatusMessage(`❌ Erro de rede: ${message}`);
         break;
       }
     }
@@ -121,7 +99,15 @@ export default function SyncPage() {
 
     setIsFinished(true);
     setIsRunning(false);
-  }
+  }, []);
+
+  // Auto-start: roda automaticamente ao abrir a página
+  useEffect(() => {
+    if (!hasStarted.current) {
+      hasStarted.current = true;
+      runSync();
+    }
+  }, [runSync]);
 
   function stopSync() {
     stopRef.current = true;
@@ -147,13 +133,13 @@ export default function SyncPage() {
           🤖 Robô de Sincronização de Recibos
         </h1>
         <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
-          Varre todas as pastas de Distribuídos (incluindo subpastas), extrai o CNJ dos PDFs e atualiza a planilha automaticamente.
+          Varre TODO o Drive, extrai o CNJ dos PDFs de recibo e atualiza a planilha automaticamente.
         </p>
       </div>
 
       {/* Controls */}
       <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-        {!isRunning ? (
+        {!isRunning && isFinished && (
           <button
             onClick={runSync}
             style={{
@@ -166,12 +152,12 @@ export default function SyncPage() {
               borderRadius: '12px',
               cursor: 'pointer',
               boxShadow: '0 4px 15px rgba(212, 175, 55, 0.3)',
-              transition: 'all 0.2s',
             }}
           >
-            🚀 Iniciar Sincronização (2026)
+            🔄 Rodar Novamente
           </button>
-        ) : (
+        )}
+        {isRunning && (
           <button
             onClick={stopSync}
             style={{
