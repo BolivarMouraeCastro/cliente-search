@@ -2,11 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { getClients } from '@/lib/sheets';
-import { getAllHearings } from '@/lib/hearings';
 
 export const dynamic = 'force-dynamic';
 
 const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID ?? '';
+
+// Pasta "# RECIBO" no Drive - contém TODOS os recibos de distribuição
+// Caminho: 1- PROCESSO > 1 INICIAIS > 1 INICIAIS PRONTAS > 01 DISTRIBUIDO > # RECIBO
+// Se o ID mudar, atualizar aqui. A rota /api/find-folder pode ajudar a encontrar.
+const RECIBO_FOLDER_ID = process.env.RECIBO_FOLDER_ID ?? '';
 
 interface ProcessoItem {
   id: string;
@@ -18,6 +22,53 @@ interface YearDistribution {
   year: string;
   count: number;
   processos: ProcessoItem[];
+}
+
+/**
+ * Busca TODOS os arquivos dentro da pasta # RECIBO, com paginação completa.
+ */
+async function fetchAllRecibosFromFolder(accessToken: string, folderId: string): Promise<any[]> {
+  let allFiles: any[] = [];
+  let pageToken: string | undefined = undefined;
+
+  // Se não tiver folder ID, busca globalmente por "RECIBO"
+  const q = folderId
+    ? `'${folderId}' in parents and trashed = false`
+    : `name contains 'RECIBO' and mimeType = 'application/pdf' and trashed = false`;
+
+  do {
+    const params = new URLSearchParams({
+      q,
+      fields: 'nextPageToken, files(id, name, createdTime)',
+      pageSize: '1000',
+      orderBy: 'createdTime desc',
+      supportsAllDrives: 'true',
+      includeItemsFromAllDrives: 'true',
+      corpora: 'allDrives',
+    });
+    if (pageToken) params.append('pageToken', pageToken);
+
+    try {
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        signal: AbortSignal.timeout(15000),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.files) allFiles = allFiles.concat(data.files);
+        pageToken = data.nextPageToken;
+      } else {
+        console.error('Drive fetch error:', await res.text());
+        pageToken = undefined;
+      }
+    } catch (e) {
+      console.error('Drive fetch exception:', e);
+      pageToken = undefined;
+    }
+  } while (pageToken);
+
+  return allFiles;
 }
 
 export async function GET(req: NextRequest) {
@@ -32,77 +83,72 @@ export async function GET(req: NextRequest) {
     const currentMonthStr = String(now.getMonth() + 1).padStart(2, '0');
 
     // =====================================================================
-    // Buscar dados em paralelo: Planilha de Clientes + Planilha de Audiências
+    // Buscar dados em paralelo
     // =====================================================================
-    const [allClients, allHearings] = await Promise.all([
+    let reciboFolderId = RECIBO_FOLDER_ID;
+
+    // Se não tiver o ID configurado, tenta encontrar a pasta automaticamente
+    if (!reciboFolderId) {
+      try {
+        const q = `name = '# RECIBO' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+        const params = new URLSearchParams({
+          q,
+          fields: 'files(id, name)',
+          supportsAllDrives: 'true',
+          includeItemsFromAllDrives: 'true',
+          corpora: 'allDrives',
+        });
+        const folderRes = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
+          headers: { Authorization: `Bearer ${session.accessToken}` },
+        });
+        if (folderRes.ok) {
+          const folderData = await folderRes.json();
+          if (folderData.files && folderData.files.length > 0) {
+            reciboFolderId = folderData.files[0].id;
+          }
+        }
+      } catch (e) {
+        console.error('Error finding # RECIBO folder:', e);
+      }
+    }
+
+    const [allRecibos, allClients] = await Promise.all([
+      fetchAllRecibosFromFolder(session.accessToken, reciboFolderId),
       getClients(session.accessToken, SPREADSHEET_ID),
-      getAllHearings(session.accessToken),
     ]);
 
     // =====================================================================
-    // DISTRIBUIÇÃO POR ANO: Agrupa processos únicos (CNJ) por ano
-    // O ano da distribuição é extraído do NÚMERO DO PROCESSO (CNJ).
-    // Formato CNJ: NNNNNNN-DD.YYYY.J.TT.OOOO
-    // Exemplo: 1001669-81.2025.5.02.0465 → ano = 2025
+    // DISTRIBUIÇÃO POR ANO
+    // Cada arquivo na pasta # RECIBO = 1 distribuição
+    // O ano é extraído da data de criação do arquivo no Drive (createdTime)
     // =====================================================================
+    const yearMap = new Map<string, ProcessoItem[]>();
 
-    // Regex para extrair o ano do número CNJ
-    const cnjYearRegex = /\d{7}-\d{2}\.(\d{4})\.\d\.\d{2}\.\d{4}/;
-
-    // Map: year -> Map of unique processo -> info
-    const yearMap = new Map<string, Map<string, { name: string; date: string }>>();
-
-    for (const h of allHearings) {
-      const num = h.numeroProcesso.trim();
-      if (!num) continue;
-
-      // Extrair o ano do número do processo (CNJ)
-      const match = num.match(cnjYearRegex);
-      if (!match) continue;
-
-      const year = match[1]; // Ex: "2025"
+    for (const file of allRecibos) {
+      const createdDate = new Date(file.createdTime);
+      const year = createdDate.getFullYear().toString();
 
       if (!yearMap.has(year)) {
-        yearMap.set(year, new Map());
+        yearMap.set(year, []);
       }
 
-      const processMap = yearMap.get(year)!;
-      if (!processMap.has(num)) {
-        processMap.set(num, { name: h.reclamante, date: h.dataAudiencia });
-      }
+      yearMap.get(year)!.push({
+        id: file.id,
+        name: file.name || 'Recibo',
+        createdTime: file.createdTime,
+      });
     }
 
-    // Convert to ProcessoItem helper
-    const toProcessoItem = (processo: string, info: { name: string; date: string }): ProcessoItem => {
-      const parts = info.date.split('/');
-      let isoDate = new Date().toISOString();
-      if (parts.length === 3) {
-        isoDate = `${parts[2]}-${parts[1]}-${parts[0]}T12:00:00.000Z`;
-      }
-      return {
-        id: processo,
-        name: info.name || 'Cliente S/N',
-        createdTime: isoDate,
-      };
-    };
-
-    // Build distribuicaoPorAno array, sorted by year descending
+    // Ordenar por ano decrescente
     const distribuicaoPorAno: YearDistribution[] = Array.from(yearMap.entries())
       .sort((a, b) => b[0].localeCompare(a[0]))
-      .map(([year, processMap]) => ({
+      .map(([year, processos]) => ({
         year,
-        count: processMap.size,
-        processos: Array.from(processMap.entries()).map(([proc, info]) => toProcessoItem(proc, info)),
+        count: processos.length,
+        processos,
       }));
 
-    // Total unique processes across ALL years
-    const allUniqueProcessos = new Set<string>();
-    for (const [, processMap] of yearMap) {
-      for (const proc of processMap.keys()) {
-        allUniqueProcessos.add(proc);
-      }
-    }
-    const totalDistribuidos = allUniqueProcessos.size;
+    const totalDistribuidos = allRecibos.length;
 
     // =====================================================================
     // NOVOS CLIENTES: Conta pela planilha de entrada (como antes)
@@ -128,6 +174,11 @@ export async function GET(req: NextRequest) {
       novosClientesAno: { count: novosClientesAnoItems.length, items: novosClientesAnoItems.map(formatClientToItem) },
       distribuicaoPorAno,
       totalDistribuidos,
+      debug: {
+        reciboFolderFound: !!reciboFolderId,
+        reciboFolderId: reciboFolderId || 'não encontrado',
+        totalFilesInFolder: allRecibos.length,
+      }
     });
 
   } catch (error: unknown) {
