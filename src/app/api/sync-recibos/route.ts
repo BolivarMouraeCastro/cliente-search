@@ -5,58 +5,146 @@ import { getClients, writeProcessNumber, updateClientStatus, searchClients } fro
 // @ts-ignore
 import pdf from "pdf-parse";
 
-// Evita que o Next.js faça cache agressivo desta rota
 export const dynamic = "force-dynamic";
+// Aumenta o timeout para 60 segundos (máximo Vercel Pro)
+export const maxDuration = 60;
 
 const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID ?? "";
+
+// IDs das pastas de "Distribuídos" onde os recibos ficam
+// Inclui TODAS as subpastas: #avisar audiencia, #SO MANDAR EMAIL, não jogar, etc.
+const DISTRIBUIDOS_PARENT_IDS = [
+  '16HzOQdcORS4vwPaaVDSEh7nZEVOOMhkE',
+  '1DfJ7CZIHw4kEfGM7ooVdW1nH-YeEgvEx',
+  '1yyO-0H6-DJc6p4mx_ez3JhRJTRb-HoYD',
+  '1ByXb7PttqXCrlkINlDSN23SRkG5lw4Mv',
+  '1204Yh3nKmJY80xY4jG5imJSjMoBcjn2q'
+];
+
+/**
+ * Busca recursiva de TODOS os IDs de subpastas dentro das pastas de Distribuídos.
+ * Isso garante que subpastas como "#avisar audiencia", "#SO MANDAR EMAIL",
+ * "não jogar" sejam incluídas na busca.
+ */
+async function getAllSubfolderIds(accessToken: string, parentIds: string[]): Promise<string[]> {
+  const allIds = [...parentIds];
+  const queue = [...parentIds];
+
+  while (queue.length > 0) {
+    const currentId = queue.shift()!;
+    try {
+      const q = `'${currentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+      const params = new URLSearchParams({
+        q,
+        fields: 'files(id, name)',
+        pageSize: '1000',
+        supportsAllDrives: 'true',
+        includeItemsFromAllDrives: 'true'
+      });
+
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        for (const folder of (data.files || [])) {
+          allIds.push(folder.id);
+          queue.push(folder.id); // Busca recursiva nas subpastas
+        }
+      }
+    } catch (e) {
+      // Ignora erros de subpastas individuais
+    }
+  }
+
+  return allIds;
+}
+
+/**
+ * Busca TODOS os PDFs com "RECIBO" no nome dentro de uma lista de pastas,
+ * com paginação completa (sem perder arquivos).
+ */
+async function fetchAllRecibos(accessToken: string, folderIds: string[], yearFilter: string): Promise<any[]> {
+  let allFiles: any[] = [];
+
+  for (const folderId of folderIds) {
+    let pageToken: string | undefined = undefined;
+    do {
+      const q = `'${folderId}' in parents and name contains 'RECIBO' and mimeType = 'application/pdf' and trashed = false and createdTime >= '${yearFilter}-01-01T00:00:00'`;
+      const params = new URLSearchParams({
+        q,
+        fields: 'nextPageToken, files(id, name, parents, createdTime)',
+        pageSize: '1000',
+        supportsAllDrives: 'true',
+        includeItemsFromAllDrives: 'true'
+      });
+      if (pageToken) params.append('pageToken', pageToken);
+
+      try {
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.files) allFiles = allFiles.concat(data.files);
+          pageToken = data.nextPageToken;
+        } else {
+          pageToken = undefined;
+        }
+      } catch (e) {
+        pageToken = undefined;
+      }
+    } while (pageToken);
+  }
+
+  // Remove duplicatas por ID
+  const seen = new Set<string>();
+  return allFiles.filter(f => {
+    if (seen.has(f.id)) return false;
+    seen.add(f.id);
+    return true;
+  });
+}
 
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.accessToken) {
-      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+      return NextResponse.json({ error: "Não autorizado. Faça login primeiro no sistema." }, { status: 401 });
     }
 
-    // Parse dos parâmetros da URL
     const { searchParams } = new URL(req.url);
-    const isTest = searchParams.get("test") === "true"; // Modo Dry Run
+    const isTest = searchParams.get("test") === "true";
     const limitParam = searchParams.get("limit");
-    const limit = limitParam ? parseInt(limitParam, 10) : 5; // Padrão: 5 arquivos
+    const limit = limitParam ? parseInt(limitParam, 10) : 20;
+    const offsetParam = searchParams.get("offset");
+    const offset = offsetParam ? parseInt(offsetParam, 10) : 0;
+    const year = searchParams.get("year") || "2026";
 
-    // Buscar os PDFs no Drive que contenham 'RECIBO' no nome
-    const query = `name contains 'RECIBO' and mimeType = 'application/pdf' and trashed = false`;
-    const driveParams = new URLSearchParams({
-      q: query,
-      fields: "files(id, name, parents)",
-      pageSize: limit.toString(),
-      orderBy: "createdTime desc",
-      supportsAllDrives: "true",
-      includeItemsFromAllDrives: "true"
-    });
+    // ETAPA 1: Descobrir TODAS as subpastas recursivamente (inclui #avisar audiencia, não jogar, etc.)
+    const allFolderIds = await getAllSubfolderIds(session.accessToken, DISTRIBUIDOS_PARENT_IDS);
 
-    const driveRes = await fetch(`https://www.googleapis.com/drive/v3/files?${driveParams}`, {
-      headers: { Authorization: `Bearer ${session.accessToken}` }
-    });
+    // ETAPA 2: Buscar TODOS os recibos de 2026 em TODAS as pastas e subpastas
+    const allRecibos = await fetchAllRecibos(session.accessToken, allFolderIds, year);
 
-    if (!driveRes.ok) {
-      const errorText = await driveRes.text();
-      throw new Error(`Erro ao buscar no Drive: ${errorText}`);
-    }
+    // ETAPA 3: Aplicar offset e limit para processar em lotes
+    const batch = allRecibos.slice(offset, offset + limit);
 
-    const driveData = await driveRes.json();
-    const files = driveData.files || [];
+    // ETAPA 4: Carregar todos os clientes da planilha uma única vez
+    const allClients = await getClients(session.accessToken, SPREADSHEET_ID);
 
     const logs = [];
+    let updated = 0;
+    let skipped = 0;
+    let errors = 0;
 
-    // Loop em lotes (limitado a 'limit' iterações)
-    for (const file of files) {
-      const logEntry: any = {
-        fileId: file.id,
-        fileName: file.name,
-      };
+    for (const file of batch) {
+      const logEntry: any = { fileId: file.id, fileName: file.name };
 
       try {
-        // 1. Obter nome da pasta pai para tentar fazer match com o cliente na Planilha Mestra
+        // Obter nome da pasta pai (nome do cliente no Drive)
         let parentName = "Desconhecido";
         if (file.parents && file.parents.length > 0) {
           const parentId = file.parents[0];
@@ -70,101 +158,120 @@ export async function GET(req: NextRequest) {
         }
         logEntry.parentFolder = parentName;
 
-        // 2. Baixar o conteúdo binário do PDF do Drive
+        // Baixar o PDF
         const fileContentRes = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media&supportsAllDrives=true`, {
           headers: { Authorization: `Bearer ${session.accessToken}` }
         });
 
         if (!fileContentRes.ok) {
           logEntry.status = "Erro";
-          logEntry.message = "Falha ao baixar o binário do arquivo PDF.";
+          logEntry.message = "Falha ao baixar PDF.";
           logs.push(logEntry);
+          errors++;
           continue;
         }
 
         const arrayBuffer = await fileContentRes.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
 
-        // 3. Extrair texto do PDF usando a biblioteca pdf-parse
+        // Extrair texto do PDF
         const pdfData = await pdf(buffer);
         const text = pdfData.text || "";
 
-        // 4. Buscar número do processo via Expressão Regular (Regex CNJ)
+        // Regex CNJ
         const cnjRegex = /\d{7}-\d{2}\.\d{4}\.\d{1}\.\d{2}\.\d{4}/;
         const match = text.match(cnjRegex);
 
         if (!match) {
           logEntry.status = "Ignorado";
-          logEntry.message = "Nenhum número de processo (CNJ) encontrado no texto do PDF.";
+          logEntry.message = "Nenhum CNJ encontrado no PDF.";
           logs.push(logEntry);
+          skipped++;
           continue;
         }
 
-        const cnjEncontrado = match[0];
-        logEntry.extractedCNJ = cnjEncontrado;
+        const cnj = match[0];
+        logEntry.extractedCNJ = cnj;
 
-        // 5. Encontrar o cliente na planilha que corresponda ao nome da pasta pai do PDF
+        // Match com a planilha pelo nome da pasta pai
         const matchedClients = await searchClients(session.accessToken, SPREADSHEET_ID, parentName);
-        
+
         if (matchedClients.length === 0) {
-          logEntry.status = "Atenção";
-          logEntry.message = `CNJ ${cnjEncontrado} encontrado, mas não achamos um cliente correspondente à pasta "${parentName}" na planilha.`;
+          logEntry.status = "Sem Match";
+          logEntry.message = `CNJ ${cnj} extraído, mas pasta "${parentName}" não bate com nenhum cliente.`;
           logs.push(logEntry);
+          skipped++;
           continue;
         }
 
-        // Pega o melhor match de cliente retornado pela busca fuzzy
         const client = matchedClients[0];
         logEntry.matchedClient = client.nome;
         logEntry.matchedRow = client.id;
-        
-        // Verifica se o cliente já possui esse número de processo salvo
-        if (client.numeroProcesso && client.numeroProcesso.includes(cnjEncontrado)) {
-          logEntry.status = "Ignorado";
-          logEntry.message = `O cliente ${client.nome} (Linha ${client.id}) já possui o CNJ ${cnjEncontrado} preenchido.`;
+
+        // Pular se já tem CNJ preenchido
+        if (client.numeroProcesso && client.numeroProcesso.includes(cnj)) {
+          logEntry.status = "Já Preenchido";
+          logEntry.message = `Cliente ${client.nome} já tem CNJ ${cnj}.`;
           logs.push(logEntry);
+          skipped++;
           continue;
         }
 
-        // 6. Atualizar a planilha (comportamento condicional com base na query `?test=true`)
+        // Atualizar planilha (ou simular em modo teste)
         if (isTest) {
-          logEntry.status = "Sucesso (Modo Teste)";
-          logEntry.message = `[DRY RUN] Atualizaria a linha ${client.id} (Cliente: ${client.nome}) com o CNJ ${cnjEncontrado} e Status DISTRIBUÍDO.`;
+          logEntry.status = "Teste OK";
+          logEntry.message = `[DRY RUN] Linha ${client.id} → CNJ ${cnj}, Status → DISTRIBUÍDO`;
+          updated++;
         } else {
-          // Efetivamente grava na planilha mestre
-          const processUpdateSuccess = await writeProcessNumber(session.accessToken, SPREADSHEET_ID, client.id, cnjEncontrado);
-          const statusUpdateSuccess = await updateClientStatus(session.accessToken, SPREADSHEET_ID, client.id, "DISTRIBUÍDO");
-          
-          if (processUpdateSuccess && statusUpdateSuccess) {
-            logEntry.status = "Sucesso";
-            logEntry.message = `[GRAVADO] CNJ ${cnjEncontrado} salvo e status alterado para DISTRIBUÍDO para o cliente ${client.nome} (Linha ${client.id}).`;
+          const okProcess = await writeProcessNumber(session.accessToken, SPREADSHEET_ID, client.id, cnj);
+          const okStatus = await updateClientStatus(session.accessToken, SPREADSHEET_ID, client.id, "DISTRIBUÍDO");
+
+          if (okProcess && okStatus) {
+            logEntry.status = "Gravado ✅";
+            logEntry.message = `Linha ${client.id}: CNJ ${cnj} salvo, status → DISTRIBUÍDO`;
+            updated++;
           } else {
-            logEntry.status = "Erro";
-            logEntry.message = `Falha ao gravar os dados na linha ${client.id} da planilha.`;
+            logEntry.status = "Erro Gravação";
+            logEntry.message = `Falha ao gravar na linha ${client.id}.`;
+            errors++;
           }
         }
 
         logs.push(logEntry);
-
       } catch (err: any) {
-        logEntry.status = "Erro Critico";
+        logEntry.status = "Erro Crítico";
         logEntry.message = err.message;
         logs.push(logEntry);
+        errors++;
       }
     }
 
-    // Retorna um relatório super detalhado do que o robô fez neste lote
+    // Calcular próximo lote
+    const nextOffset = offset + limit;
+    const hasMore = nextOffset < allRecibos.length;
+
     return NextResponse.json({
       summary: {
         isTestMode: isTest,
-        filesFetched: files.length,
-        limitRequested: limit
+        year,
+        totalRecibosFound: allRecibos.length,
+        totalFoldersScanned: allFolderIds.length,
+        batchProcessed: batch.length,
+        offset,
+        nextOffset: hasMore ? nextOffset : null,
+        hasMoreBatches: hasMore,
+        updated,
+        skipped,
+        errors,
+        nextUrl: hasMore
+          ? `/api/sync-recibos?year=${year}&offset=${nextOffset}&limit=${limit}${isTest ? '&test=true' : ''}`
+          : null
       },
       logs
     });
 
   } catch (error: any) {
     console.error("Erro na rota /api/sync-recibos:", error);
-    return NextResponse.json({ error: error.message || "Erro interno no servidor" }, { status: 500 });
+    return NextResponse.json({ error: error.message || "Erro interno" }, { status: 500 });
   }
 }
