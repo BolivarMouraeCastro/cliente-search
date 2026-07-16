@@ -8,6 +8,18 @@ export const dynamic = 'force-dynamic';
 
 const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID ?? '';
 
+interface ProcessoItem {
+  id: string;
+  name: string;
+  createdTime: string;
+}
+
+interface YearDistribution {
+  year: string;
+  count: number;
+  processos: ProcessoItem[];
+}
+
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -19,12 +31,6 @@ export async function GET(req: NextRequest) {
     const currentYearStr = now.getFullYear().toString();
     const currentMonthStr = String(now.getMonth() + 1).padStart(2, '0');
 
-    // Monday as start of week
-    const currentDay = now.getDay();
-    const distanceToMonday = currentDay === 0 ? 6 : currentDay - 1;
-    const startOfWeekDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - distanceToMonday);
-    startOfWeekDate.setHours(0, 0, 0, 0);
-
     // =====================================================================
     // Buscar dados em paralelo: Planilha de Clientes + Planilha de Audiências
     // =====================================================================
@@ -34,79 +40,69 @@ export async function GET(req: NextRequest) {
     ]);
 
     // =====================================================================
-    // DISTRIBUÍDOS: Conta processos ÚNICOS da planilha de audiências
-    // Cada número de processo (CNJ) diferente que tenha data em 2026 = 1 processo
+    // DISTRIBUIÇÃO POR ANO: Agrupa processos únicos (CNJ) por ano
+    // Extrai o ano de dataAudiencia (DD/MM/YYYY)
     // =====================================================================
-    const parseDateBR = (dateStr: string): Date | null => {
-      if (!dateStr) return null;
-      const parts = dateStr.split('/');
-      if (parts.length !== 3) return null;
-      const day = parseInt(parts[0], 10);
-      const month = parseInt(parts[1], 10) - 1;
-      const year = parseInt(parts[2], 10);
-      if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
-      return new Date(year, month, day);
+
+    // Map: year -> Map of unique processo -> info
+    const yearMap = new Map<string, Map<string, { name: string; date: string }>>();
+
+    for (const h of allHearings) {
+      const num = h.numeroProcesso.trim();
+      if (!num || !h.dataAudiencia) continue;
+
+      const parts = h.dataAudiencia.split('/');
+      if (parts.length !== 3) continue;
+
+      const year = parts[2];
+      if (!year) continue;
+
+      if (!yearMap.has(year)) {
+        yearMap.set(year, new Map());
+      }
+
+      const processMap = yearMap.get(year)!;
+      if (!processMap.has(num)) {
+        processMap.set(num, { name: h.reclamante, date: h.dataAudiencia });
+      }
+    }
+
+    // Convert to ProcessoItem helper
+    const toProcessoItem = (processo: string, info: { name: string; date: string }): ProcessoItem => {
+      const parts = info.date.split('/');
+      let isoDate = new Date().toISOString();
+      if (parts.length === 3) {
+        isoDate = `${parts[2]}-${parts[1]}-${parts[0]}T12:00:00.000Z`;
+      }
+      return {
+        id: processo,
+        name: info.name || 'Cliente S/N',
+        createdTime: isoDate,
+      };
     };
 
-    // Filtrar audiências do ano corrente
-    const hearingsThisYear = allHearings.filter(h => {
-      return h.dataAudiencia.endsWith(`/${currentYearStr}`);
-    });
+    // Build distribuicaoPorAno array, sorted by year descending
+    const distribuicaoPorAno: YearDistribution[] = Array.from(yearMap.entries())
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([year, processMap]) => ({
+        year,
+        count: processMap.size,
+        processos: Array.from(processMap.entries()).map(([proc, info]) => toProcessoItem(proc, info)),
+      }));
 
-    // Extrair números de processo ÚNICOS (cada processo conta 1x, mesmo com várias audiências)
-    const uniqueProcessosAno = new Map<string, { name: string; date: string }>();
-    for (const h of hearingsThisYear) {
-      const num = h.numeroProcesso.trim();
-      if (num && !uniqueProcessosAno.has(num)) {
-        uniqueProcessosAno.set(num, { name: h.reclamante, date: h.dataAudiencia });
+    // Total unique processes across ALL years
+    const allUniqueProcessos = new Set<string>();
+    for (const [, processMap] of yearMap) {
+      for (const proc of processMap.keys()) {
+        allUniqueProcessos.add(proc);
       }
     }
-
-    // Processos do mês corrente
-    const uniqueProcessosMes = new Map<string, { name: string; date: string }>();
-    for (const h of hearingsThisYear) {
-      const num = h.numeroProcesso.trim();
-      if (num && h.dataAudiencia.includes(`/${currentMonthStr}/${currentYearStr}`)) {
-        if (!uniqueProcessosMes.has(num)) {
-          uniqueProcessosMes.set(num, { name: h.reclamante, date: h.dataAudiencia });
-        }
-      }
-    }
-
-    // Processos da semana corrente
-    const uniqueProcessosSemana = new Map<string, { name: string; date: string }>();
-    for (const h of hearingsThisYear) {
-      const num = h.numeroProcesso.trim();
-      if (num) {
-        const date = parseDateBR(h.dataAudiencia);
-        if (date && date >= startOfWeekDate) {
-          if (!uniqueProcessosSemana.has(num)) {
-            uniqueProcessosSemana.set(num, { name: h.reclamante, date: h.dataAudiencia });
-          }
-        }
-      }
-    }
-
-    // Converter Maps para arrays de items (para o frontend exibir)
-    const mapToItems = (map: Map<string, { name: string; date: string }>) => {
-      return Array.from(map.entries()).map(([processo, info]) => {
-        const parts = info.date.split('/');
-        let isoDate = new Date().toISOString();
-        if (parts.length === 3) {
-          isoDate = `${parts[2]}-${parts[1]}-${parts[0]}T12:00:00.000Z`;
-        }
-        return {
-          id: processo,
-          name: info.name || 'Cliente S/N',
-          createdTime: isoDate,
-        };
-      });
-    };
+    const totalDistribuidos = allUniqueProcessos.size;
 
     // =====================================================================
     // NOVOS CLIENTES: Conta pela planilha de entrada (como antes)
     // =====================================================================
-    const formatClientToItem = (c: any) => {
+    const formatClientToItem = (c: { id?: string; nome?: string; empresa?: string; entrada: string }): ProcessoItem => {
       const parts = c.entrada.split('/');
       let isoDate = new Date().toISOString();
       if (parts.length === 3) {
@@ -125,9 +121,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       novosClientesMes: { count: novosClientesMesItems.length, items: novosClientesMesItems.map(formatClientToItem) },
       novosClientesAno: { count: novosClientesAnoItems.length, items: novosClientesAnoItems.map(formatClientToItem) },
-      distribuidosAno: { count: uniqueProcessosAno.size, items: mapToItems(uniqueProcessosAno) },
-      distribuidosMes: { count: uniqueProcessosMes.size, items: mapToItems(uniqueProcessosMes) },
-      distribuidosSemana: { count: uniqueProcessosSemana.size, items: mapToItems(uniqueProcessosSemana) },
+      distribuicaoPorAno,
+      totalDistribuidos,
     });
 
   } catch (error: unknown) {
