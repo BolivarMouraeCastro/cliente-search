@@ -41,21 +41,26 @@ export async function GET(req: NextRequest) {
 
     // =====================================================================
     // DISTRIBUIÇÃO POR ANO: Agrupa processos únicos (CNJ) por ano
-    // Extrai o ano de dataAudiencia (DD/MM/YYYY)
+    // O ano da distribuição é extraído do NÚMERO DO PROCESSO (CNJ).
+    // Formato CNJ: NNNNNNN-DD.YYYY.J.TT.OOOO
+    // Exemplo: 1001669-81.2025.5.02.0465 → ano = 2025
     // =====================================================================
+
+    // Regex para extrair o ano do número CNJ
+    const cnjYearRegex = /\d{7}-\d{2}\.(\d{4})\.\d\.\d{2}\.\d{4}/;
 
     // Map: year -> Map of unique processo -> info
     const yearMap = new Map<string, Map<string, { name: string; date: string }>>();
 
     for (const h of allHearings) {
       const num = h.numeroProcesso.trim();
-      if (!num || !h.dataAudiencia) continue;
+      if (!num) continue;
 
-      const parts = h.dataAudiencia.split('/');
-      if (parts.length !== 3) continue;
+      // Extrair o ano do número do processo (CNJ)
+      const match = num.match(cnjYearRegex);
+      if (!match) continue;
 
-      const year = parts[2];
-      if (!year) continue;
+      const year = match[1]; // Ex: "2025"
 
       if (!yearMap.has(year)) {
         yearMap.set(year, new Map());
