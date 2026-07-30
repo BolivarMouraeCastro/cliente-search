@@ -7,11 +7,6 @@ export const dynamic = 'force-dynamic';
 
 const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID ?? '';
 
-// Pasta "# RECIBO" no Drive - contém TODOS os recibos de distribuição
-// Caminho: 1- PROCESSO > 1 INICIAIS > 1 INICIAIS PRONTAS > 01 DISTRIBUIDO > # RECIBO
-// Se o ID mudar, atualizar aqui. A rota /api/find-folder pode ajudar a encontrar.
-const RECIBO_FOLDER_ID = process.env.RECIBO_FOLDER_ID ?? '';
-
 interface ProcessoItem {
   id: string;
   name: string;
@@ -25,23 +20,61 @@ interface YearDistribution {
 }
 
 /**
- * Busca TODOS os arquivos dentro da pasta # RECIBO, com paginação completa.
+ * Busca a pasta #2026 no Drive (ou o ano atual #YYYY).
+ * Retorna o ID da pasta encontrada, ou null se não existir.
  */
-async function fetchAllRecibosFromFolder(accessToken: string, folderId: string): Promise<any[]> {
-  let allFiles: any[] = [];
+async function findYearFolder(accessToken: string, year: string): Promise<string | null> {
+  const folderName = `#${year}`;
+  const q = `name = '${folderName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+  const params = new URLSearchParams({
+    q,
+    fields: 'files(id, name)',
+    pageSize: '5',
+    supportsAllDrives: 'true',
+    includeItemsFromAllDrives: 'true',
+    corpora: 'allDrives',
+  });
+
+  try {
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.files && data.files.length > 0) {
+        return data.files[0].id;
+      }
+    } else {
+      console.error(`Error finding folder ${folderName}:`, await res.text());
+    }
+  } catch (e) {
+    console.error(`Exception finding folder ${folderName}:`, e);
+  }
+
+  return null;
+}
+
+/**
+ * Conta TODAS as subpastas diretas dentro de uma pasta (com paginação completa).
+ * Cada subpasta = 1 processo distribuído.
+ * Suporta 1000+ subpastas com paginação automática.
+ */
+async function countSubfoldersInFolder(
+  accessToken: string,
+  folderId: string
+): Promise<ProcessoItem[]> {
+  const allSubfolders: ProcessoItem[] = [];
   let pageToken: string | undefined = undefined;
 
-  // Se não tiver folder ID, busca globalmente por "RECIBO"
-  const q = folderId
-    ? `'${folderId}' in parents and trashed = false`
-    : `name contains 'RECIBO' and mimeType = 'application/pdf' and trashed = false`;
+  const q = `'${folderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
 
   do {
     const params = new URLSearchParams({
       q,
       fields: 'nextPageToken, files(id, name, createdTime)',
       pageSize: '1000',
-      orderBy: 'createdTime desc',
       supportsAllDrives: 'true',
       includeItemsFromAllDrives: 'true',
       corpora: 'allDrives',
@@ -51,24 +84,32 @@ async function fetchAllRecibosFromFolder(accessToken: string, folderId: string):
     try {
       const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(30000),
       });
 
       if (res.ok) {
         const data = await res.json();
-        if (data.files) allFiles = allFiles.concat(data.files);
+        if (data.files) {
+          allSubfolders.push(
+            ...data.files.map((f: any) => ({
+              id: f.id,
+              name: f.name || 'Processo',
+              createdTime: f.createdTime || new Date().toISOString(),
+            }))
+          );
+        }
         pageToken = data.nextPageToken;
       } else {
-        console.error('Drive fetch error:', await res.text());
+        console.error(`Drive fetch error (subfolders of ${folderId}):`, await res.text());
         pageToken = undefined;
       }
     } catch (e) {
-      console.error('Drive fetch exception:', e);
+      console.error(`Drive fetch exception (subfolders of ${folderId}):`, e);
       pageToken = undefined;
     }
   } while (pageToken);
 
-  return allFiles;
+  return allSubfolders;
 }
 
 export async function GET(req: NextRequest) {
@@ -83,72 +124,33 @@ export async function GET(req: NextRequest) {
     const currentMonthStr = String(now.getMonth() + 1).padStart(2, '0');
 
     // =====================================================================
-    // Buscar dados em paralelo
+    // Buscar dados em paralelo:
+    // 1. Pasta #2026 no Drive (processos distribuídos do ano atual)
+    // 2. Clientes da planilha (para novos clientes mês/ano)
     // =====================================================================
-    let reciboFolderId = RECIBO_FOLDER_ID;
-
-    // Se não tiver o ID configurado, tenta encontrar a pasta automaticamente
-    if (!reciboFolderId) {
-      try {
-        const q = `name = '# RECIBO' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
-        const params = new URLSearchParams({
-          q,
-          fields: 'files(id, name)',
-          supportsAllDrives: 'true',
-          includeItemsFromAllDrives: 'true',
-          corpora: 'allDrives',
-        });
-        const folderRes = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
-          headers: { Authorization: `Bearer ${session.accessToken}` },
-        });
-        if (folderRes.ok) {
-          const folderData = await folderRes.json();
-          if (folderData.files && folderData.files.length > 0) {
-            reciboFolderId = folderData.files[0].id;
-          }
-        }
-      } catch (e) {
-        console.error('Error finding # RECIBO folder:', e);
-      }
-    }
-
-    const [allRecibos, allClients] = await Promise.all([
-      fetchAllRecibosFromFolder(session.accessToken, reciboFolderId),
-      getClients(session.accessToken, SPREADSHEET_ID),
+    const [yearFolderId, allClients] = await Promise.all([
+      findYearFolder(session.accessToken as string, currentYearStr),
+      getClients(session.accessToken as string, SPREADSHEET_ID),
     ]);
 
     // =====================================================================
-    // DISTRIBUIÇÃO POR ANO
-    // Cada arquivo na pasta # RECIBO = 1 distribuição
-    // O ano é extraído da data de criação do arquivo no Drive (createdTime)
+    // DISTRIBUIÇÃO — Apenas ano atual (2026)
+    // Conta as subpastas dentro da pasta #2026
+    // Cada subpasta = 1 processo distribuído
     // =====================================================================
-    const yearMap = new Map<string, ProcessoItem[]>();
+    let distribuicaoPorAno: YearDistribution[] = [];
+    let totalDistribuidos = 0;
 
-    for (const file of allRecibos) {
-      const createdDate = new Date(file.createdTime);
-      const year = createdDate.getFullYear().toString();
+    if (yearFolderId) {
+      const subfolders = await countSubfoldersInFolder(session.accessToken as string, yearFolderId);
+      totalDistribuidos = subfolders.length;
 
-      if (!yearMap.has(year)) {
-        yearMap.set(year, []);
-      }
-
-      yearMap.get(year)!.push({
-        id: file.id,
-        name: file.name || 'Recibo',
-        createdTime: file.createdTime,
-      });
+      distribuicaoPorAno = [{
+        year: currentYearStr,
+        count: subfolders.length,
+        processos: subfolders,
+      }];
     }
-
-    // Ordenar por ano decrescente
-    const distribuicaoPorAno: YearDistribution[] = Array.from(yearMap.entries())
-      .sort((a, b) => b[0].localeCompare(a[0]))
-      .map(([year, processos]) => ({
-        year,
-        count: processos.length,
-        processos,
-      }));
-
-    const totalDistribuidos = allRecibos.length;
 
     // =====================================================================
     // NOVOS CLIENTES: Conta pela planilha de entrada (como antes)
@@ -175,9 +177,10 @@ export async function GET(req: NextRequest) {
       distribuicaoPorAno,
       totalDistribuidos,
       debug: {
-        reciboFolderFound: !!reciboFolderId,
-        reciboFolderId: reciboFolderId || 'não encontrado',
-        totalFilesInFolder: allRecibos.length,
+        yearFolder: `#${currentYearStr}`,
+        yearFolderFound: !!yearFolderId,
+        yearFolderId: yearFolderId || 'não encontrado',
+        totalProcessos: totalDistribuidos,
       }
     });
 
