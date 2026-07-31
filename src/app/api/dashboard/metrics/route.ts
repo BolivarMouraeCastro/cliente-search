@@ -65,11 +65,31 @@ async function countItemsInFolder(
   accessToken: string,
   folderId: string
 ): Promise<{ items: ProcessoItem[]; error?: string }> {
+  // Tenta duas estratégias: sem corpora (drives pessoais compartilhados) e com allDrives
+  const strategies: Record<string, string>[] = [
+    { supportsAllDrives: 'true', includeItemsFromAllDrives: 'true' },
+    { supportsAllDrives: 'true', includeItemsFromAllDrives: 'true', corpora: 'allDrives' },
+  ];
+
+  for (const extraParams of strategies) {
+    const result = await fetchFolderItems(accessToken, folderId, extraParams);
+    if (result.items.length > 0) {
+      return result;
+    }
+  }
+
+  return { items: [], error: 'Nenhum item encontrado em nenhuma estratégia de busca' };
+}
+
+async function fetchFolderItems(
+  accessToken: string,
+  folderId: string,
+  extraParams: Record<string, string>
+): Promise<{ items: ProcessoItem[]; error?: string }> {
   const allItems: ProcessoItem[] = [];
   let pageToken: string | undefined = undefined;
   let lastError: string | undefined = undefined;
 
-  // Conta TUDO dentro da pasta (sem filtro de mimeType)
   const q = `'${folderId}' in parents and trashed = false`;
 
   do {
@@ -77,16 +97,14 @@ async function countItemsInFolder(
       q,
       fields: 'nextPageToken, files(id, name, createdTime)',
       pageSize: '1000',
-      supportsAllDrives: 'true',
-      includeItemsFromAllDrives: 'true',
-      corpora: 'allDrives',
+      ...extraParams,
     });
     if (pageToken) params.append('pageToken', pageToken);
 
     try {
       const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
-        signal: AbortSignal.timeout(30000),
+        signal: AbortSignal.timeout(60000),
       });
 
       if (res.ok) {
@@ -190,6 +208,7 @@ export async function GET(req: NextRequest) {
       totalDistribuidos,
       debug: {
         yearFolders: Object.entries(YEAR_FOLDERS).map(([year, id]) => ({ year, folderId: id })),
+        perYearCount: distribuicaoPorAno.map(y => ({ year: y.year, count: y.count })),
         totalDistribuidos,
         errors: Object.keys(debugErrors).length > 0 ? debugErrors : undefined,
       }
