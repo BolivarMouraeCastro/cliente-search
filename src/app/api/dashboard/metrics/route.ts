@@ -132,6 +132,7 @@ export async function GET(req: NextRequest) {
     // IDs fixos das pastas — cada item dentro = 1 processo distribuído
     // =====================================================================
     const YEAR_FOLDERS: Record<string, string> = {
+      '2024': '1sjuyjodOEdCjqLrcO_uHTF4h4FGKhNM7',
       '2025': '1Gy8nNHponNxrQeX-XwOfBOAXE7QarkBK',
       '2026': '1UZboUcb7IoZKcEWKYKMwy9o_v6JWNMFj',
     };
