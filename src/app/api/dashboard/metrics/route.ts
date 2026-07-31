@@ -57,18 +57,20 @@ async function findYearFolder(accessToken: string, year: string): Promise<string
 }
 
 /**
- * Conta TODAS as subpastas diretas dentro de uma pasta (com paginação completa).
- * Cada subpasta = 1 processo distribuído.
- * Suporta 1000+ subpastas com paginação automática.
+ * Conta TODOS os itens (pastas e arquivos) dentro de uma pasta do Drive.
+ * Usa paginação completa para suportar 1000+ itens.
+ * Cada item = 1 processo distribuído.
  */
-async function countSubfoldersInFolder(
+async function countItemsInFolder(
   accessToken: string,
   folderId: string
-): Promise<ProcessoItem[]> {
-  const allSubfolders: ProcessoItem[] = [];
+): Promise<{ items: ProcessoItem[]; error?: string }> {
+  const allItems: ProcessoItem[] = [];
   let pageToken: string | undefined = undefined;
+  let lastError: string | undefined = undefined;
 
-  const q = `'${folderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+  // Conta TUDO dentro da pasta (sem filtro de mimeType)
+  const q = `'${folderId}' in parents and trashed = false`;
 
   do {
     const params = new URLSearchParams({
@@ -90,7 +92,7 @@ async function countSubfoldersInFolder(
       if (res.ok) {
         const data = await res.json();
         if (data.files) {
-          allSubfolders.push(
+          allItems.push(
             ...data.files.map((f: any) => ({
               id: f.id,
               name: f.name || 'Processo',
@@ -100,16 +102,18 @@ async function countSubfoldersInFolder(
         }
         pageToken = data.nextPageToken;
       } else {
-        console.error(`Drive fetch error (subfolders of ${folderId}):`, await res.text());
+        lastError = await res.text();
+        console.error(`Drive fetch error (folder ${folderId}):`, lastError);
         pageToken = undefined;
       }
     } catch (e) {
-      console.error(`Drive fetch exception (subfolders of ${folderId}):`, e);
+      lastError = e instanceof Error ? e.message : String(e);
+      console.error(`Drive fetch exception (folder ${folderId}):`, lastError);
       pageToken = undefined;
     }
   } while (pageToken);
 
-  return allSubfolders;
+  return { items: allItems, error: lastError };
 }
 
 export async function GET(req: NextRequest) {
@@ -125,37 +129,32 @@ export async function GET(req: NextRequest) {
 
     // =====================================================================
     // Pastas de processos distribuídos por ano no Drive
-    // Cada subpasta dentro dessas pastas = 1 processo distribuído
+    // IDs fixos das pastas — cada item dentro = 1 processo distribuído
     // =====================================================================
     const YEAR_FOLDERS: Record<string, string> = {
       '2025': '1Gy8nNHponNxrQeX-XwOfBOAXE7QarkBK',
-      '2026': '', // será buscado dinamicamente pela pasta #2026
+      '2026': '1UZboUcb7IoZKcEWKYKMwy9o_v6JWNMFj',
     };
 
-    // Buscar a pasta #2026 dinamicamente e os clientes da planilha
-    const [folder2026Id, allClients] = await Promise.all([
-      findYearFolder(session.accessToken as string, '2026'),
-      getClients(session.accessToken as string, SPREADSHEET_ID),
-    ]);
-
-    // Atualizar o ID da pasta 2026 se encontrado
-    if (folder2026Id) {
-      YEAR_FOLDERS['2026'] = folder2026Id;
-    }
+    // Buscar clientes da planilha
+    const allClients = await getClients(session.accessToken as string, SPREADSHEET_ID);
 
     // =====================================================================
     // DISTRIBUIÇÃO POR ANO
-    // Buscar subpastas de cada ano em paralelo
+    // Buscar itens de cada ano em paralelo
     // =====================================================================
-    const yearEntries = Object.entries(YEAR_FOLDERS).filter(([, id]) => id !== '');
+    const debugErrors: Record<string, string> = {};
 
     const yearResults = await Promise.all(
-      yearEntries.map(async ([year, folderId]) => {
-        const subfolders = await countSubfoldersInFolder(session.accessToken as string, folderId);
+      Object.entries(YEAR_FOLDERS).map(async ([year, folderId]) => {
+        const result = await countItemsInFolder(session.accessToken as string, folderId);
+        if (result.error) {
+          debugErrors[year] = result.error;
+        }
         return {
           year,
-          count: subfolders.length,
-          processos: subfolders,
+          count: result.items.length,
+          processos: result.items,
         } as YearDistribution;
       })
     );
@@ -189,8 +188,9 @@ export async function GET(req: NextRequest) {
       distribuicaoPorAno,
       totalDistribuidos,
       debug: {
-        yearFolders: yearEntries.map(([year, id]) => ({ year, folderId: id })),
+        yearFolders: Object.entries(YEAR_FOLDERS).map(([year, id]) => ({ year, folderId: id })),
         totalDistribuidos,
+        errors: Object.keys(debugErrors).length > 0 ? debugErrors : undefined,
       }
     });
 
