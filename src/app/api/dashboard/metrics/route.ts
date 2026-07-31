@@ -124,33 +124,45 @@ export async function GET(req: NextRequest) {
     const currentMonthStr = String(now.getMonth() + 1).padStart(2, '0');
 
     // =====================================================================
-    // Buscar dados em paralelo:
-    // 1. Pasta #2026 no Drive (processos distribuídos do ano atual)
-    // 2. Clientes da planilha (para novos clientes mês/ano)
+    // Pastas de processos distribuídos por ano no Drive
+    // Cada subpasta dentro dessas pastas = 1 processo distribuído
     // =====================================================================
-    const [yearFolderId, allClients] = await Promise.all([
-      findYearFolder(session.accessToken as string, currentYearStr),
+    const YEAR_FOLDERS: Record<string, string> = {
+      '2025': '1Gy8nNHponNxrQeX-XwOfBOAXE7QarkBK',
+      '2026': '', // será buscado dinamicamente pela pasta #2026
+    };
+
+    // Buscar a pasta #2026 dinamicamente e os clientes da planilha
+    const [folder2026Id, allClients] = await Promise.all([
+      findYearFolder(session.accessToken as string, '2026'),
       getClients(session.accessToken as string, SPREADSHEET_ID),
     ]);
 
-    // =====================================================================
-    // DISTRIBUIÇÃO — Apenas ano atual (2026)
-    // Conta as subpastas dentro da pasta #2026
-    // Cada subpasta = 1 processo distribuído
-    // =====================================================================
-    let distribuicaoPorAno: YearDistribution[] = [];
-    let totalDistribuidos = 0;
-
-    if (yearFolderId) {
-      const subfolders = await countSubfoldersInFolder(session.accessToken as string, yearFolderId);
-      totalDistribuidos = subfolders.length;
-
-      distribuicaoPorAno = [{
-        year: currentYearStr,
-        count: subfolders.length,
-        processos: subfolders,
-      }];
+    // Atualizar o ID da pasta 2026 se encontrado
+    if (folder2026Id) {
+      YEAR_FOLDERS['2026'] = folder2026Id;
     }
+
+    // =====================================================================
+    // DISTRIBUIÇÃO POR ANO
+    // Buscar subpastas de cada ano em paralelo
+    // =====================================================================
+    const yearEntries = Object.entries(YEAR_FOLDERS).filter(([, id]) => id !== '');
+
+    const yearResults = await Promise.all(
+      yearEntries.map(async ([year, folderId]) => {
+        const subfolders = await countSubfoldersInFolder(session.accessToken as string, folderId);
+        return {
+          year,
+          count: subfolders.length,
+          processos: subfolders,
+        } as YearDistribution;
+      })
+    );
+
+    // Ordenar por ano decrescente (2026 primeiro, depois 2025)
+    const distribuicaoPorAno = yearResults.sort((a, b) => b.year.localeCompare(a.year));
+    const totalDistribuidos = distribuicaoPorAno.reduce((sum, y) => sum + y.count, 0);
 
     // =====================================================================
     // NOVOS CLIENTES: Conta pela planilha de entrada (como antes)
@@ -177,10 +189,8 @@ export async function GET(req: NextRequest) {
       distribuicaoPorAno,
       totalDistribuidos,
       debug: {
-        yearFolder: `#${currentYearStr}`,
-        yearFolderFound: !!yearFolderId,
-        yearFolderId: yearFolderId || 'não encontrado',
-        totalProcessos: totalDistribuidos,
+        yearFolders: yearEntries.map(([year, id]) => ({ year, folderId: id })),
+        totalDistribuidos,
       }
     });
 
