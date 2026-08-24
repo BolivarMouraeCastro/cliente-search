@@ -24,6 +24,12 @@ interface YearData {
   processos: Array<{ id: string; name: string; createdTime: string }>;
 }
 
+interface MonthData {
+  month: number;
+  monthName: string;
+  count: number;
+}
+
 export default function DashboardPage() {
   const [totalClients, setTotalClients] = useState(0);
   const [statusData, setStatusData] = useState<StatusData[]>([]);
@@ -34,6 +40,7 @@ export default function DashboardPage() {
     novosClientesAno: { count: 0, items: [] },
   });
   const [distribuicaoPorAno, setDistribuicaoPorAno] = useState<YearData[]>([]);
+  const [distribuicaoPorMes, setDistribuicaoPorMes] = useState<MonthData[]>([]);
   const [totalDistribuidos, setTotalDistribuidos] = useState(0);
   const [metricsLoading, setMetricsLoading] = useState(true);
 
@@ -70,6 +77,7 @@ export default function DashboardPage() {
             novosClientesAno: data.novosClientesAno || { count: 0, items: [] },
           });
           setDistribuicaoPorAno(data.distribuicaoPorAno || []);
+          setDistribuicaoPorMes(data.distribuicaoPorMes || []);
           setTotalDistribuidos(data.totalDistribuidos || 0);
         }
       } catch { /* ignore */ }
@@ -328,6 +336,74 @@ export default function DashboardPage() {
             ))}
           </div>
         )}
+
+        {/* ══════════════════ DISTRIBUIÇÃO POR MÊS (2026) ══════════════════ */}
+        {!metricsLoading && distribuicaoPorMes.length > 0 && (() => {
+          const maxMonthCount = Math.max(...distribuicaoPorMes.map(m => m.count), 1);
+          const totalMes2026 = distribuicaoPorMes.reduce((s, m) => s + m.count, 0);
+          const MONTH_COLORS = [
+            '#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#ec4899',
+            '#14b8a6', '#f97316', '#6366f1', '#84cc16', '#06b6d4', '#a855f7',
+          ];
+          return (
+            <div style={{ marginBottom: '2rem' }}>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '1rem' }}>
+                📅 Distribuídos por Mês — 2026
+              </h3>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
+                {distribuicaoPorMes.map((m, idx) => {
+                  const barWidth = Math.max(3, (m.count / maxMonthCount) * 100);
+                  const color = MONTH_COLORS[idx % MONTH_COLORS.length];
+                  return (
+                    <div key={m.month} style={{
+                      background: 'var(--card-bg)', border: '1px solid var(--card-border)',
+                      borderRadius: '0.6rem', padding: '0.75rem 1rem',
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                          <span style={{
+                            fontSize: '0.75rem', fontWeight: 800, color,
+                            background: `${color}18`, padding: '0.15rem 0.5rem', borderRadius: '6px',
+                            minWidth: '90px', textAlign: 'center',
+                          }}>
+                            {m.monthName}
+                          </span>
+                        </div>
+                        <span style={{ fontSize: '1.1rem', fontWeight: 900, color }}>
+                          {m.count}
+                        </span>
+                      </div>
+                      <div style={{ width: '100%', height: '5px', background: 'rgba(255,255,255,0.06)', borderRadius: '999px', overflow: 'hidden' }}>
+                        <div style={{
+                          width: `${barWidth}%`, height: '100%',
+                          background: `linear-gradient(90deg, ${color}, ${color}88)`,
+                          borderRadius: '999px', transition: 'width 0.8s ease',
+                        }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Total 2026 */}
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(59, 130, 246, 0.04))',
+                border: '1px solid rgba(59, 130, 246, 0.25)',
+                borderRadius: '0.75rem', padding: '1rem 1.25rem',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              }}>
+                <div>
+                  <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#3b82f6' }}>Total Distribuídos em 2026</div>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                    Soma de todos os meses • Baseado na data de modificação
+                  </div>
+                </div>
+                <span style={{ fontSize: '1.5rem', fontWeight: 900, color: '#3b82f6' }}>{totalMes2026}</span>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Donut Chart - Status */}
         {!dashLoading && statusData.length > 0 && (

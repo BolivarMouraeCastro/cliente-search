@@ -11,6 +11,13 @@ interface ProcessoItem {
   id: string;
   name: string;
   createdTime: string;
+  modifiedTime?: string;
+}
+
+interface MonthDistribution {
+  month: number;       // 1-12
+  monthName: string;   // JANEIRO, FEVEREIRO, etc.
+  count: number;
 }
 
 interface YearDistribution {
@@ -95,7 +102,7 @@ async function fetchFolderItems(
   do {
     const params = new URLSearchParams({
       q,
-      fields: 'nextPageToken, files(id, name, createdTime)',
+      fields: 'nextPageToken, files(id, name, createdTime, modifiedTime)',
       pageSize: '1000',
       ...extraParams,
     });
@@ -115,6 +122,7 @@ async function fetchFolderItems(
               id: f.id,
               name: f.name || 'Processo',
               createdTime: f.createdTime || new Date().toISOString(),
+              modifiedTime: f.modifiedTime || f.createdTime || new Date().toISOString(),
             }))
           );
         }
@@ -183,6 +191,39 @@ export async function GET(req: NextRequest) {
     const totalDistribuidos = distribuicaoPorAno.reduce((sum, y) => sum + y.count, 0);
 
     // =====================================================================
+    // DISTRIBUIÇÃO POR MÊS (2026)
+    // Agrupa processos do ano atual pela data de modificação (modifiedTime)
+    // =====================================================================
+    const MONTH_NAMES = [
+      'JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO',
+      'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO',
+    ];
+
+    const year2026Data = yearResults.find(y => y.year === '2026');
+    const distribuicaoPorMes: MonthDistribution[] = [];
+
+    if (year2026Data) {
+      // Contagem por mês usando modifiedTime
+      const monthCounts = new Array(12).fill(0);
+
+      for (const processo of year2026Data.processos) {
+        const modDate = new Date(processo.modifiedTime || processo.createdTime);
+        const month = modDate.getMonth(); // 0-11
+        monthCounts[month]++;
+      }
+
+      // Gerar array apenas dos meses que já passaram (até o mês atual)
+      const currentMonth = now.getMonth(); // 0-11
+      for (let m = 0; m <= currentMonth; m++) {
+        distribuicaoPorMes.push({
+          month: m + 1,
+          monthName: MONTH_NAMES[m],
+          count: monthCounts[m],
+        });
+      }
+    }
+
+    // =====================================================================
     // NOVOS CLIENTES: Conta pela planilha de entrada (como antes)
     // =====================================================================
     const formatClientToItem = (c: { id?: string; nome?: string; empresa?: string; entrada: string }): ProcessoItem => {
@@ -205,6 +246,7 @@ export async function GET(req: NextRequest) {
       novosClientesMes: { count: novosClientesMesItems.length, items: novosClientesMesItems.map(formatClientToItem) },
       novosClientesAno: { count: novosClientesAnoItems.length, items: novosClientesAnoItems.map(formatClientToItem) },
       distribuicaoPorAno,
+      distribuicaoPorMes,
       totalDistribuidos,
       debug: {
         yearFolders: Object.entries(YEAR_FOLDERS).map(([year, id]) => ({ year, folderId: id })),
