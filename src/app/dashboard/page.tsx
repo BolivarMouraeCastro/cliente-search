@@ -2,11 +2,6 @@
 
 import { useState, useEffect } from 'react';
 
-const YEAR_COLORS = [
-  '#d4af37', '#8b5cf6', '#3b82f6', '#10b981', '#f59e0b',
-  '#ef4444', '#ec4899', '#14b8a6', '#f97316', '#6366f1',
-];
-
 const BAR_COLORS = [
   '#3b82f6', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444',
   '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16',
@@ -45,7 +40,6 @@ export default function DashboardPage() {
   const [metricsLoading, setMetricsLoading] = useState(true);
 
   const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
-  const [selectedYearData, setSelectedYearData] = useState<YearData | null>(null);
 
   const [autoSyncState, setAutoSyncState] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
   const [autoSyncMessage, setAutoSyncMessage] = useState('');
@@ -163,9 +157,6 @@ export default function DashboardPage() {
   const donutNovosMes = getDonutProps(novosClientesMesCount, novosClientesGoal, '#f59e0b');
   const donutNovosAno = getDonutProps(novosClientesAnoCount, novosClientesAnoGoal, '#ef4444');
 
-  // Find max year count for bar chart scaling
-  const maxYearCount = Math.max(...distribuicaoPorAno.map(y => y.count), 1);
-
   return (
     <div className="detail-page" style={{ paddingTop: '1rem' }}>
       <div style={{ marginTop: '1rem' }}>
@@ -251,159 +242,107 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* ══════════════════ DISTRIBUIÇÕES POR ANO ══════════════════ */}
-        <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '1rem' }}>
-          📤 Processos Distribuídos por Ano
-        </h3>
-
-        {/* Card Grande - Total Geral */}
-        <div style={{
-          background: 'linear-gradient(135deg, rgba(212, 175, 55, 0.12), rgba(170, 128, 53, 0.06))',
-          border: '1px solid rgba(212, 175, 55, 0.25)',
-          borderRadius: '1rem', padding: '1.5rem', marginBottom: '1.5rem',
-          display: 'flex', alignItems: 'center', gap: '1.5rem',
-        }}>
-          <div style={{
-            width: '80px', height: '80px', borderRadius: '50%',
-            background: 'linear-gradient(135deg, #d4af37, #f5d678)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 4px 20px rgba(212, 175, 55, 0.3)',
-          }}>
-            <span style={{ fontSize: '1.5rem', fontWeight: 900, color: '#0a0a0f' }}>
-              {metricsLoading ? '—' : totalDistribuidos}
-            </span>
-          </div>
-          <div>
-            <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#d4af37' }}>Total de Processos Distribuídos</div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-              Soma de todos os anos • Contagem por nº de processo único (CNJ)
-            </div>
-          </div>
-        </div>
-
-        {/* Cards por Ano - Bar Chart Visual */}
-        {!metricsLoading && distribuicaoPorAno.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '2rem' }}>
-            {distribuicaoPorAno.map((yearData, idx) => {
-              const barWidth = Math.max(5, (yearData.count / maxYearCount) * 100);
-              const color = YEAR_COLORS[idx % YEAR_COLORS.length];
-              return (
-                <div
-                  key={yearData.year}
-                  onClick={() => setSelectedYearData(yearData)}
-                  style={{
-                    background: 'var(--card-bg)', border: '1px solid var(--card-border)',
-                    borderRadius: '0.75rem', padding: '1rem 1.25rem',
-                    cursor: 'pointer', transition: 'all 0.2s',
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateX(4px)'; e.currentTarget.style.borderColor = color; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateX(0)'; e.currentTarget.style.borderColor = 'var(--card-border)'; }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                      <span style={{
-                        fontSize: '1rem', fontWeight: 800, color,
-                        background: `${color}18`, padding: '0.2rem 0.6rem', borderRadius: '8px',
-                      }}>
-                        {yearData.year}
-                      </span>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                        {yearData.count} processo{yearData.count !== 1 ? 's' : ''}
-                      </span>
-                    </div>
-                    <span style={{ fontSize: '1.3rem', fontWeight: 900, color }}>
-                      {yearData.count}
-                    </span>
-                  </div>
-                  {/* Progress bar */}
-                  <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.06)', borderRadius: '999px', overflow: 'hidden' }}>
-                    <div style={{
-                      width: `${barWidth}%`, height: '100%',
-                      background: `linear-gradient(90deg, ${color}, ${color}88)`,
-                      borderRadius: '999px', transition: 'width 0.8s ease',
-                    }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {metricsLoading && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '2rem' }}>
-            {[1, 2, 3].map(i => (
-              <div key={i} className="shimmer" style={{ height: '70px', borderRadius: '0.75rem' }} />
-            ))}
-          </div>
-        )}
-
-        {/* ══════════════════ DISTRIBUIÇÃO POR MÊS (2026) ══════════════════ */}
+        {/* ══════════════════ GRÁFICO MENSAL 2026 (Barras Verticais) ══════════════════ */}
         {!metricsLoading && distribuicaoPorMes.length > 0 && (() => {
           const maxMonthCount = Math.max(...distribuicaoPorMes.map(m => m.count), 1);
           const totalMes2026 = distribuicaoPorMes.reduce((s, m) => s + m.count, 0);
-          const MONTH_COLORS = [
-            '#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#ec4899',
-            '#14b8a6', '#f97316', '#6366f1', '#84cc16', '#06b6d4', '#a855f7',
-          ];
+          const BAR_COLOR = '#3b82f6';
+          const chartHeight = 220;
+          const MONTH_SHORT = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+          const gridLines = 4;
+          const gridStep = Math.ceil(maxMonthCount / gridLines);
+          const gridValues = Array.from({ length: gridLines + 1 }, (_, i) => i * gridStep);
+
           return (
             <div style={{ marginBottom: '2rem' }}>
               <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '1rem' }}>
-                📅 Distribuídos por Mês — 2026
+                📅 Processos Distribuídos por Mês — 2026
               </h3>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
-                {distribuicaoPorMes.map((m, idx) => {
-                  const barWidth = Math.max(3, (m.count / maxMonthCount) * 100);
-                  const color = MONTH_COLORS[idx % MONTH_COLORS.length];
-                  return (
-                    <div key={m.month} style={{
-                      background: 'var(--card-bg)', border: '1px solid var(--card-border)',
-                      borderRadius: '0.6rem', padding: '0.75rem 1rem',
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                          <span style={{
-                            fontSize: '0.75rem', fontWeight: 800, color,
-                            background: `${color}18`, padding: '0.15rem 0.5rem', borderRadius: '6px',
-                            minWidth: '90px', textAlign: 'center',
-                          }}>
-                            {m.monthName}
-                          </span>
-                        </div>
-                        <span style={{ fontSize: '1.1rem', fontWeight: 900, color }}>
-                          {m.count}
-                        </span>
-                      </div>
-                      <div style={{ width: '100%', height: '5px', background: 'rgba(255,255,255,0.06)', borderRadius: '999px', overflow: 'hidden' }}>
-                        <div style={{
-                          width: `${barWidth}%`, height: '100%',
-                          background: `linear-gradient(90deg, ${color}, ${color}88)`,
-                          borderRadius: '999px', transition: 'width 0.8s ease',
-                        }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Total 2026 */}
               <div style={{
-                background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(59, 130, 246, 0.04))',
-                border: '1px solid rgba(59, 130, 246, 0.25)',
-                borderRadius: '0.75rem', padding: '1rem 1.25rem',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                background: 'var(--card-bg)', border: '1px solid var(--card-border)',
+                borderRadius: '1rem', padding: '1.5rem',
               }}>
-                <div>
-                  <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#3b82f6' }}>Total Distribuídos em 2026</div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
-                    Soma de todos os meses • Baseado na data de modificação
+                <div style={{ display: 'flex', gap: '0', height: `${chartHeight + 50}px` }}>
+                  {/* Eixo Y */}
+                  <div style={{
+                    display: 'flex', flexDirection: 'column-reverse', justifyContent: 'space-between',
+                    height: `${chartHeight}px`, paddingRight: '0.5rem', minWidth: '30px',
+                  }}>
+                    {gridValues.map(v => (
+                      <span key={v} style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textAlign: 'right' }}>{v}</span>
+                    ))}
+                  </div>
+
+                  {/* Barras */}
+                  <div style={{ flex: 1, display: 'flex', position: 'relative' }}>
+                    {/* Grid lines */}
+                    <div style={{
+                      position: 'absolute', top: 0, left: 0, right: 0, height: `${chartHeight}px`,
+                      display: 'flex', flexDirection: 'column-reverse', justifyContent: 'space-between',
+                      pointerEvents: 'none',
+                    }}>
+                      {gridValues.map(v => (
+                        <div key={v} style={{ width: '100%', height: '1px', background: 'rgba(255,255,255,0.06)' }} />
+                      ))}
+                    </div>
+
+                    {/* Barras verticais */}
+                    <div style={{
+                      display: 'flex', alignItems: 'flex-end', gap: '4px',
+                      width: '100%', height: `${chartHeight}px`,
+                    }}>
+                      {distribuicaoPorMes.map((m) => {
+                        const barHeight = Math.max(2, (m.count / (gridStep * gridLines || 1)) * chartHeight);
+                        return (
+                          <div key={m.month} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                            <span style={{ fontSize: '0.6rem', fontWeight: 700, color: BAR_COLOR }}>{m.count}</span>
+                            <div style={{
+                              width: '100%', maxWidth: '40px', height: `${barHeight}px`,
+                              background: BAR_COLOR, borderRadius: '4px 4px 0 0',
+                              transition: 'height 0.8s ease',
+                            }} />
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Labels meses */}
+                    <div style={{
+                      position: 'absolute', bottom: '-25px', left: 0, right: 0,
+                      display: 'flex', gap: '4px',
+                    }}>
+                      {distribuicaoPorMes.map((m) => (
+                        <div key={m.month} style={{
+                          flex: 1, textAlign: 'center',
+                          fontSize: '0.55rem', fontWeight: 700, color: 'var(--text-muted)',
+                        }}>
+                          {MONTH_SHORT[m.month - 1]}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
-                <span style={{ fontSize: '1.5rem', fontWeight: 900, color: '#3b82f6' }}>{totalMes2026}</span>
+
+                {/* Total 2026 */}
+                <div style={{
+                  marginTop: '1.5rem', paddingTop: '1rem',
+                  borderTop: '1px solid var(--card-border)',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                }}>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>Total Distribuídos em 2026</span>
+                  <span style={{ fontSize: '1.3rem', fontWeight: 900, color: BAR_COLOR }}>{totalMes2026}</span>
+                </div>
               </div>
             </div>
           );
         })()}
+
+        {metricsLoading && (
+          <div style={{ marginBottom: '2rem' }}>
+            <div className="shimmer" style={{ height: '300px', borderRadius: '1rem' }} />
+          </div>
+        )}
 
         {/* Donut Chart - Status */}
         {!dashLoading && statusData.length > 0 && (
@@ -468,6 +407,30 @@ export default function DashboardPage() {
             <div className="shimmer" style={{ height: '350px', borderRadius: '1rem' }} />
           </div>
         )}
+
+        {/* ══════════════════ TOTAIS POR ANO (simples) ══════════════════ */}
+        {!metricsLoading && distribuicaoPorAno.length > 0 && (
+          <div style={{
+            background: 'var(--card-bg)', border: '1px solid var(--card-border)',
+            borderRadius: '0.75rem', padding: '1rem 1.25rem', marginTop: '2rem',
+          }}>
+            <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              📊 Total de Processos Distribuídos por Ano
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {distribuicaoPorAno.map((y) => (
+                <div key={y.year} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{y.year}</span>
+                  <span style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)' }}>{y.count}</span>
+                </div>
+              ))}
+              <div style={{ borderTop: '1px solid var(--card-border)', marginTop: '0.25rem', paddingTop: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#d4af37' }}>Total Geral</span>
+                <span style={{ fontSize: '1.1rem', fontWeight: 900, color: '#d4af37' }}>{totalDistribuidos}</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ══════════════════ MODAL: Entradas ══════════════════ */}
@@ -505,43 +468,6 @@ export default function DashboardPage() {
                   Nenhum registro encontrado neste período.
                 </div>
               )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ══════════════════ MODAL: Processos por Ano ══════════════════ */}
-      {selectedYearData && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0, 0, 0, 0.7)', backdropFilter: 'blur(4px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 9999, padding: '1rem'
-        }} onClick={() => setSelectedYearData(null)}>
-          <div style={{
-            background: 'var(--card-bg)', border: '1px solid var(--card-border)',
-            borderRadius: '1rem', padding: '2rem', width: '100%', maxWidth: '600px',
-            maxHeight: '80vh', overflowY: 'auto', position: 'relative'
-          }} onClick={e => e.stopPropagation()}>
-            <button onClick={() => setSelectedYearData(null)} style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem' }}>✕</button>
-            <h2 style={{ margin: '0 0 0.5rem', color: 'var(--text-primary)', fontSize: '1.25rem', fontWeight: 800 }}>
-              Processos Distribuídos — {selectedYearData.year}
-            </h2>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '0 0 1.5rem' }}>
-              {selectedYearData.count} processo{selectedYearData.count !== 1 ? 's' : ''} único{selectedYearData.count !== 1 ? 's' : ''}
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {selectedYearData.processos.map((item) => (
-                <div key={item.id} style={{
-                  padding: '1rem', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--card-border)',
-                  borderRadius: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-                }}>
-                  <div>
-                    <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{item.name}</div>
-                    <div style={{ color: '#818cf8', fontFamily: 'monospace', fontSize: '0.75rem', marginTop: '0.25rem' }}>{item.id}</div>
-                  </div>
-                </div>
-              ))}
             </div>
           </div>
         </div>
