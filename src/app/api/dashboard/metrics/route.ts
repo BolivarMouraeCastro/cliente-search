@@ -204,12 +204,27 @@ export async function GET(req: NextRequest) {
 
     if (year2026Data) {
       // Contagem por mês usando modifiedTime
+      // Se modifiedTime não é de 2026, usa createdTime como fallback
+      // Se nenhum é de 2026, conta no mês de janeiro como catch-all
       const monthCounts = new Array(12).fill(0);
 
       for (const processo of year2026Data.processos) {
         const modDate = new Date(processo.modifiedTime || processo.createdTime);
-        const month = modDate.getMonth(); // 0-11
-        monthCounts[month]++;
+        const createDate = new Date(processo.createdTime);
+
+        let targetMonth: number;
+
+        if (modDate.getFullYear() === 2026) {
+          targetMonth = modDate.getMonth(); // 0-11
+        } else if (createDate.getFullYear() === 2026) {
+          targetMonth = createDate.getMonth();
+        } else {
+          // Processo está na pasta 2026 mas sem data de 2026
+          // Conta no mês 0 (janeiro) como catch-all
+          targetMonth = 0;
+        }
+
+        monthCounts[targetMonth]++;
       }
 
       // Gerar array apenas dos meses que já passaram (até o mês atual)

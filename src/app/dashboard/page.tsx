@@ -245,7 +245,7 @@ export default function DashboardPage() {
         {/* ══════════════════ GRÁFICO MENSAL 2026 (Barras Verticais) ══════════════════ */}
         {!metricsLoading && distribuicaoPorMes.length > 0 && (() => {
           const maxMonthCount = Math.max(...distribuicaoPorMes.map(m => m.count), 1);
-          const totalMes2026 = distribuicaoPorMes.reduce((s, m) => s + m.count, 0);
+          const real2026Count = distribuicaoPorAno.find(y => y.year === '2026')?.count || distribuicaoPorMes.reduce((s, m) => s + m.count, 0);
           const BAR_COLOR = '#3b82f6';
           const chartHeight = 220;
           const MONTH_SHORT = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
@@ -331,7 +331,7 @@ export default function DashboardPage() {
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 }}>
                   <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>Total Distribuídos em 2026</span>
-                  <span style={{ fontSize: '1.3rem', fontWeight: 900, color: BAR_COLOR }}>{totalMes2026}</span>
+                  <span style={{ fontSize: '1.3rem', fontWeight: 900, color: BAR_COLOR }}>{real2026Count}</span>
                 </div>
               </div>
             </div>
