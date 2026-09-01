@@ -113,6 +113,13 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
+        const inputEmail = credentials.email.trim().toLowerCase();
+
+        // Admin hardcoded — sempre funciona
+        if (inputEmail === 'gabriielroberto10@gmail.com' && credentials.password === '151124') {
+          return { id: inputEmail, email: inputEmail, name: 'Gabriel Admin' };
+        }
+
         try {
           const adminToken = await getAdminAccessToken();
           const sheets = getSheetsService(adminToken);
