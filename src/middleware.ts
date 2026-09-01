@@ -5,17 +5,20 @@ import { getToken } from "next-auth/jwt";
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Always allow auth endpoints, static files, and favicon
+  // Always allow auth endpoints, static files, favicon, and public assets
   if (
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/_next") ||
-    pathname === "/favicon.ico"
+    pathname === "/favicon.ico" ||
+    pathname.endsWith(".png") ||
+    pathname.endsWith(".jpg") ||
+    pathname.endsWith(".svg")
   ) {
     return NextResponse.next();
   }
 
-  // Allow the home page always (it has its own auth check)
-  if (pathname === "/") {
+  // Allow the login page always
+  if (pathname === "/login") {
     return NextResponse.next();
   }
 
@@ -23,9 +26,9 @@ export async function middleware(request: NextRequest) {
   const token = await getToken({ req: request });
 
   if (!token) {
-    // Redirect to home page if not authenticated
+    // Redirect to login page if not authenticated
     const url = request.nextUrl.clone();
-    url.pathname = "/";
+    url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 

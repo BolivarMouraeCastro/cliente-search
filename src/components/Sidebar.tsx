@@ -10,6 +10,25 @@ export default function Sidebar() {
   const { data: session } = useSession();
   const [isOpen, setIsOpen] = useState(false);
 
+  const ADMIN_EMAIL = 'gabriielroberto10@gmail.com';
+  const isAdmin = session?.user?.email?.toLowerCase() === ADMIN_EMAIL;
+
+  // Track sidebar clicks
+  const trackClick = (label: string) => {
+    if (!session?.user?.email) return;
+    try {
+      fetch('/api/usuarios/atividades', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          acao: 'CLIQUE_SIDEBAR',
+          detalhes: `Clicou em "${label}"`,
+        }),
+        keepalive: true,
+      }).catch(() => {});
+    } catch {}
+  };
+
   // Close sidebar on route change (mobile)
   useEffect(() => {
     setIsOpen(false);
@@ -182,11 +201,27 @@ export default function Sidebar() {
               key={i}
               href={link.href}
               className={`sidebar-link ${pathname === link.href ? 'active' : ''}`}
+              onClick={() => trackClick(link.label)}
             >
               {link.icon}
               <span className="sidebar-link-text">{link.label}</span>
             </Link>
           ))}
+
+          {/* Admin link - only for admin */}
+          {isAdmin && (
+            <Link
+              href="/admin"
+              className={`sidebar-link ${pathname === '/admin' ? 'active' : ''}`}
+              onClick={() => trackClick('Admin')}
+              style={{ borderTop: '1px solid rgba(212, 175, 55, 0.15)', marginTop: '0.5rem', paddingTop: '0.75rem' }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#d4af37" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 15v2m-6 4h12a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2zm10-10V7a4 4 0 0 0-8 0v4h8z" />
+              </svg>
+              <span className="sidebar-link-text" style={{ color: '#d4af37' }}>Admin</span>
+            </Link>
+          )}
         </nav>
 
         <div className="sidebar-footer">

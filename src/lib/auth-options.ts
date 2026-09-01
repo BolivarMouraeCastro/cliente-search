@@ -1,5 +1,9 @@
 import { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
+import CredentialsProvider from "next-auth/providers/credentials";
+import { verifyPassword } from "@/lib/password";
+import { getAdminAccessToken } from "@/lib/admin-token";
+import { getSheetsService } from "@/lib/google-auth";
 
 declare module "next-auth" {
   interface Session {
@@ -14,6 +18,7 @@ declare module "next-auth/jwt" {
     refreshToken?: string;
     accessTokenExpires?: number;
     error?: string;
+    loginType?: string;
   }
 }
 
@@ -25,6 +30,8 @@ const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/spreadsheets",
   "https://www.googleapis.com/auth/drive",
 ].join(" ");
+
+const USUARIOS_SPREADSHEET_ID = '11ni1pXu0QbPQ_QmMGxdqdT4PsDNz6Z0ITBUW-E1ogMM';
 
 async function refreshAccessToken(token: {
   refreshToken?: string;
@@ -75,8 +82,72 @@ async function refreshAccessToken(token: {
   }
 }
 
+/** Log login activity to the Atividades sheet */
+async function logLoginActivity(email: string, nome: string, tipo: string) {
+  try {
+    const adminToken = await getAdminAccessToken();
+    const sheets = getSheetsService(adminToken);
+    const timestamp = new Date().toISOString();
+
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: USUARIOS_SPREADSHEET_ID,
+      range: 'Atividades!A:E',
+      valueInputOption: 'RAW',
+      requestBody: {
+        values: [[timestamp, email, nome, 'LOGIN', `Login via ${tipo}`]],
+      },
+    });
+  } catch (e) {
+    console.error('Failed to log login activity:', e);
+  }
+}
+
 export const authOptions: NextAuthOptions = {
   providers: [
+    CredentialsProvider({
+      name: 'Credentials',
+      credentials: {
+        email: { label: 'Email', type: 'email' },
+        password: { label: 'Senha', type: 'password' },
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) return null;
+
+        try {
+          const adminToken = await getAdminAccessToken();
+          const sheets = getSheetsService(adminToken);
+
+          const res = await sheets.spreadsheets.values.get({
+            spreadsheetId: USUARIOS_SPREADSHEET_ID,
+            range: 'Usuarios!A:E',
+          });
+
+          const rows = res.data.values || [];
+          // Skip header row, find matching email
+          for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            const rowEmail = (row[0] || '').trim().toLowerCase();
+            const rowNome = row[1] || '';
+            const rowSenha = row[4] || '';
+
+            if (rowEmail === credentials.email.trim().toLowerCase() && rowSenha) {
+              const isValid = verifyPassword(credentials.password, rowSenha);
+              if (isValid) {
+                return {
+                  id: rowEmail,
+                  email: rowEmail,
+                  name: rowNome,
+                };
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Credentials auth error:', e);
+        }
+
+        return null;
+      },
+    }),
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
@@ -90,8 +161,26 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, account }) {
-      // On initial sign-in, store the tokens from the account
+    async signIn({ user, account }) {
+      const tipo = account?.provider === 'google' ? 'Google' : 'email/senha';
+      // Log login asynchronously (don't block sign-in)
+      logLoginActivity(user.email || '', user.name || '', tipo);
+      return true;
+    },
+
+    async jwt({ token, account, user }) {
+      // Credentials login — use admin token for API access
+      if (user && !account) {
+        const adminToken = await getAdminAccessToken();
+        return {
+          ...token,
+          accessToken: adminToken,
+          accessTokenExpires: Date.now() + 3600 * 1000,
+          loginType: 'credentials',
+        };
+      }
+
+      // Google OAuth initial sign-in
       if (account) {
         return {
           ...token,
@@ -100,18 +189,32 @@ export const authOptions: NextAuthOptions = {
           accessTokenExpires: account.expires_at
             ? account.expires_at * 1000
             : Date.now() + 3600 * 1000,
+          loginType: 'google',
         };
       }
 
-      // If the access token hasn't expired yet, return the existing token
-      if (
-        token.accessTokenExpires &&
-        Date.now() < token.accessTokenExpires
-      ) {
+      // If credentials login and token expired, refresh admin token
+      if (token.loginType === 'credentials') {
+        if (token.accessTokenExpires && Date.now() < token.accessTokenExpires) {
+          return token;
+        }
+        try {
+          const adminToken = await getAdminAccessToken();
+          return {
+            ...token,
+            accessToken: adminToken,
+            accessTokenExpires: Date.now() + 3600 * 1000,
+          };
+        } catch {
+          return { ...token, error: 'RefreshAccessTokenError' };
+        }
+      }
+
+      // Google OAuth: check expiry
+      if (token.accessTokenExpires && Date.now() < token.accessTokenExpires) {
         return token;
       }
 
-      // Access token has expired, try to refresh it
       console.log("Access token expired, refreshing...");
       return await refreshAccessToken(token);
     },
