@@ -176,19 +176,22 @@ export const authOptions: NextAuthOptions = {
     },
 
     async jwt({ token, account, user }) {
-      // Credentials login — use admin token for API access
-      if (user && !account) {
-        const adminToken = await getAdminAccessToken();
-        return {
-          ...token,
-          accessToken: adminToken,
-          accessTokenExpires: Date.now() + 3600 * 1000,
-          loginType: 'credentials',
-        };
-      }
+      // Initial sign-in
+      if (account && user) {
+        if (account.provider === 'credentials') {
+          // Credentials login — use admin token for API access
+          const adminToken = await getAdminAccessToken();
+          return {
+            ...token,
+            accessToken: adminToken,
+            accessTokenExpires: Date.now() + 3600 * 1000,
+            loginType: 'credentials',
+            email: user.email,
+            name: user.name,
+          };
+        }
 
-      // Google OAuth initial sign-in
-      if (account) {
+        // Google OAuth initial sign-in
         return {
           ...token,
           accessToken: account.access_token,
@@ -230,8 +233,18 @@ export const authOptions: NextAuthOptions = {
       session.accessToken = token.accessToken;
       session.error = token.error;
       (session as any).refreshToken = token.refreshToken;
+      // Ensure email/name are available for credentials users
+      if (token.email && session.user) {
+        session.user.email = token.email as string;
+      }
+      if (token.name && session.user) {
+        session.user.name = token.name as string;
+      }
       return session;
     },
+  },
+  session: {
+    strategy: 'jwt',
   },
   pages: {
     signIn: '/login',
