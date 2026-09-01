@@ -230,7 +230,15 @@ export const authOptions: NextAuthOptions = {
     },
 
     async session({ session, token }) {
-      session.accessToken = token.accessToken;
+      // SEMPRE usar token admin para APIs (Drive/Sheets do advogadosjjs@gmail.com)
+      // Independente de quem fez login, o app precisa acessar a conta principal
+      try {
+        const adminToken = await getAdminAccessToken();
+        session.accessToken = adminToken;
+      } catch {
+        // Fallback para o token da sessão se admin token falhar
+        session.accessToken = token.accessToken;
+      }
       session.error = token.error;
       (session as any).refreshToken = token.refreshToken;
       // Ensure email/name are available for credentials users
