@@ -430,9 +430,21 @@ export default function ClientDetailPage() {
               </button>
               <button
                 className="report-action-btn whatsapp"
-                onClick={() => {
-                  const text = encodeURIComponent(`📋 *Relatório — ${client.nome}*\n\n${reportText}`);
-                  window.open(`https://wa.me/?text=${text}`, '_blank');
+                onClick={async () => {
+                  const text = `📋 *Relatório — ${client.nome}*\n\n${reportText}`;
+                  const encodedText = encodeURIComponent(text);
+                  try {
+                    const res = await fetch(`/api/contatos/lookup?nome=${encodeURIComponent(client.nome)}`);
+                    const data = await res.json();
+                    if (data.found && data.telefone) {
+                      window.open(`https://wa.me/${data.telefone}?text=${encodedText}`, '_blank');
+                    } else {
+                      const go = confirm('Contato não encontrado. Deseja enviar sem número?\n\n(Cadastre o contato em "Contatos" no menu lateral)');
+                      if (go) window.open(`https://wa.me/?text=${encodedText}`, '_blank');
+                    }
+                  } catch {
+                    window.open(`https://wa.me/?text=${encodedText}`, '_blank');
+                  }
                 }}
               >
                 💬 WhatsApp

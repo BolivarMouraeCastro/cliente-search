@@ -152,7 +152,7 @@ export default function ClientCard({ client }: ClientCardProps) {
     navigator.clipboard.writeText(text);
   };
 
-  const handleWhatsApp = (e: React.MouseEvent) => {
+  const handleWhatsApp = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!reportData) return;
     const msg = `Olá! Aqui é do escritório *BM&C Advogados*. Segue atualização do seu processo:\n\n` +
@@ -160,7 +160,18 @@ export default function ClientCard({ client }: ClientCardProps) {
       (reportData.processo ? `📄 *Processo:* ${reportData.processo}\n` : '') +
       (reportData.audiencia ? `📅 *Próxima audiência:* ${reportData.audiencia}\n` : '') +
       `\n${reportData.resumo}\n\nQualquer dúvida, estamos à disposição! 🤝`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+    const encodedMsg = encodeURIComponent(msg);
+    try {
+      const res = await fetch(`/api/contatos/lookup?nome=${encodeURIComponent(client.nome)}`);
+      const data = await res.json();
+      if (data.found && data.telefone) {
+        window.open(`https://wa.me/${data.telefone}?text=${encodedMsg}`, '_blank');
+      } else {
+        window.open(`https://wa.me/?text=${encodedMsg}`, '_blank');
+      }
+    } catch {
+      window.open(`https://wa.me/?text=${encodedMsg}`, '_blank');
+    }
   };
 
   return (
