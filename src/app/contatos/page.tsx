@@ -51,6 +51,8 @@ export default function ContatosPage() {
   const [formCpf, setFormCpf] = useState('');
   const [formTel, setFormTel] = useState('+55 ');
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState('');
   const [message, setMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
   const fetchContatos = async () => {
@@ -64,7 +66,39 @@ export default function ContatosPage() {
 
   const flash = (type: 'ok' | 'err', text: string) => {
     setMessage({ type, text });
-    setTimeout(() => setMessage(null), 3500);
+    setTimeout(() => setMessage(null), 6000);
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = ''; // reset input
+
+    setImporting(true);
+    setImportProgress('Enviando arquivo...');
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch('/api/contatos/import', { method: 'POST', body: formData });
+      const data = await res.json();
+
+      if (res.ok) {
+        setImportProgress('');
+        flash('ok', `✅ Importação concluída! ${data.imported} contatos importados` +
+          (data.skipped > 0 ? ` (${data.skipped} linhas vazias ignoradas)` : '') +
+          `\n\nColunas detectadas: Nome="${data.columns.nome}", CPF="${data.columns.cpf}", Tel="${data.columns.telefone}"`);
+        setLoading(true);
+        fetchContatos();
+      } else {
+        flash('err', data.error || 'Erro na importação');
+      }
+    } catch {
+      flash('err', 'Erro de conexão durante importação');
+    }
+    setImporting(false);
+    setImportProgress('');
   };
 
   const openAdd = () => {
@@ -149,13 +183,36 @@ export default function ContatosPage() {
             Gerencie os contatos dos clientes para envio via WhatsApp
           </p>
         </div>
-        <button onClick={openAdd} style={{
-          padding: '0.6rem 1.2rem', borderRadius: '0.5rem', border: 'none',
-          background: 'var(--gradient-brand)', color: '#fff', fontWeight: 700,
-          fontSize: '0.85rem', cursor: 'pointer', transition: 'all 0.2s',
-        }}>
-          + Adicionar Contato
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          {/* Hidden file input */}
+          <input
+            id="excel-import"
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            onChange={handleImport}
+            style={{ display: 'none' }}
+          />
+          <button
+            onClick={() => document.getElementById('excel-import')?.click()}
+            disabled={importing}
+            style={{
+              padding: '0.6rem 1.2rem', borderRadius: '0.5rem',
+              border: '1px solid var(--border-default)', background: 'transparent',
+              color: importing ? 'var(--text-muted)' : '#4ade80', fontWeight: 700,
+              fontSize: '0.85rem', cursor: importing ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s',
+            }}
+          >
+            {importing ? '⏳ Importando...' : '📥 Importar Excel'}
+          </button>
+          <button onClick={openAdd} style={{
+            padding: '0.6rem 1.2rem', borderRadius: '0.5rem', border: 'none',
+            background: 'var(--gradient-brand)', color: '#fff', fontWeight: 700,
+            fontSize: '0.85rem', cursor: 'pointer', transition: 'all 0.2s',
+          }}>
+            + Adicionar Contato
+          </button>
+        </div>
       </div>
 
       {/* Message */}
@@ -165,12 +222,28 @@ export default function ContatosPage() {
           background: message.type === 'ok' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
           border: `1px solid ${message.type === 'ok' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`,
           color: message.type === 'ok' ? '#4ade80' : '#ef4444',
-          fontSize: '0.85rem', fontWeight: 600,
+          fontSize: '0.85rem', fontWeight: 600, whiteSpace: 'pre-line',
         }}>
           {message.text}
         </div>
       )}
 
+      {/* Import Progress */}
+      {importing && (
+        <div style={{
+          padding: '1rem', borderRadius: '0.5rem', marginBottom: '1rem',
+          background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.3)',
+          color: '#60a5fa', fontSize: '0.85rem', fontWeight: 600,
+          display: 'flex', alignItems: 'center', gap: '0.75rem',
+        }}>
+          <div style={{
+            width: '20px', height: '20px', border: '2px solid rgba(96,165,250,0.3)',
+            borderTopColor: '#60a5fa', borderRadius: '50%',
+            animation: 'spin 0.8s linear infinite',
+          }} />
+          {importProgress || 'Processando arquivo Excel... isso pode levar alguns segundos para 8000+ contatos'}
+        </div>
+      )}
       {/* Add/Edit Modal */}
       {showForm && (
         <div style={{
