@@ -7,6 +7,7 @@ import { Suspense, useState } from 'react';
 function LoginContent() {
   const searchParams = useSearchParams();
   const error = searchParams?.get('error');
+  const kicked = searchParams?.get('kicked');
 
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
@@ -160,6 +161,22 @@ function LoginContent() {
         <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
           {mode === 'login' ? 'Entre com suas credenciais' : 'Crie sua conta'}
         </p>
+
+        {/* Kicked warning */}
+        {kicked === 'true' && (
+          <div style={{
+            background: 'rgba(239, 68, 68, 0.1)',
+            color: '#ef4444',
+            padding: '0.75rem',
+            borderRadius: '0.5rem',
+            marginBottom: '1rem',
+            fontSize: '0.8rem',
+            border: '1px solid rgba(239, 68, 68, 0.25)',
+            fontWeight: 600,
+          }}>
+            🚪 Sua sessão foi encerrada pelo administrador.
+          </div>
+        )}
 
         {/* Error/Success Messages */}
         {(error || message) && (

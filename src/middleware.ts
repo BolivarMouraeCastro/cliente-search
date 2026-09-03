@@ -26,10 +26,37 @@ export async function middleware(request: NextRequest) {
   const token = await getToken({ req: request });
 
   if (!token) {
-    // Redirect to login page if not authenticated
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
+  }
+
+  // Check if user is revoked (kicked by admin)
+  const email = (token.email as string)?.toLowerCase();
+  if (email && !pathname.startsWith("/api/admin/revoke")) {
+    try {
+      const checkUrl = new URL("/api/admin/revoke", request.nextUrl.origin);
+      checkUrl.searchParams.set("email", email);
+      const res = await fetch(checkUrl.toString(), {
+        headers: { cookie: request.headers.get("cookie") || "" },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.revoked) {
+          // Clear session and redirect to login
+          const url = request.nextUrl.clone();
+          url.pathname = "/login";
+          url.searchParams.set("kicked", "true");
+          const response = NextResponse.redirect(url);
+          // Delete the session cookie
+          response.cookies.delete("next-auth.session-token");
+          response.cookies.delete("__Secure-next-auth.session-token");
+          return response;
+        }
+      }
+    } catch {
+      // Don't block if check fails
+    }
   }
 
   return NextResponse.next();
