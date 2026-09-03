@@ -102,6 +102,35 @@ async function logLoginActivity(email: string, nome: string, tipo: string) {
   }
 }
 
+/** Garante que o usuário está registrado na aba Usuarios */
+async function ensureUserRegistered(email: string, nome: string) {
+  try {
+    const adminToken = await getAdminAccessToken();
+    const sheets = getSheetsService(adminToken);
+
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: USUARIOS_SPREADSHEET_ID,
+      range: 'Usuarios!A:E',
+    });
+
+    const rows = res.data.values || [];
+    const exists = rows.some((row, i) => i > 0 && (row[0] || '').trim().toLowerCase() === email.toLowerCase());
+
+    if (!exists) {
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: USUARIOS_SPREADSHEET_ID,
+        range: 'Usuarios!A:E',
+        valueInputOption: 'RAW',
+        requestBody: {
+          values: [[email.toLowerCase(), nome, 'usuario', new Date().toISOString(), '']],
+        },
+      });
+    }
+  } catch (e) {
+    console.error('Failed to ensure user registered:', e);
+  }
+}
+
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
@@ -170,8 +199,9 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async signIn({ user, account }) {
       const tipo = account?.provider === 'google' ? 'Google' : 'email/senha';
-      // Log login asynchronously (don't block sign-in)
+      // Log login and ensure user is registered (don't block sign-in)
       logLoginActivity(user.email || '', user.name || '', tipo);
+      ensureUserRegistered(user.email || '', user.name || '');
       return true;
     },
 
