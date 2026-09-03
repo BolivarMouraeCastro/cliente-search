@@ -144,6 +144,17 @@ export default function ContatosPage() {
     catch { flash('err', 'Erro'); }
   };
 
+  const handleDeleteAll = async () => {
+    if (!confirm(`⚠️ ATENÇÃO: Isso vai apagar TODOS os ${allContatos.length} contatos!\n\nDeseja continuar?`)) return;
+    if (!confirm('TEM CERTEZA? Esta ação não pode ser desfeita!')) return;
+    try {
+      const res = await fetch('/api/contatos', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deleteAll: true }) });
+      const data = await res.json();
+      if (res.ok) { flash('ok', `🗑️ ${data.deleted} contatos apagados!`); setAllContatos([]); setPage(1); }
+      else flash('err', data.error || 'Erro');
+    } catch { flash('err', 'Erro de conexão'); }
+  };
+
   const inputStyle = { width: '100%', padding: '0.7rem 1rem', borderRadius: '0.5rem', border: '1px solid var(--border-default)', background: 'rgba(0,0,0,0.2)', color: 'var(--text-primary)', fontSize: '0.9rem', outline: 'none' };
   const labelStyle = { display: 'block' as const, color: 'var(--text-secondary)', fontSize: '0.8rem', fontWeight: 600 as const, marginBottom: '0.3rem' };
   const pageBtnStyle = (active: boolean) => ({
@@ -163,6 +174,15 @@ export default function ContatosPage() {
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
           <input id="excel-import" type="file" accept=".xlsx,.xls,.csv" onChange={handleImport} style={{ display: 'none' }} />
+          {allContatos.length > 0 && (
+            <button onClick={handleDeleteAll} style={{
+              padding: '0.6rem 1.2rem', borderRadius: '0.5rem', border: '1px solid rgba(239,68,68,0.3)',
+              background: 'transparent', color: '#ef4444', fontWeight: 700,
+              fontSize: '0.85rem', cursor: 'pointer',
+            }}>
+              🗑️ Apagar Todos
+            </button>
+          )}
           <button onClick={() => document.getElementById('excel-import')?.click()} disabled={importing} style={{
             padding: '0.6rem 1.2rem', borderRadius: '0.5rem', border: '1px solid var(--border-default)',
             background: 'transparent', color: importing ? 'var(--text-muted)' : '#4ade80',

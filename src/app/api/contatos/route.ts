@@ -145,16 +145,39 @@ export async function PUT(request: NextRequest) {
   return NextResponse.json({ success: true });
 }
 
-/** DELETE — remover contato */
+/** DELETE — remover contato ou todos */
 export async function DELETE(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
 
-  const { rowIndex } = await request.json();
-  if (!rowIndex) return NextResponse.json({ error: 'rowIndex obrigatório' }, { status: 400 });
-
+  const body = await request.json();
   const token = await getAdminAccessToken();
   const sheets = getSheetsService(token);
+
+  // Delete ALL contacts
+  if (body.deleteAll === true) {
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${TAB}!A:D`,
+    });
+    const totalRows = (res.data.values || []).length;
+    if (totalRows > 1) {
+      // Clear everything except header row
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${TAB}!A2:D${totalRows}`,
+        valueInputOption: 'RAW',
+        requestBody: {
+          values: Array.from({ length: totalRows - 1 }, () => ['', '', '', '']),
+        },
+      });
+    }
+    return NextResponse.json({ success: true, deleted: totalRows - 1 });
+  }
+
+  // Delete single contact
+  const { rowIndex } = body;
+  if (!rowIndex) return NextResponse.json({ error: 'rowIndex obrigatório' }, { status: 400 });
 
   await sheets.spreadsheets.values.update({
     spreadsheetId: SPREADSHEET_ID,
