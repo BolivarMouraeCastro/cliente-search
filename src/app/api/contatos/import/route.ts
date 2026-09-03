@@ -9,7 +9,7 @@ const SPREADSHEET_ID = '11ni1pXu0QbPQ_QmMGxdqdT4PsDNz6Z0ITBUW-E1ogMM';
 const TAB = 'Contatos';
 const BATCH_SIZE = 500;
 
-const NOME_KEYS = ['nome', 'razão social', 'razao social', 'nome completo', 'nome_completo', 'cliente', 'reclamante', 'name'];
+const NOME_KEYS = ['nome', 'razão social', 'razao social', 'nome completo', 'nome_completo', 'reclamante', 'name'];
 const CPF_KEYS = ['cpf', 'cpf/cnpj', 'documento', 'doc', 'cpf_cnpj'];
 const TEL_KEYS = ['telefone', 'celular', 'whatsapp', 'fone', 'tel', 'phone', 'numero', 'contato', 'whats'];
 
@@ -50,15 +50,19 @@ async function ensureTab(sheets: any) {
   }
 }
 
-/** Finds the header row (searches first 5 rows) */
+/** Finds the header row — requires at least 2 column matches to avoid false positives */
 function findHeaderRow(rawData: (string | number)[][]): { headerIdx: number; nomeIdx: number; cpfIdx: number; telIdx: number } {
   for (let r = 0; r < Math.min(5, rawData.length); r++) {
     const row = rawData[r].map(c => String(c || ''));
     const nomeIdx = findColumn(row, NOME_KEYS);
     const cpfIdx = findColumn(row, CPF_KEYS);
-    // Accept row as header if at least nome OR cpf is found
-    if (nomeIdx >= 0 || cpfIdx >= 0) {
-      const telIdx = findColumn(row, TEL_KEYS);
+    const telIdx = findColumn(row, TEL_KEYS);
+
+    // Count how many columns matched
+    const matches = [nomeIdx, cpfIdx, telIdx].filter(i => i >= 0).length;
+
+    // Require at least 2 matches to confirm this is the header row
+    if (matches >= 2) {
       return { headerIdx: r, nomeIdx, cpfIdx, telIdx };
     }
   }
