@@ -12,6 +12,7 @@ interface ProcessoItem {
   name: string;
   createdTime: string;
   modifiedTime?: string;
+  viewedByMeTime?: string;
 }
 
 interface MonthDistribution {
@@ -102,7 +103,7 @@ async function fetchFolderItems(
   do {
     const params = new URLSearchParams({
       q,
-      fields: 'nextPageToken, files(id, name, createdTime, modifiedTime)',
+      fields: 'nextPageToken, files(id, name, createdTime, modifiedTime, viewedByMeTime)',
       pageSize: '1000',
       ...extraParams,
     });
@@ -123,6 +124,7 @@ async function fetchFolderItems(
               name: f.name || 'Processo',
               createdTime: f.createdTime || new Date().toISOString(),
               modifiedTime: f.modifiedTime || f.createdTime || new Date().toISOString(),
+              viewedByMeTime: f.viewedByMeTime || '',
             }))
           );
         }
@@ -203,25 +205,33 @@ export async function GET(req: NextRequest) {
     const distribuicaoPorMes: MonthDistribution[] = [];
 
     if (year2026Data) {
-      // Contagem por mês usando modifiedTime
-      // Se modifiedTime não é de 2026, usa createdTime como fallback
-      // Se nenhum é de 2026, conta no mês de janeiro como catch-all
+      // Contagem por mês usando a data MAIS RECENTE entre modifiedTime e createdTime.
+      // Quando o usuário move/adiciona uma pasta em setembro mas ela foi
+      // modificada em agosto, usamos a data mais recente para capturar
+      // o mês correto de distribuição.
       const monthCounts = new Array(12).fill(0);
 
       for (const processo of year2026Data.processos) {
-        const modDate = new Date(processo.modifiedTime || processo.createdTime);
-        const createDate = new Date(processo.createdTime);
+        // Coletar todas as datas disponíveis
+        const dates: Date[] = [];
+        if (processo.modifiedTime) dates.push(new Date(processo.modifiedTime));
+        if (processo.createdTime) dates.push(new Date(processo.createdTime));
+        if (processo.viewedByMeTime) dates.push(new Date(processo.viewedByMeTime));
 
+        // Usar a data MAIS RECENTE de 2026 para determinar o mês
+        const dates2026 = dates.filter(d => d.getFullYear() === 2026);
+        
         let targetMonth: number;
-
-        if (modDate.getFullYear() === 2026) {
-          targetMonth = modDate.getMonth(); // 0-11
-        } else if (createDate.getFullYear() === 2026) {
-          targetMonth = createDate.getMonth();
+        if (dates2026.length > 0) {
+          // Pegar a data mais recente de 2026
+          const latest = dates2026.reduce((a, b) => a > b ? a : b);
+          targetMonth = latest.getMonth();
+        } else if (dates.length > 0) {
+          // Nenhuma data de 2026, usar a mais recente como fallback
+          const latest = dates.reduce((a, b) => a > b ? a : b);
+          targetMonth = latest.getMonth();
         } else {
-          // Processo está na pasta 2026 mas sem data de 2026
-          // Conta no mês 0 (janeiro) como catch-all
-          targetMonth = 0;
+          targetMonth = 0; // catch-all janeiro
         }
 
         monthCounts[targetMonth]++;
