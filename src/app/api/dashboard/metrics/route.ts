@@ -205,25 +205,27 @@ export async function GET(req: NextRequest) {
     const distribuicaoPorMes: MonthDistribution[] = [];
 
     if (year2026Data) {
-      // Contagem por mês usando a data MAIS RECENTE entre modifiedTime e createdTime.
-      // Quando o usuário move/adiciona uma pasta em setembro mas ela foi
-      // modificada em agosto, usamos a data mais recente para capturar
-      // o mês correto de distribuição.
+      // Contagem por mês usando modifiedTime convertido para horário de Brasília (UTC-3)
+      // O Google Drive API retorna datas em UTC, mas o usuário vê no fuso do Brasil
       const monthCounts = new Array(12).fill(0);
+      const BRAZIL_OFFSET_MS = -3 * 60 * 60 * 1000; // UTC-3
 
       for (const processo of year2026Data.processos) {
-        const modDate = new Date(processo.modifiedTime || processo.createdTime);
-        const createDate = new Date(processo.createdTime);
+        const modDateUTC = new Date(processo.modifiedTime || processo.createdTime);
+        const createDateUTC = new Date(processo.createdTime);
+
+        // Converter para horário de Brasília
+        const modDate = new Date(modDateUTC.getTime() + BRAZIL_OFFSET_MS);
+        const createDate = new Date(createDateUTC.getTime() + BRAZIL_OFFSET_MS);
 
         let targetMonth: number;
 
-        // Usar modifiedTime (Data de última modificação) como base
-        if (modDate.getFullYear() === 2026) {
-          targetMonth = modDate.getMonth(); // 0-11
-        } else if (createDate.getFullYear() === 2026) {
-          targetMonth = createDate.getMonth();
+        if (modDate.getUTCFullYear() === 2026) {
+          targetMonth = modDate.getUTCMonth(); // 0-11
+        } else if (createDate.getUTCFullYear() === 2026) {
+          targetMonth = createDate.getUTCMonth();
         } else {
-          targetMonth = 0; // catch-all janeiro
+          targetMonth = 0;
         }
 
         monthCounts[targetMonth]++;
