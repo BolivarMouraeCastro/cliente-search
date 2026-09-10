@@ -212,24 +212,16 @@ export async function GET(req: NextRequest) {
       const monthCounts = new Array(12).fill(0);
 
       for (const processo of year2026Data.processos) {
-        // Coletar todas as datas disponíveis
-        const dates: Date[] = [];
-        if (processo.modifiedTime) dates.push(new Date(processo.modifiedTime));
-        if (processo.createdTime) dates.push(new Date(processo.createdTime));
-        if (processo.viewedByMeTime) dates.push(new Date(processo.viewedByMeTime));
+        const modDate = new Date(processo.modifiedTime || processo.createdTime);
+        const createDate = new Date(processo.createdTime);
 
-        // Usar a data MAIS RECENTE de 2026 para determinar o mês
-        const dates2026 = dates.filter(d => d.getFullYear() === 2026);
-        
         let targetMonth: number;
-        if (dates2026.length > 0) {
-          // Pegar a data mais recente de 2026
-          const latest = dates2026.reduce((a, b) => a > b ? a : b);
-          targetMonth = latest.getMonth();
-        } else if (dates.length > 0) {
-          // Nenhuma data de 2026, usar a mais recente como fallback
-          const latest = dates.reduce((a, b) => a > b ? a : b);
-          targetMonth = latest.getMonth();
+
+        // Usar modifiedTime (Data de última modificação) como base
+        if (modDate.getFullYear() === 2026) {
+          targetMonth = modDate.getMonth(); // 0-11
+        } else if (createDate.getFullYear() === 2026) {
+          targetMonth = createDate.getMonth();
         } else {
           targetMonth = 0; // catch-all janeiro
         }
