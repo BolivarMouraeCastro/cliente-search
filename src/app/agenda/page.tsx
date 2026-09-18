@@ -323,6 +323,52 @@ export default function AgendaPage() {
                       {h.numeroProcesso && (
                         <div className="agenda-card-process">{h.numeroProcesso}</div>
                       )}
+                      {/* Botão avisar reclamante via WhatsApp */}
+                      <button
+                        className="agenda-card-whatsapp"
+                        title="Avisar reclamante via WhatsApp"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          const msg =
+                            `Olá *${h.reclamante}*! 👋\n\n` +
+                            `Informamos que sua audiência está agendada:\n\n` +
+                            `📅 *Data:* ${h.dataAudiencia}\n` +
+                            `🕐 *Horário:* ${h.horario || 'A confirmar'}\n` +
+                            (h.tipoAudiencia ? `📋 *Tipo:* ${h.tipoAudiencia}\n` : '') +
+                            (h.orgaoJulgador ? `🏛️ *Local:* ${h.orgaoJulgador}\n` : '') +
+                            (h.advogado ? `👨‍⚖️ *Advogado responsável:* ${h.advogado}\n` : '') +
+                            (h.numeroProcesso ? `📄 *Processo:* ${h.numeroProcesso}\n` : '') +
+                            `\nPor favor, confirme o recebimento. Qualquer dúvida, estamos à disposição! 🤝\n\n` +
+                            `*BM&C Advogados*`;
+                          const encoded = encodeURIComponent(msg);
+                          try {
+                            const res = await fetch(`/api/contatos/lookup?nome=${encodeURIComponent(h.reclamante)}`);
+                            const data = await res.json();
+                            if (data.found && data.telefone) {
+                              window.open(`https://wa.me/${data.telefone}?text=${encoded}`, '_blank');
+                            } else {
+                              const go = confirm(
+                                `Contato "${h.reclamante}" não encontrado.\n\nDeseja enviar sem número?\n(Cadastre em "Contatos" no menu lateral)`
+                              );
+                              if (go) window.open(`https://wa.me/?text=${encoded}`, '_blank');
+                            }
+                          } catch {
+                            window.open(`https://wa.me/?text=${encoded}`, '_blank');
+                          }
+                        }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '0.35rem',
+                          marginTop: '0.5rem', padding: '0.35rem 0.65rem',
+                          borderRadius: '0.4rem', border: 'none',
+                          background: 'rgba(37,211,102,0.12)', color: '#25D366',
+                          cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600,
+                          transition: 'all 0.15s', width: 'fit-content',
+                        }}
+                        onMouseOver={e => (e.currentTarget.style.background = 'rgba(37,211,102,0.25)')}
+                        onMouseOut={e => (e.currentTarget.style.background = 'rgba(37,211,102,0.12)')}
+                      >
+                        💬 Avisar Reclamante
+                      </button>
                     </div>
                   ))}
                 </div>

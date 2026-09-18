@@ -19,6 +19,7 @@ interface MonthDistribution {
   month: number;       // 1-12
   monthName: string;   // JANEIRO, FEVEREIRO, etc.
   count: number;
+  debug?: string[];
 }
 
 interface YearDistribution {
@@ -231,6 +232,19 @@ export async function GET(req: NextRequest) {
         monthCounts[targetMonth]++;
       }
 
+      // DEBUG: coletar amostras de datas por mês para diagnóstico
+      const debugMonthSamples: Record<string, string[]> = {};
+      for (const processo of year2026Data.processos) {
+        const modDateUTC = new Date(processo.modifiedTime || processo.createdTime);
+        const modDate = new Date(modDateUTC.getTime() + BRAZIL_OFFSET_MS);
+        const m = modDate.getUTCMonth();
+        const key = MONTH_NAMES[m] || `MES_${m}`;
+        if (!debugMonthSamples[key]) debugMonthSamples[key] = [];
+        if (debugMonthSamples[key].length < 3) {
+          debugMonthSamples[key].push(`${processo.name} → mod:${processo.modifiedTime} created:${processo.createdTime}`);
+        }
+      }
+
       // Gerar array apenas dos meses que já passaram (até o mês atual)
       const currentMonth = now.getMonth(); // 0-11
       for (let m = 0; m <= currentMonth; m++) {
@@ -238,6 +252,7 @@ export async function GET(req: NextRequest) {
           month: m + 1,
           monthName: MONTH_NAMES[m],
           count: monthCounts[m],
+          debug: debugMonthSamples[MONTH_NAMES[m]] || [],
         });
       }
     }
