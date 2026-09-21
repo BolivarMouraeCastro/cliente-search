@@ -9,38 +9,63 @@ export const dynamic = 'force-dynamic';
 const SPREADSHEET_ID = '11ni1pXu0QbPQ_QmMGxdqdT4PsDNz6Z0ITBUW-E1ogMM';
 const CLIENT_SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID ?? '';
 
-// Mapeamento de Varas/Fóruns → Endereços (TRT-2 e região)
+// Mapeamento de Varas/Fóruns → Endereços (TRT-2 e região) - Fonte oficial: ww2.trt2.jus.br
 const FORUM_ADDRESSES: Record<string, string> = {
+  // São Paulo Capital
   'barra funda': 'Av. Marquês de São Vicente, 235 – Barra Funda, São Paulo/SP',
   'ruy barbosa': 'Av. Marquês de São Vicente, 235 – Barra Funda, São Paulo/SP',
   'santo amaro': 'Av. Guido Caloi, 1000 – Santo Amaro, São Paulo/SP',
   'zona sul': 'Av. Guido Caloi, 1000 – Santo Amaro, São Paulo/SP',
   'guido caloi': 'Av. Guido Caloi, 1000 – Santo Amaro, São Paulo/SP',
-  'guarulhos': 'Av. Tiradentes, 1125 – Guarulhos/SP',
-  'osasco': 'Av. Dionysia Alves Barreto, 59 – Centro, Osasco/SP',
-  'barueri': 'Alameda Araguaia, 2096 – Alphaville Industrial, Barueri/SP',
+  // ABC
+  'santo andre': 'Rua Monte Casseros, 259 – Centro, Santo André/SP',
+  'santo andré': 'Rua Monte Casseros, 259 – Centro, Santo André/SP',
+  'sao bernardo': 'Av. Getúlio Vargas, 57 – Centro, São Bernardo do Campo/SP',
+  'são bernardo': 'Av. Getúlio Vargas, 57 – Centro, São Bernardo do Campo/SP',
+  'sao caetano': 'Rua Baraldi, 795 – Centro, São Caetano do Sul/SP',
+  'são caetano': 'Rua Baraldi, 795 – Centro, São Caetano do Sul/SP',
   'diadema': 'Av. Alda, 411 – Centro, Diadema/SP',
   'maua': 'Rua Manoel Pedro Júnior, 298 – Vila Bocaina, Mauá/SP',
   'mauá': 'Rua Manoel Pedro Júnior, 298 – Vila Bocaina, Mauá/SP',
+  'ribeirao pires': 'Rua Monte Casseros, 259 – Centro, Santo André/SP',
+  'ribeirão pires': 'Rua Monte Casseros, 259 – Centro, Santo André/SP',
+  'rio grande da serra': 'Rua Monte Casseros, 259 – Centro, Santo André/SP',
+  // Grande SP
+  'guarulhos': 'Av. Tiradentes, 1125 – Centro, Guarulhos/SP',
+  'osasco': 'Av. Dionysia Alves Barreto, 59 – Centro, Osasco/SP',
+  'barueri': 'Alameda Araguaia, 2096 – Alphaville Industrial, Barueri/SP',
   'mogi': 'Av. Ver. Narciso Yague Guimarães, 149 – Centro, Mogi das Cruzes/SP',
-  'santos': 'Rua Amador Bueno, 333, 10º andar – Centro, Santos/SP',
-  'são bernardo': 'Av. Getúlio Vargas, 57 – Centro, São Bernardo do Campo/SP',
-  'sao bernardo': 'Av. Getúlio Vargas, 57 – Centro, São Bernardo do Campo/SP',
-  'são caetano': 'Rua Baraldi, 795 – Centro, São Caetano do Sul/SP',
-  'sao caetano': 'Rua Baraldi, 795 – Centro, São Caetano do Sul/SP',
   'suzano': 'Rua Paraná, 69 – Jardim Paulista, Suzano/SP',
-  'taboão': 'Estrada São Francisco, 1061 – Centro, Taboão da Serra/SP',
   'taboao': 'Estrada São Francisco, 1061 – Centro, Taboão da Serra/SP',
+  'taboão': 'Estrada São Francisco, 1061 – Centro, Taboão da Serra/SP',
+  'cotia': 'Av. Rotary, 175 – Centro, Cotia/SP',
+  'itapecerica': 'Rua Recife, 15 – Parque Paraíso, Itapecerica da Serra/SP',
+  'carapicuiba': 'Av. Mirian, 55 – Carapicuíba/SP',
+  'carapicuíba': 'Av. Mirian, 55 – Carapicuíba/SP',
+  'franco da rocha': 'Rua 15 de Novembro, 100 – Centro, Franco da Rocha/SP',
+  'aruja': 'Rua José Basílio, 205 – Centro, Arujá/SP',
+  'arujá': 'Rua José Basílio, 205 – Centro, Arujá/SP',
+  // Baixada Santista
+  'santos': 'Rua Amador Bueno, 333, 10º andar – Centro, Santos/SP',
+  'guaruja': 'Rua Amador Bueno, 333, 10º andar – Centro, Santos/SP',
+  'guarujá': 'Rua Amador Bueno, 333, 10º andar – Centro, Santos/SP',
+  'cubatao': 'Rua Amador Bueno, 333, 10º andar – Centro, Santos/SP',
+  'cubatão': 'Rua Amador Bueno, 333, 10º andar – Centro, Santos/SP',
+  'praia grande': 'Rua Amador Bueno, 333, 10º andar – Centro, Santos/SP',
+  'sao vicente': 'Rua Amador Bueno, 333, 10º andar – Centro, Santos/SP',
+  'são vicente': 'Rua Amador Bueno, 333, 10º andar – Centro, Santos/SP',
 };
 
 function findAddress(orgaoJulgador: string): string {
   const lower = orgaoJulgador.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  // FIRST: check city/forum names (most specific match)
   for (const [key, address] of Object.entries(FORUM_ADDRESSES)) {
     const normalizedKey = key.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     if (lower.includes(normalizedKey)) return address;
   }
+  // THEN: fallback by VT number for São Paulo Capital ONLY (not cities)
   const vtMatch = lower.match(/(\d+)[ªºa]\s*(vt|vara)/i);
-  if (vtMatch) {
+  if (vtMatch && !lower.match(/santo|bernardo|caetano|diadema|maua|guarulhos|osasco|barueri|mogi|suzano|santos|taboao|cotia|aruja|franco/)) {
     const vtNum = parseInt(vtMatch[1]);
     if (vtNum >= 60 && vtNum <= 70) return FORUM_ADDRESSES['santo amaro'];
     if (vtNum >= 1 && vtNum <= 59) return FORUM_ADDRESSES['barra funda'];
@@ -190,7 +215,6 @@ export async function GET(req: NextRequest) {
     nome: clientData.nome,
     cpf: cpfFormatted,
     numeroProcesso: clientData.numeroProcesso || null,
-    status: clientData.status || null,
     empresa: clientData.empresa || null,
     entrada: clientData.entrada || null,
     materia: clientData.materia || null,

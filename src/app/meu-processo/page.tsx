@@ -169,12 +169,9 @@ export default function MeuProcessoPage() {
           </div>
 
           {/* Process Details */}
-          {result.status && (
+          {(result.empresa || result.entrada || result.advogado) && (
             <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                {result.status && (
-                  <InfoItem icon="📌" label="Status" value={result.status} />
-                )}
                 {result.empresa && (
                   <InfoItem icon="🏢" label="Empresa" value={result.empresa} />
                 )}
