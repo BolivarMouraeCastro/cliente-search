@@ -1,13 +1,12 @@
+export const metadata = {
+  title: 'Meu Processo — BM&C Advogados',
+  description: 'Consulte o andamento do seu processo trabalhista',
+};
+
 export default function MeuProcessoLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <html lang="pt-BR">
-      <body style={{ margin: 0, padding: 0 }}>
-        {children}
-      </body>
-    </html>
-  );
+  return <>{children}</>;
 }
