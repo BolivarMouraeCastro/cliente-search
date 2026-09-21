@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminAccessToken } from '@/lib/admin-token';
 import { getSheetsService } from '@/lib/google-auth';
 import { getAllHearings } from '@/lib/hearings';
+import { getClients } from '@/lib/sheets';
 
 export const dynamic = 'force-dynamic';
 
@@ -151,32 +152,29 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ found: false, error: 'CPF não encontrado em nossos registros.' });
     }
     
-    // 2. Buscar dados do cliente na planilha principal
-    const clientsRes = await sheets.spreadsheets.values.get({
-      spreadsheetId: CLIENT_SPREADSHEET_ID,
-      range: 'A:M',
-    });
-    
-    const clientRows = clientsRes.data.values || [];
-    let clientData: any = null;
+    // 2. Buscar dados do cliente na planilha principal usando getClients
+    const allClients = await getClients(token, CLIENT_SPREADSHEET_ID);
     
     const normalizedSearchName = clientName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
     
-    for (const row of clientRows.slice(1)) {
-      const nome = (row[2] || '').trim(); // Column C = nome
-      const normalizedNome = nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-      if (normalizedNome === normalizedSearchName || normalizedNome.includes(normalizedSearchName) || normalizedSearchName.includes(normalizedNome)) {
-        clientData = {
-          entrada: (row[1] || '').trim(),
-          nome: nome,
-          status: (row[6] || '').trim(),
-          materia: (row[7] || '').trim(),
-          responsavel: (row[9] || '').trim(),
-          empresa: (row[10] || '').trim(),
-          numeroProcesso: (row[12] || '').trim(),
-        };
-        break;
-      }
+    const matchedClient = allClients.find(c => {
+      const normalizedNome = c.nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+      return normalizedNome === normalizedSearchName || 
+             normalizedNome.includes(normalizedSearchName) || 
+             normalizedSearchName.includes(normalizedNome);
+    });
+    
+    let clientData: any = null;
+    if (matchedClient) {
+      clientData = {
+        entrada: matchedClient.entrada,
+        nome: matchedClient.nome,
+        status: matchedClient.status,
+        materia: matchedClient.materia,
+        responsavel: matchedClient.responsavel,
+        empresa: matchedClient.empresa,
+        numeroProcesso: matchedClient.numeroProcesso,
+      };
     }
     
     if (!clientData) {
