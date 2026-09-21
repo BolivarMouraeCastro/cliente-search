@@ -229,27 +229,107 @@ export default function ClientCard({ client }: ClientCardProps) {
         </div>
       )}
 
-      {/* Número do processo */}
+      {/* Número do processo + botões de consulta */}
       {client.numeroProcesso && (
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.5rem',
-          padding: '0.4rem 0.75rem',
-          background: 'rgba(139, 92, 246, 0.08)',
-          borderRadius: '0.5rem',
-          marginBottom: '0.75rem',
-          border: '1px solid rgba(139, 92, 246, 0.15)',
-        }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent-purple, #8b5cf6)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <polyline points="14 2 14 8 20 8" />
-            <line x1="16" y1="13" x2="8" y2="13" />
-            <line x1="16" y1="17" x2="8" y2="17" />
-          </svg>
-          <span style={{ fontSize: '0.75rem', color: 'var(--accent-purple, #8b5cf6)', fontWeight: 600, fontFamily: 'monospace' }}>
-            {client.numeroProcesso}
-          </span>
+        <div style={{ marginBottom: '0.75rem' }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            padding: '0.4rem 0.75rem',
+            background: 'rgba(139, 92, 246, 0.08)',
+            borderRadius: '0.5rem 0.5rem 0 0',
+            border: '1px solid rgba(139, 92, 246, 0.15)',
+            borderBottom: 'none',
+          }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent-purple, #8b5cf6)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+            </svg>
+            <span style={{ fontSize: '0.75rem', color: 'var(--accent-purple, #8b5cf6)', fontWeight: 600, fontFamily: 'monospace' }}>
+              {client.numeroProcesso}
+            </span>
+          </div>
+          <div style={{
+            display: 'flex', gap: '0.35rem',
+            padding: '0.35rem 0.75rem',
+            background: 'rgba(139, 92, 246, 0.04)',
+            borderRadius: '0 0 0.5rem 0.5rem',
+            border: '1px solid rgba(139, 92, 246, 0.15)',
+            borderTop: '1px dashed rgba(139, 92, 246, 0.12)',
+          }}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                const num = client.numeroProcesso || '';
+                // Extrair TRT do número: NNNNNNN-DD.AAAA.J.TT.OOOO
+                const match = num.match(/\d{7}-\d{2}\.\d{4}\.(\d)\.(\d{2})\.\d{4}/);
+                let url = '';
+                if (match) {
+                  const trt = match[2]; // ex: "02", "15"
+                  const trtNum = parseInt(trt);
+                  // URLs de consulta PJe por TRT
+                  const pjeUrls: Record<number, string> = {
+                    1: `https://pje.trt1.jus.br/consultaprocessual/detalhe-processo/${num}`,
+                    2: `https://pje.trt2.jus.br/consultaprocessual/detalhe-processo/${num}`,
+                    3: `https://pje.trt3.jus.br/consultaprocessual/detalhe-processo/${num}`,
+                    4: `https://pje.trt4.jus.br/consultaprocessual/detalhe-processo/${num}`,
+                    5: `https://pje.trt5.jus.br/consultaprocessual/detalhe-processo/${num}`,
+                    6: `https://pje.trt6.jus.br/consultaprocessual/detalhe-processo/${num}`,
+                    7: `https://pje.trt7.jus.br/consultaprocessual/detalhe-processo/${num}`,
+                    8: `https://pje.trt8.jus.br/consultaprocessual/detalhe-processo/${num}`,
+                    9: `https://pje.trt9.jus.br/consultaprocessual/detalhe-processo/${num}`,
+                    10: `https://pje.trt10.jus.br/consultaprocessual/detalhe-processo/${num}`,
+                    11: `https://pje.trt11.jus.br/consultaprocessual/detalhe-processo/${num}`,
+                    12: `https://pje.trt12.jus.br/consultaprocessual/detalhe-processo/${num}`,
+                    13: `https://pje.trt13.jus.br/consultaprocessual/detalhe-processo/${num}`,
+                    14: `https://pje.trt14.jus.br/consultaprocessual/detalhe-processo/${num}`,
+                    15: `https://pje.trt15.jus.br/consultaprocessual/detalhe-processo/${num}`,
+                    16: `https://pje.trt16.jus.br/consultaprocessual/detalhe-processo/${num}`,
+                    17: `https://pje.trt17.jus.br/consultaprocessual/detalhe-processo/${num}`,
+                    18: `https://pje.trt18.jus.br/consultaprocessual/detalhe-processo/${num}`,
+                    19: `https://pje.trt19.jus.br/consultaprocessual/detalhe-processo/${num}`,
+                    20: `https://pje.trt20.jus.br/consultaprocessual/detalhe-processo/${num}`,
+                    21: `https://pje.trt21.jus.br/consultaprocessual/detalhe-processo/${num}`,
+                    22: `https://pje.trt22.jus.br/consultaprocessual/detalhe-processo/${num}`,
+                    23: `https://pje.trt23.jus.br/consultaprocessual/detalhe-processo/${num}`,
+                    24: `https://pje.trt24.jus.br/consultaprocessual/detalhe-processo/${num}`,
+                  };
+                  url = pjeUrls[trtNum] || `https://pje.trt2.jus.br/consultaprocessual/detalhe-processo/${num}`;
+                } else {
+                  url = `https://pje.trt2.jus.br/consultaprocessual/detalhe-processo/${num}`;
+                }
+                window.open(url, '_blank');
+              }}
+              style={{
+                padding: '0.25rem 0.5rem', borderRadius: '0.3rem', border: 'none',
+                background: 'rgba(99, 102, 241, 0.12)', color: '#818cf8',
+                cursor: 'pointer', fontSize: '0.68rem', fontWeight: 600,
+                transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: '0.25rem',
+              }}
+              title="Consultar no PJe"
+            >
+              🏛️ PJe
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                const num = client.numeroProcesso || '';
+                window.open(`https://www.jusbrasil.com.br/consulta-processual/busca?q=${encodeURIComponent(num)}`, '_blank');
+              }}
+              style={{
+                padding: '0.25rem 0.5rem', borderRadius: '0.3rem', border: 'none',
+                background: 'rgba(239, 68, 68, 0.1)', color: '#f87171',
+                cursor: 'pointer', fontSize: '0.68rem', fontWeight: 600,
+                transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: '0.25rem',
+              }}
+              title="Consultar no JusBrasil"
+            >
+              📋 JusBrasil
+            </button>
+          </div>
         </div>
       )}
 
