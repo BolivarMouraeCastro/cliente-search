@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { Inter, Playfair_Display } from 'next/font/google';
 import './globals.css';
 import Providers from './providers';
-import Sidebar from '@/components/Sidebar';
+import ConditionalLayout from '@/components/ConditionalLayout';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -34,12 +34,10 @@ export default function RootLayout({
     <html lang="pt-BR" className={`${inter.variable} ${playfair.variable}`}>
       <body>
         <Providers>
-          <div className="app-layout">
-            <Sidebar />
-            <main className="main-content">{children}</main>
-          </div>
+          <ConditionalLayout>{children}</ConditionalLayout>
         </Providers>
       </body>
     </html>
   );
 }
+
