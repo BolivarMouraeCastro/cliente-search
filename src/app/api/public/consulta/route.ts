@@ -11,13 +11,11 @@ const CLIENT_SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID ?? '';
 
 // Mapeamento de Varas/Fóruns → Endereços (TRT-2 e região)
 const FORUM_ADDRESSES: Record<string, string> = {
-  // São Paulo Capital
   'barra funda': 'Av. Marquês de São Vicente, 235 – Barra Funda, São Paulo/SP',
   'ruy barbosa': 'Av. Marquês de São Vicente, 235 – Barra Funda, São Paulo/SP',
   'santo amaro': 'Av. Guido Caloi, 1000 – Santo Amaro, São Paulo/SP',
   'zona sul': 'Av. Guido Caloi, 1000 – Santo Amaro, São Paulo/SP',
   'guido caloi': 'Av. Guido Caloi, 1000 – Santo Amaro, São Paulo/SP',
-  // Grande São Paulo
   'guarulhos': 'Av. Tiradentes, 1125 – Guarulhos/SP',
   'osasco': 'Av. Dionysia Alves Barreto, 59 – Centro, Osasco/SP',
   'barueri': 'Alameda Araguaia, 2096 – Alphaville Industrial, Barueri/SP',
@@ -33,233 +31,180 @@ const FORUM_ADDRESSES: Record<string, string> = {
   'suzano': 'Rua Paraná, 69 – Jardim Paulista, Suzano/SP',
   'taboão': 'Estrada São Francisco, 1061 – Centro, Taboão da Serra/SP',
   'taboao': 'Estrada São Francisco, 1061 – Centro, Taboão da Serra/SP',
-  // São Paulo Capital - Varas por número (1ª a 92ª VT ficam em fóruns específicos)
-  // 1ª a 59ª VT → Barra Funda
-  // 60ª a 70ª VT → Zona Sul (Santo Amaro)
 };
 
 function findAddress(orgaoJulgador: string): string {
   const lower = orgaoJulgador.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  
-  // Check direct matches
   for (const [key, address] of Object.entries(FORUM_ADDRESSES)) {
     const normalizedKey = key.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     if (lower.includes(normalizedKey)) return address;
   }
-  
-  // Try to detect by VT number for São Paulo
   const vtMatch = lower.match(/(\d+)[ªºa]\s*(vt|vara)/i);
   if (vtMatch) {
     const vtNum = parseInt(vtMatch[1]);
-    if (vtNum >= 60 && vtNum <= 70) {
-      return FORUM_ADDRESSES['santo amaro'];
-    }
-    if (vtNum >= 1 && vtNum <= 59) {
-      return FORUM_ADDRESSES['barra funda'];
-    }
+    if (vtNum >= 60 && vtNum <= 70) return FORUM_ADDRESSES['santo amaro'];
+    if (vtNum >= 1 && vtNum <= 59) return FORUM_ADDRESSES['barra funda'];
   }
-  
-  return ''; // Endereço não encontrado
+  return '';
 }
 
-// Inferir fase processual baseado nos dados disponíveis
 function inferPhase(status: string, hearings: any[]): { fase: string; proximoPasso: string } {
   const futureHearings = hearings.filter(h => h.isFuture);
   const pastHearings = hearings.filter(h => !h.isFuture);
-  
   const statusUpper = (status || '').toUpperCase().trim();
-  
-  // Se tem audiência futura
+
   if (futureHearings.length > 0) {
-    const next = futureHearings[0];
-    const tipo = (next.tipoAudiencia || '').toUpperCase();
-    if (tipo.includes('CONCILIA')) {
-      return { fase: 'Audiência de Conciliação Agendada', proximoPasso: 'Sua audiência de conciliação está marcada. Compareça no dia e horário indicados.' };
-    }
-    if (tipo.includes('INSTRU')) {
-      return { fase: 'Audiência de Instrução Agendada', proximoPasso: 'Sua audiência de instrução está marcada. Compareça com os documentos e testemunhas necessários.' };
-    }
-    if (tipo.includes('JULGA')) {
-      return { fase: 'Audiência de Julgamento Agendada', proximoPasso: 'Sua audiência de julgamento está marcada.' };
-    }
+    const tipo = (futureHearings[0].tipoAudiencia || '').toUpperCase();
+    if (tipo.includes('CONCILIA')) return { fase: 'Audiência de Conciliação Agendada', proximoPasso: 'Sua audiência de conciliação está marcada. Compareça no dia e horário indicados.' };
+    if (tipo.includes('INSTRU')) return { fase: 'Audiência de Instrução Agendada', proximoPasso: 'Sua audiência de instrução está marcada. Compareça com os documentos e testemunhas necessários.' };
+    if (tipo.includes('JULGA')) return { fase: 'Audiência de Julgamento Agendada', proximoPasso: 'Sua audiência de julgamento está marcada.' };
     return { fase: 'Audiência Agendada', proximoPasso: 'Você tem uma audiência agendada. Verifique os detalhes abaixo.' };
   }
-  
-  // Se tem audiências passadas mas nenhuma futura
+
   if (pastHearings.length > 0) {
-    const lastHearing = pastHearings[pastHearings.length - 1];
-    const tipo = (lastHearing.tipoAudiencia || '').toUpperCase();
-    if (tipo.includes('CONCILIA')) {
-      return { fase: 'Pós-Conciliação', proximoPasso: 'A audiência de conciliação já foi realizada. Aguardando designação de audiência de instrução ou sentença.' };
-    }
-    if (tipo.includes('INSTRU')) {
-      return { fase: 'Aguardando Sentença', proximoPasso: 'A audiência de instrução já foi realizada. Seu processo está com o juiz para decisão. Prazo estimado: 30 a 90 dias.' };
-    }
-    if (tipo.includes('JULGA')) {
-      return { fase: 'Pós-Julgamento', proximoPasso: 'O julgamento já foi realizado. Aguardando publicação da decisão.' };
-    }
+    const tipo = (pastHearings[pastHearings.length - 1].tipoAudiencia || '').toUpperCase();
+    if (tipo.includes('CONCILIA')) return { fase: 'Pós-Conciliação', proximoPasso: 'A audiência de conciliação já foi realizada. Aguardando designação de audiência de instrução ou sentença.' };
+    if (tipo.includes('INSTRU')) return { fase: 'Aguardando Sentença', proximoPasso: 'A audiência de instrução já foi realizada. Seu processo está com o juiz para decisão. Prazo estimado: 30 a 90 dias.' };
+    if (tipo.includes('JULGA')) return { fase: 'Pós-Julgamento', proximoPasso: 'O julgamento já foi realizado. Aguardando publicação da decisão.' };
   }
-  
-  // Baseado no status
-  if (statusUpper === 'DISTRIBUÍDO' || statusUpper === 'DISTRIBUIDO') {
-    return { fase: 'Processo Distribuído', proximoPasso: 'Seu processo foi distribuído à vara trabalhista. Aguardando citação da empresa reclamada.' };
-  }
-  if (statusUpper === 'A FAZER' || statusUpper === 'FAZER INICIAL') {
-    return { fase: 'Elaboração da Inicial', proximoPasso: 'Estamos preparando sua petição inicial para distribuição.' };
-  }
-  if (statusUpper === 'ARQUIVADO') {
-    return { fase: 'Processo Encerrado', proximoPasso: 'Seu processo foi encerrado/arquivado.' };
-  }
-  
+
+  if (statusUpper.includes('DISTRIBU')) return { fase: 'Processo Distribuído', proximoPasso: 'Seu processo foi distribuído à vara trabalhista. Aguardando citação da empresa reclamada.' };
+  if (statusUpper === 'A FAZER' || statusUpper.includes('FAZER INICIAL')) return { fase: 'Elaboração da Inicial', proximoPasso: 'Estamos preparando sua petição inicial para distribuição.' };
+  if (statusUpper === 'ARQUIVADO') return { fase: 'Processo Encerrado', proximoPasso: 'Seu processo foi encerrado/arquivado.' };
+
   return { fase: 'Em Andamento', proximoPasso: 'Seu processo está em andamento. Entre em contato com o escritório para mais detalhes.' };
 }
 
+function normalize(str: string): string {
+  return str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+}
+
 export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const cpfDigits = (searchParams.get('cpf') || '').replace(/\D/g, '');
+
+  if (cpfDigits.length !== 11) {
+    return NextResponse.json({ found: false, error: 'CPF inválido. Informe os 11 dígitos.' }, { status: 400 });
+  }
+
+  // Step 1: Token
+  let token: string;
   try {
-    const { searchParams } = new URL(req.url);
-    const cpfRaw = searchParams.get('cpf') || '';
-    const cpfDigits = cpfRaw.replace(/\D/g, '');
-    
-    if (cpfDigits.length !== 11) {
-      return NextResponse.json({ error: 'CPF inválido. Informe os 11 dígitos.' }, { status: 400 });
-    }
-    
-    const token = await getAdminAccessToken();
+    token = await getAdminAccessToken();
+  } catch (e: any) {
+    console.error('Consulta Step1 token:', e?.message);
+    return NextResponse.json({ found: false, error: 'Erro de autenticação do servidor.' }, { status: 500 });
+  }
+
+  // Step 2: Buscar CPF nos Contatos
+  let clientName = '';
+  try {
     const sheets = getSheetsService(token);
-    
-    // 1. Buscar nome pelo CPF na aba Contatos
-    const contatosRes = await sheets.spreadsheets.values.get({
+    const res = await sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
-      range: 'Contatos!A:D',
+      range: 'Contatos!A:C',
     });
-    
-    const contatoRows = contatosRes.data.values || [];
-    let clientName = '';
-    let clientPhone = '';
-    
-    for (const row of contatoRows.slice(1)) {
+    for (const row of (res.data.values || []).slice(1)) {
       const nome = (row[0] || '').trim();
       const cpf = (row[1] || '').replace(/\D/g, '');
-      const tel = (row[2] || '').trim();
-      if (cpf === cpfDigits && nome) {
-        clientName = nome;
-        clientPhone = tel;
-        break;
+      if (cpf === cpfDigits && nome) { clientName = nome; break; }
+    }
+  } catch (e: any) {
+    console.error('Consulta Step2 contatos:', e?.message);
+    return NextResponse.json({ found: false, error: 'Erro ao buscar contatos.' }, { status: 500 });
+  }
+
+  if (!clientName) {
+    return NextResponse.json({ found: false, error: 'CPF não encontrado em nossos registros.' });
+  }
+
+  const cpfFormatted = cpfDigits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+
+  // Step 3: Buscar dados do processo
+  let clientData: any = null;
+  try {
+    const sid = CLIENT_SPREADSHEET_ID || process.env.GOOGLE_SPREADSHEET_ID || '';
+    if (sid) {
+      const allClients = await getClients(token, sid);
+      const searchN = normalize(clientName);
+      const match = allClients.find(c => {
+        const n = normalize(c.nome);
+        return n === searchN || n.includes(searchN) || searchN.includes(n);
+      });
+      if (match) {
+        clientData = {
+          entrada: match.entrada, nome: match.nome, status: match.status,
+          materia: match.materia, responsavel: match.responsavel,
+          empresa: match.empresa, numeroProcesso: match.numeroProcesso,
+        };
       }
     }
-    
-    if (!clientName) {
-      return NextResponse.json({ found: false, error: 'CPF não encontrado em nossos registros.' });
-    }
-    
-    // 2. Buscar dados do cliente na planilha principal usando getClients
-    const allClients = await getClients(token, CLIENT_SPREADSHEET_ID);
-    
-    const normalizedSearchName = clientName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-    
-    const matchedClient = allClients.find(c => {
-      const normalizedNome = c.nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-      return normalizedNome === normalizedSearchName || 
-             normalizedNome.includes(normalizedSearchName) || 
-             normalizedSearchName.includes(normalizedNome);
+  } catch (e: any) {
+    console.error('Consulta Step3 clients:', e?.message);
+  }
+
+  if (!clientData) {
+    return NextResponse.json({
+      found: true, nome: clientName, cpf: cpfFormatted,
+      message: 'Encontramos seu cadastro, porém os dados do processo ainda não foram vinculados. Entre em contato com o escritório.',
     });
-    
-    let clientData: any = null;
-    if (matchedClient) {
-      clientData = {
-        entrada: matchedClient.entrada,
-        nome: matchedClient.nome,
-        status: matchedClient.status,
-        materia: matchedClient.materia,
-        responsavel: matchedClient.responsavel,
-        empresa: matchedClient.empresa,
-        numeroProcesso: matchedClient.numeroProcesso,
-      };
-    }
-    
-    if (!clientData) {
-      return NextResponse.json({
-        found: true,
-        nome: clientName,
-        message: 'Encontramos seu cadastro, porém os dados do processo ainda não foram vinculados. Entre em contato com o escritório.',
-      });
-    }
-    
-    // 3. Buscar audiências
-    const allHearings = await getAllHearings(token);
-    const normalizedName = clientName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-    
-    const clientHearings = allHearings.filter(h => {
-      const hName = h.reclamante.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  }
+
+  // Step 4: Audiências
+  let clientHearings: any[] = [];
+  try {
+    const all = await getAllHearings(token);
+    const searchN = normalize(clientName);
+    clientHearings = all.filter(h => {
       if (clientData.numeroProcesso && h.numeroProcesso) {
         return h.numeroProcesso.includes(clientData.numeroProcesso) || clientData.numeroProcesso.includes(h.numeroProcesso);
       }
-      return hName === normalizedName || hName.includes(normalizedName) || normalizedName.includes(hName);
+      const hN = normalize(h.reclamante);
+      return hN === searchN || hN.includes(searchN) || searchN.includes(hN);
     });
-    
-    // Sort by date
     clientHearings.sort((a, b) => {
-      const parseD = (d: string) => {
-        const p = d.split('/');
-        if (p.length !== 3) return 0;
-        return new Date(parseInt(p[2]), parseInt(p[1])-1, parseInt(p[0])).getTime();
-      };
-      return parseD(a.dataAudiencia) - parseD(b.dataAudiencia);
+      const p = (d: string) => { const s = d.split('/'); return s.length === 3 ? new Date(+s[2], +s[1]-1, +s[0]).getTime() : 0; };
+      return p(a.dataAudiencia) - p(b.dataAudiencia);
     });
-    
-    const futureHearings = clientHearings.filter(h => h.isFuture);
-    
-    // 4. Detect modalidade (online/presencial) from tipoAudiencia text
-    // Blue color in spreadsheet = online, but we can also check text
-    const nextHearing = futureHearings.length > 0 ? futureHearings[0] : null;
-    
-    let modalidade = 'Presencial';
-    let endereco = '';
-    
-    if (nextHearing) {
-      const tipo = (nextHearing.tipoAudiencia || '').toUpperCase();
-      const orgao = (nextHearing.orgaoJulgador || '').toUpperCase();
-      
-      // Detect online/telepresencial
-      if (tipo.includes('TELE') || tipo.includes('VIRTUAL') || tipo.includes('ONLINE') || 
-          tipo.includes('REMOT') || tipo.includes('VIDEOCONF') ||
-          orgao.includes('TELE') || orgao.includes('VIRTUAL')) {
-        modalidade = 'Online (Telepresencial)';
-      }
-      
-      endereco = findAddress(nextHearing.orgaoJulgador);
-    }
-    
-    // 5. Infer phase
-    const { fase, proximoPasso } = inferPhase(clientData.status, clientHearings);
-    
-    // 6. Build response
-    return NextResponse.json({
-      found: true,
-      nome: clientData.nome,
-      cpf: cpfDigits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'),
-      numeroProcesso: clientData.numeroProcesso || null,
-      status: clientData.status || null,
-      empresa: clientData.empresa || null,
-      entrada: clientData.entrada || null,
-      materia: clientData.materia || null,
-      advogado: clientData.responsavel || null,
-      fase,
-      proximoPasso,
-      audiencia: nextHearing ? {
-        data: nextHearing.dataAudiencia,
-        horario: nextHearing.horario,
-        tipo: nextHearing.tipoAudiencia,
-        orgaoJulgador: nextHearing.orgaoJulgador,
-        modalidade,
-        endereco,
-        advogado: nextHearing.advogado,
-      } : null,
-      whatsappEscritorio: '5511999999999', // Número do escritório
-    });
-    
-  } catch (error) {
-    console.error('Erro na consulta pública:', error);
-    return NextResponse.json({ error: 'Erro interno. Tente novamente.' }, { status: 500 });
+  } catch (e: any) {
+    console.error('Consulta Step4 hearings:', e?.message);
   }
+
+  const nextHearing = clientHearings.filter(h => h.isFuture)[0] || null;
+  let modalidade = 'Presencial';
+  let endereco = '';
+
+  if (nextHearing) {
+    const tipo = (nextHearing.tipoAudiencia || '').toUpperCase();
+    const orgao = (nextHearing.orgaoJulgador || '').toUpperCase();
+    if (tipo.includes('TELE') || tipo.includes('VIRTUAL') || tipo.includes('ONLINE') || tipo.includes('REMOT') || orgao.includes('TELE') || orgao.includes('VIRTUAL')) {
+      modalidade = 'Online (Telepresencial)';
+    }
+    endereco = findAddress(nextHearing.orgaoJulgador);
+  }
+
+  const { fase, proximoPasso } = inferPhase(clientData.status, clientHearings);
+
+  return NextResponse.json({
+    found: true,
+    nome: clientData.nome,
+    cpf: cpfFormatted,
+    numeroProcesso: clientData.numeroProcesso || null,
+    status: clientData.status || null,
+    empresa: clientData.empresa || null,
+    entrada: clientData.entrada || null,
+    materia: clientData.materia || null,
+    advogado: clientData.responsavel || null,
+    fase,
+    proximoPasso,
+    audiencia: nextHearing ? {
+      data: nextHearing.dataAudiencia,
+      horario: nextHearing.horario,
+      tipo: nextHearing.tipoAudiencia,
+      orgaoJulgador: nextHearing.orgaoJulgador,
+      modalidade,
+      endereco,
+      advogado: nextHearing.advogado,
+    } : null,
+  });
 }
