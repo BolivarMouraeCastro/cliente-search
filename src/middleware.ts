@@ -5,9 +5,11 @@ import { getToken } from "next-auth/jwt";
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Always allow auth endpoints, static files, favicon, and public assets
+  // Always allow auth endpoints, static files, favicon, public assets, and public pages
   if (
     pathname.startsWith("/api/auth") ||
+    pathname.startsWith("/api/public") ||
+    pathname.startsWith("/meu-processo") ||
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico" ||
     pathname.endsWith(".png") ||
