@@ -24,7 +24,7 @@ const FORUM_ADDRESSES: Record<string, string> = {
   'são bernardo': 'Av. Getúlio Vargas, 57 – Centro, São Bernardo do Campo/SP',
   'sao caetano': 'Rua Baraldi, 795 – Centro, São Caetano do Sul/SP',
   'são caetano': 'Rua Baraldi, 795 – Centro, São Caetano do Sul/SP',
-  'diadema': 'Av. Alda, 411 – Centro, Diadema/SP',
+  'diadema': 'Av. Sete de Setembro, 919 – Centro, Diadema/SP – CEP 09912-010 (Fórum Juiz Ugo Recchimuzzi)',
   'maua': 'Rua Manoel Pedro Júnior, 298 – Vila Bocaina, Mauá/SP',
   'mauá': 'Rua Manoel Pedro Júnior, 298 – Vila Bocaina, Mauá/SP',
   'ribeirao pires': 'Rua Monte Casseros, 259 – Centro, Santo André/SP',
