@@ -198,6 +198,9 @@ export default function MeuProcessoPage() {
             <ProcessCard key={i} processo={p} index={i} total={processos.length} nome={result!.nome || ''} cpf={result!.cpf || ''} />
           ))}
 
+          {/* Chat IA */}
+          <ChatSection nome={result!.nome || ''} cpf={result!.cpf || ''} />
+
           {/* Indicação */}
           <IndicacaoSection nome={result!.nome || ''} />
 
@@ -541,6 +544,127 @@ function FAQSection() {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+/* ==================== CHAT IA ==================== */
+function ChatSection({ nome, cpf }: { nome: string; cpf: string }) {
+  const [open, setOpen] = useState(false);
+  const [messages, setMessages] = useState<Array<{ role: 'user' | 'ai'; text: string }>>([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const send = async () => {
+    if (!input.trim() || loading) return;
+    const question = input.trim();
+    setInput('');
+    setMessages(prev => [...prev, { role: 'user', text: question }]);
+    setLoading(true);
+
+    try {
+      const res = await fetch('/api/public/chat', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome, cpf, pergunta: question }),
+      });
+      const data = await res.json();
+      setMessages(prev => [...prev, { role: 'ai', text: data.resposta || data.error || 'Erro ao processar.' }]);
+    } catch {
+      setMessages(prev => [...prev, { role: 'ai', text: 'Erro de conexão. Tente novamente.' }]);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{
+      background: 'rgba(30,41,59,0.8)', border: '1px solid rgba(148,163,184,0.15)',
+      borderRadius: '1rem', overflow: 'hidden',
+    }}>
+      <button onClick={() => setOpen(!open)} style={{
+        width: '100%', padding: '1rem 1.25rem', border: 'none',
+        background: 'linear-gradient(135deg, rgba(99,102,241,0.08), rgba(139,92,246,0.08))',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer',
+      }}>
+        <span style={{ color: '#a78bfa', fontWeight: 700, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          🤖 Pergunte sobre seu processo
+        </span>
+        <span style={{ color: '#64748b', fontSize: '0.75rem' }}>{open ? '▲' : '▼'}</span>
+      </button>
+
+      {open && (
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {/* Messages */}
+          <div style={{
+            padding: '0.75rem 1rem', maxHeight: '300px', overflowY: 'auto',
+            display: 'flex', flexDirection: 'column', gap: '0.5rem',
+            minHeight: messages.length === 0 ? '80px' : undefined,
+          }}>
+            {messages.length === 0 && (
+              <div style={{ color: '#64748b', fontSize: '0.78rem', textAlign: 'center', padding: '1rem 0' }}>
+                Pergunte qualquer coisa sobre seu processo!<br/>
+                <span style={{ fontSize: '0.7rem' }}>Ex: "Em que fase está?", "O que aconteceu?"</span>
+              </div>
+            )}
+            {messages.map((msg, i) => (
+              <div key={i} style={{
+                alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                maxWidth: '85%',
+                padding: '0.6rem 0.85rem', borderRadius: '0.75rem',
+                background: msg.role === 'user'
+                  ? 'linear-gradient(135deg, #6366f1, #8b5cf6)'
+                  : 'rgba(51,65,85,0.8)',
+                color: '#f1f5f9', fontSize: '0.8rem', lineHeight: 1.45,
+                whiteSpace: 'pre-wrap',
+              }}>
+                {msg.text}
+              </div>
+            ))}
+            {loading && (
+              <div style={{
+                alignSelf: 'flex-start', padding: '0.6rem 0.85rem', borderRadius: '0.75rem',
+                background: 'rgba(51,65,85,0.8)', color: '#94a3b8', fontSize: '0.8rem',
+              }}>
+                <span style={{ animation: 'pulse 1.5s infinite' }}>Analisando seus documentos...</span>
+              </div>
+            )}
+          </div>
+
+          {/* Input */}
+          <div style={{
+            padding: '0.5rem 0.75rem 0.75rem', display: 'flex', gap: '0.4rem',
+            borderTop: '1px solid rgba(148,163,184,0.1)',
+          }}>
+            <input
+              type="text" value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && send()}
+              placeholder="Digite sua pergunta..."
+              disabled={loading}
+              style={{
+                flex: 1, padding: '0.6rem 0.75rem', borderRadius: '0.5rem',
+                border: '1px solid rgba(148,163,184,0.2)',
+                background: 'rgba(15,23,42,0.6)', color: '#f1f5f9',
+                fontSize: '0.8rem', outline: 'none',
+              }}
+            />
+            <button onClick={send} disabled={loading || !input.trim()} style={{
+              padding: '0.6rem 0.85rem', borderRadius: '0.5rem', border: 'none',
+              background: loading ? '#475569' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+              color: '#fff', fontSize: '0.8rem', fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer',
+              flexShrink: 0,
+            }}>
+              Enviar
+            </button>
+          </div>
+
+          {/* Disclaimer */}
+          <div style={{
+            padding: '0 1rem 0.6rem', color: '#475569', fontSize: '0.6rem', textAlign: 'center',
+          }}>
+            IA auxiliar — consulte seu advogado para orientações específicas
+          </div>
+        </div>
+      )}
     </div>
   );
 }
