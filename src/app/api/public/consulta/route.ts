@@ -168,6 +168,21 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  // Deduplicate by processo number — keep entry with most data
+  const deduped = new Map<string, any>();
+  for (const c of allMatchedClients) {
+    const key = (c.numeroProcesso || '').trim() || `_no_proc_${Math.random()}`;
+    const existing = deduped.get(key);
+    if (!existing) {
+      deduped.set(key, c);
+    } else {
+      // Keep the one with more data filled (empresa, materia)
+      const score = (x: any) => (x.empresa ? 1 : 0) + (x.materia ? 1 : 0) + (x.responsavel ? 1 : 0) + (x.entrada ? 1 : 0);
+      if (score(c) > score(existing)) deduped.set(key, c);
+    }
+  }
+  allMatchedClients = Array.from(deduped.values());
+
   // Step 4: Audiências (buscar todas de uma vez)
   let allHearings: any[] = [];
   try {
