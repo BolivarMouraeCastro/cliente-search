@@ -73,11 +73,13 @@ function findAddress(orgaoJulgador: string): string {
   return '';
 }
 
-function inferPhase(status: string, hearings: any[]): { fase: string; proximoPasso: string } {
+function inferPhase(status: string, hearings: any[], numeroProcesso?: string): { fase: string; proximoPasso: string } {
   const futureHearings = hearings.filter(h => h.isFuture);
   const pastHearings = hearings.filter(h => !h.isFuture);
   const statusUpper = (status || '').toUpperCase().trim();
+  const hasProcesso = !!(numeroProcesso && numeroProcesso.trim());
 
+  // Prioridade 1: Audiência futura
   if (futureHearings.length > 0) {
     const tipo = (futureHearings[0].tipoAudiencia || '').toUpperCase();
     if (tipo.includes('CONCILIA')) return { fase: 'Audiência de Conciliação Agendada', proximoPasso: 'Sua audiência de conciliação está marcada. Compareça no dia e horário indicados.' };
@@ -86,6 +88,7 @@ function inferPhase(status: string, hearings: any[]): { fase: string; proximoPas
     return { fase: 'Audiência Agendada', proximoPasso: 'Você tem uma audiência agendada. Verifique os detalhes abaixo.' };
   }
 
+  // Prioridade 2: Audiência passada
   if (pastHearings.length > 0) {
     const tipo = (pastHearings[pastHearings.length - 1].tipoAudiencia || '').toUpperCase();
     if (tipo.includes('CONCILIA')) return { fase: 'Pós-Conciliação', proximoPasso: 'A audiência de conciliação já foi realizada. Aguardando designação de audiência de instrução ou sentença.' };
@@ -93,9 +96,24 @@ function inferPhase(status: string, hearings: any[]): { fase: string; proximoPas
     if (tipo.includes('JULGA')) return { fase: 'Pós-Julgamento', proximoPasso: 'O julgamento já foi realizado. Aguardando publicação da decisão.' };
   }
 
+  // Prioridade 3: Status da planilha, MAS com correção automática
   if (statusUpper.includes('DISTRIBU')) return { fase: 'Processo Distribuído', proximoPasso: 'Seu processo foi distribuído à vara trabalhista. Aguardando citação da empresa reclamada.' };
-  if (statusUpper === 'A FAZER' || statusUpper.includes('FAZER INICIAL')) return { fase: 'Elaboração da Inicial', proximoPasso: 'Estamos preparando sua petição inicial para distribuição.' };
   if (statusUpper === 'ARQUIVADO') return { fase: 'Processo Encerrado', proximoPasso: 'Seu processo foi encerrado/arquivado.' };
+
+  // Se tem número de processo mas status diz "FAZER INICIAL" → já foi distribuído
+  if (hasProcesso && (statusUpper === 'A FAZER' || statusUpper.includes('FAZER INICIAL') || statusUpper.includes('INICIAL'))) {
+    return { fase: 'Processo Distribuído', proximoPasso: 'Seu processo foi distribuído à vara trabalhista. Aguardando citação da empresa reclamada.' };
+  }
+
+  // Se tem número de processo e status está vazio ou genérico → distribuído
+  if (hasProcesso) {
+    return { fase: 'Processo Distribuído', proximoPasso: 'Seu processo foi distribuído à vara trabalhista. Aguardando andamento processual.' };
+  }
+
+  // Sem número de processo
+  if (statusUpper === 'A FAZER' || statusUpper.includes('FAZER INICIAL')) {
+    return { fase: 'Elaboração da Inicial', proximoPasso: 'Estamos preparando sua petição inicial para distribuição.' };
+  }
 
   return { fase: 'Em Andamento', proximoPasso: 'Seu processo está em andamento. Entre em contato com o escritório para mais detalhes.' };
 }
@@ -220,7 +238,7 @@ export async function GET(req: NextRequest) {
       endereco = findAddress(nextHearing.orgaoJulgador);
     }
 
-    const { fase, proximoPasso } = inferPhase(client.status, processHearings);
+    const { fase, proximoPasso } = inferPhase(client.status, processHearings, client.numeroProcesso);
 
     return {
       numeroProcesso: client.numeroProcesso || null,
