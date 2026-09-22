@@ -19,7 +19,6 @@ interface ConsultaResult {
   nome?: string;
   cpf?: string;
   numeroProcesso?: string;
-  status?: string;
   empresa?: string;
   entrada?: string;
   materia?: string;
@@ -75,14 +74,26 @@ export default function MeuProcessoPage() {
       {/* Header */}
       <div style={{ textAlign: 'center', marginBottom: '2rem', maxWidth: '500px' }}>
         <div style={{
-          fontSize: '2.5rem', marginBottom: '0.5rem',
-          background: 'linear-gradient(135deg, #60a5fa, #a78bfa)',
-          WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-          fontWeight: 800,
+          width: '90px', height: '90px', borderRadius: '50%', margin: '0 auto 1rem',
+          background: 'linear-gradient(135deg, rgba(212, 175, 55, 0.15), rgba(30, 41, 59, 0.8))',
+          border: '2px solid rgba(212, 175, 55, 0.3)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 0 30px rgba(212, 175, 55, 0.1)',
         }}>
-          ⚖️ BM&C Advogados
+          <img 
+            src="/bmc-logo.png" 
+            alt="BM&C Advogados" 
+            style={{ width: '60px', height: '60px', objectFit: 'contain' }} 
+          />
         </div>
-        <p style={{ color: '#94a3b8', fontSize: '1rem', margin: 0 }}>
+        <div style={{
+          fontSize: '1.6rem', marginBottom: '0.25rem',
+          color: '#f1f5f9',
+          fontWeight: 700, letterSpacing: '0.02em',
+        }}>
+          BM&C Advogados
+        </div>
+        <p style={{ color: '#94a3b8', fontSize: '0.9rem', margin: 0 }}>
           Consulte o andamento do seu processo
         </p>
       </div>
