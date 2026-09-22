@@ -92,8 +92,9 @@ function inferPhase(status: string, hearings: any[], numeroProcesso?: string): {
   if (pastHearings.length > 0) {
     const tipo = (pastHearings[pastHearings.length - 1].tipoAudiencia || '').toUpperCase();
     if (tipo.includes('CONCILIA')) return { fase: 'Pós-Conciliação', proximoPasso: 'A audiência de conciliação já foi realizada. Aguardando designação de audiência de instrução ou sentença.' };
-    if (tipo.includes('INSTRU')) return { fase: 'Aguardando Sentença', proximoPasso: 'A audiência de instrução já foi realizada. Seu processo está com o juiz para decisão. Prazo estimado: 30 a 90 dias.' };
+    if (tipo.includes('INSTRU') || tipo.includes('UNA')) return { fase: 'Aguardando Sentença', proximoPasso: 'A audiência já foi realizada. Seu processo está com o juiz para decisão. Prazo estimado: 30 a 90 dias.' };
     if (tipo.includes('JULGA')) return { fase: 'Pós-Julgamento', proximoPasso: 'O julgamento já foi realizado. Aguardando publicação da decisão.' };
+    return { fase: 'Audiência Realizada', proximoPasso: 'A audiência já foi realizada. Aguardando próximos andamentos do processo.' };
   }
 
   // Prioridade 3: Status da planilha, MAS com correção automática
