@@ -592,7 +592,7 @@ function FAQSection() {
 
 /* ==================== CHAT IA WIDGET FLUTUANTE ==================== */
 function ChatSection({ nome, cpf, processos }: { nome: string; cpf: string; processos: any[] }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const [messages, setMessages] = useState<Array<{ role: 'user' | 'ai'; text: string }>>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
