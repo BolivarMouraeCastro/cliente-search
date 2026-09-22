@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 /* ==================== TYPES ==================== */
 interface AudienciaData {
@@ -198,8 +198,6 @@ export default function MeuProcessoPage() {
             <ProcessCard key={i} processo={p} index={i} total={processos.length} nome={result!.nome || ''} cpf={result!.cpf || ''} />
           ))}
 
-          {/* Chat IA */}
-          <ChatSection nome={result!.nome || ''} cpf={result!.cpf || ''} processos={processos} />
 
           {/* Indicação */}
           <IndicacaoSection nome={result!.nome || ''} />
@@ -216,6 +214,11 @@ export default function MeuProcessoPage() {
       <div style={{ marginTop: '2rem', color: '#475569', fontSize: '0.75rem', textAlign: 'center' }}>
         BM&C Advogados © {new Date().getFullYear()} — Todos os direitos reservados
       </div>
+
+      {/* Chat IA Widget Flutuante */}
+      {result && processos.length > 0 && (
+        <ChatSection nome={result.nome || ''} cpf={result.cpf || ''} processos={processos} />
+      )}
     </div>
   );
 }
@@ -548,24 +551,41 @@ function FAQSection() {
   );
 }
 
-/* ==================== CHAT IA ==================== */
+/* ==================== CHAT IA WIDGET FLUTUANTE ==================== */
 function ChatSection({ nome, cpf, processos }: { nome: string; cpf: string; processos: any[] }) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Array<{ role: 'user' | 'ai'; text: string }>>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(true);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const send = async () => {
-    if (!input.trim() || loading) return;
-    const question = input.trim();
+  const suggestions = [
+    'Em que fase está meu processo?',
+    'Tenho audiência marcada?',
+    'O que aconteceu até agora?',
+    'Quanto tempo demora?',
+  ];
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, loading]);
+
+  const sendMessage = async (question: string) => {
+    if (!question.trim() || loading) return;
     setInput('');
-    setMessages(prev => [...prev, { role: 'user', text: question }]);
+    setShowSuggestions(false);
+    setMessages(prev => [...prev, { role: 'user', text: question.trim() }]);
     setLoading(true);
 
     try {
       const res = await fetch('/api/public/chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome, cpf, pergunta: question, processos }),
+        body: JSON.stringify({ nome, cpf, pergunta: question.trim(), processos }),
       });
       const data = await res.json();
       setMessages(prev => [...prev, { role: 'ai', text: data.resposta || data.error || 'Erro ao processar.' }]);
@@ -575,97 +595,233 @@ function ChatSection({ nome, cpf, processos }: { nome: string; cpf: string; proc
     setLoading(false);
   };
 
-  return (
-    <div style={{
-      background: 'rgba(30,41,59,0.8)', border: '1px solid rgba(148,163,184,0.15)',
-      borderRadius: '1rem', overflow: 'hidden',
-    }}>
-      <button onClick={() => setOpen(!open)} style={{
-        width: '100%', padding: '1rem 1.25rem', border: 'none',
-        background: 'linear-gradient(135deg, rgba(99,102,241,0.08), rgba(139,92,246,0.08))',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer',
-      }}>
-        <span style={{ color: '#a78bfa', fontWeight: 700, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-          🤖 Pergunte sobre seu processo
-        </span>
-        <span style={{ color: '#64748b', fontSize: '0.75rem' }}>{open ? '▲' : '▼'}</span>
+  // Botão flutuante quando fechado
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        aria-label="Abrir chat"
+        style={{
+          position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 9999,
+          width: '60px', height: '60px', borderRadius: '50%',
+          background: 'linear-gradient(135deg, #6366f1, #8b5cf6, #a78bfa)',
+          border: 'none', cursor: 'pointer',
+          boxShadow: '0 8px 32px rgba(99,102,241,0.4), 0 0 60px rgba(139,92,246,0.15)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          transition: 'all 0.3s ease',
+          animation: 'chatPulse 2s infinite',
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.1)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+      >
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+        </svg>
       </button>
+    );
+  }
 
-      {open && (
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          {/* Messages */}
-          <div style={{
-            padding: '0.75rem 1rem', maxHeight: '300px', overflowY: 'auto',
-            display: 'flex', flexDirection: 'column', gap: '0.5rem',
-            minHeight: messages.length === 0 ? '80px' : undefined,
-          }}>
-            {messages.length === 0 && (
-              <div style={{ color: '#64748b', fontSize: '0.78rem', textAlign: 'center', padding: '1rem 0' }}>
-                Pergunte qualquer coisa sobre seu processo!<br/>
-                <span style={{ fontSize: '0.7rem' }}>Ex: "Em que fase está?", "O que aconteceu?"</span>
+  return (
+    <>
+      <style>{`
+        @keyframes chatPulse {
+          0%, 100% { box-shadow: 0 8px 32px rgba(99,102,241,0.4), 0 0 0 0 rgba(139,92,246,0.3); }
+          50% { box-shadow: 0 8px 32px rgba(99,102,241,0.4), 0 0 0 10px rgba(139,92,246,0); }
+        }
+        @keyframes chatSlideUp {
+          from { opacity: 0; transform: translateY(20px) scale(0.95); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes typingDot {
+          0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+          30% { opacity: 1; transform: translateY(-4px); }
+        }
+        .chat-suggestion:hover {
+          background: rgba(99,102,241,0.15) !important;
+          border-color: rgba(139,92,246,0.4) !important;
+          transform: translateY(-1px);
+        }
+        .chat-input-field:focus {
+          border-color: rgba(139,92,246,0.5) !important;
+          box-shadow: 0 0 0 2px rgba(139,92,246,0.15);
+        }
+      `}</style>
+      <div style={{
+        position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 9999,
+        width: '380px', maxWidth: 'calc(100vw - 2rem)',
+        height: '520px', maxHeight: 'calc(100vh - 6rem)',
+        borderRadius: '1.25rem',
+        background: 'linear-gradient(180deg, rgba(15,23,42,0.98), rgba(20,27,45,0.98))',
+        border: '1px solid rgba(148,163,184,0.12)',
+        boxShadow: '0 25px 60px rgba(0,0,0,0.5), 0 0 40px rgba(99,102,241,0.08)',
+        backdropFilter: 'blur(20px)',
+        display: 'flex', flexDirection: 'column',
+        overflow: 'hidden',
+        animation: 'chatSlideUp 0.3s ease-out',
+      }}>
+        {/* Header */}
+        <div style={{
+          padding: '1rem 1.25rem',
+          background: 'linear-gradient(135deg, rgba(99,102,241,0.12), rgba(139,92,246,0.08))',
+          borderBottom: '1px solid rgba(148,163,184,0.08)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          flexShrink: 0,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div style={{
+              width: '36px', height: '36px', borderRadius: '10px',
+              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 4px 12px rgba(99,102,241,0.3)',
+            }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" />
+                <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+                <line x1="9" y1="9" x2="9.01" y2="9" />
+                <line x1="15" y1="9" x2="15.01" y2="9" />
+              </svg>
+            </div>
+            <div>
+              <div style={{ color: '#f1f5f9', fontWeight: 700, fontSize: '0.9rem', letterSpacing: '-0.01em' }}>Assistente BM&C</div>
+              <div style={{ color: '#6366f1', fontSize: '0.65rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
+                Online agora
               </div>
-            )}
-            {messages.map((msg, i) => (
-              <div key={i} style={{
-                alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                maxWidth: '85%',
-                padding: '0.6rem 0.85rem', borderRadius: '0.75rem',
-                background: msg.role === 'user'
-                  ? 'linear-gradient(135deg, #6366f1, #8b5cf6)'
-                  : 'rgba(51,65,85,0.8)',
-                color: '#f1f5f9', fontSize: '0.8rem', lineHeight: 1.45,
-                whiteSpace: 'pre-wrap',
-              }}>
-                {msg.text}
-              </div>
-            ))}
-            {loading && (
-              <div style={{
-                alignSelf: 'flex-start', padding: '0.6rem 0.85rem', borderRadius: '0.75rem',
-                background: 'rgba(51,65,85,0.8)', color: '#94a3b8', fontSize: '0.8rem',
-              }}>
-                <span style={{ animation: 'pulse 1.5s infinite' }}>Analisando seus documentos...</span>
-              </div>
-            )}
+            </div>
           </div>
+          <button onClick={() => setOpen(false)} style={{
+            width: '32px', height: '32px', borderRadius: '8px',
+            background: 'rgba(51,65,85,0.5)', border: 'none', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: '#94a3b8', fontSize: '1.1rem', transition: 'all 0.2s',
+          }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(239,68,68,0.2)'; e.currentTarget.style.color = '#ef4444'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(51,65,85,0.5)'; e.currentTarget.style.color = '#94a3b8'; }}
+          >
+            ✕
+          </button>
+        </div>
 
-          {/* Input */}
-          <div style={{
-            padding: '0.5rem 0.75rem 0.75rem', display: 'flex', gap: '0.4rem',
-            borderTop: '1px solid rgba(148,163,184,0.1)',
-          }}>
+        {/* Messages Area */}
+        <div style={{
+          flex: 1, padding: '1rem', overflowY: 'auto',
+          display: 'flex', flexDirection: 'column', gap: '0.75rem',
+        }}>
+          {/* Welcome message */}
+          {messages.length === 0 && (
+            <div style={{
+              padding: '0.85rem 1rem', borderRadius: '0.75rem 0.75rem 0.75rem 0.2rem',
+              background: 'rgba(51,65,85,0.6)', maxWidth: '90%',
+            }}>
+              <div style={{ color: '#e2e8f0', fontSize: '0.82rem', lineHeight: 1.5 }}>
+                Olá, <strong>{nome.split(' ')[0]}</strong>! 👋<br/>
+                Sou o assistente virtual do BM&C. Como posso ajudar?
+              </div>
+            </div>
+          )}
+
+          {/* Suggestions */}
+          {messages.length === 0 && showSuggestions && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginTop: '0.25rem' }}>
+              {suggestions.map((s, i) => (
+                <button
+                  key={i}
+                  className="chat-suggestion"
+                  onClick={() => sendMessage(s)}
+                  style={{
+                    padding: '0.45rem 0.75rem', borderRadius: '1rem',
+                    border: '1px solid rgba(148,163,184,0.15)',
+                    background: 'rgba(30,41,59,0.6)', color: '#a78bfa',
+                    fontSize: '0.72rem', fontWeight: 500, cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Message bubbles */}
+          {messages.map((msg, i) => (
+            <div key={i} style={{
+              alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+              maxWidth: '85%',
+              padding: '0.65rem 0.9rem',
+              borderRadius: msg.role === 'user' ? '0.75rem 0.75rem 0.2rem 0.75rem' : '0.75rem 0.75rem 0.75rem 0.2rem',
+              background: msg.role === 'user'
+                ? 'linear-gradient(135deg, #6366f1, #8b5cf6)'
+                : 'rgba(51,65,85,0.6)',
+              color: '#f1f5f9', fontSize: '0.8rem', lineHeight: 1.5,
+              whiteSpace: 'pre-wrap',
+              boxShadow: msg.role === 'user' ? '0 2px 8px rgba(99,102,241,0.25)' : 'none',
+            }}>
+              {msg.text}
+            </div>
+          ))}
+
+          {/* Typing indicator */}
+          {loading && (
+            <div style={{
+              alignSelf: 'flex-start', padding: '0.7rem 1rem', borderRadius: '0.75rem 0.75rem 0.75rem 0.2rem',
+              background: 'rgba(51,65,85,0.6)', display: 'flex', gap: '0.3rem', alignItems: 'center',
+            }}>
+              {[0, 1, 2].map(i => (
+                <span key={i} style={{
+                  width: '7px', height: '7px', borderRadius: '50%',
+                  background: '#a78bfa', display: 'inline-block',
+                  animation: `typingDot 1.4s ${i * 0.2}s infinite`,
+                }} />
+              ))}
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Input area */}
+        <div style={{
+          padding: '0.75rem 1rem',
+          borderTop: '1px solid rgba(148,163,184,0.08)',
+          background: 'rgba(15,23,42,0.5)',
+          flexShrink: 0,
+        }}>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
             <input
+              className="chat-input-field"
               type="text" value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && send()}
+              onKeyDown={(e) => e.key === 'Enter' && sendMessage(input)}
               placeholder="Digite sua pergunta..."
               disabled={loading}
               style={{
-                flex: 1, padding: '0.6rem 0.75rem', borderRadius: '0.5rem',
-                border: '1px solid rgba(148,163,184,0.2)',
-                background: 'rgba(15,23,42,0.6)', color: '#f1f5f9',
-                fontSize: '0.8rem', outline: 'none',
+                flex: 1, padding: '0.65rem 0.85rem', borderRadius: '0.75rem',
+                border: '1px solid rgba(148,163,184,0.15)',
+                background: 'rgba(30,41,59,0.6)', color: '#f1f5f9',
+                fontSize: '0.82rem', outline: 'none',
+                transition: 'all 0.2s',
               }}
             />
-            <button onClick={send} disabled={loading || !input.trim()} style={{
-              padding: '0.6rem 0.85rem', borderRadius: '0.5rem', border: 'none',
-              background: loading ? '#475569' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-              color: '#fff', fontSize: '0.8rem', fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer',
-              flexShrink: 0,
+            <button onClick={() => sendMessage(input)} disabled={loading || !input.trim()} style={{
+              width: '38px', height: '38px', borderRadius: '0.75rem', border: 'none',
+              background: (loading || !input.trim()) ? 'rgba(51,65,85,0.5)' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+              cursor: (loading || !input.trim()) ? 'not-allowed' : 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'all 0.2s', flexShrink: 0,
+              boxShadow: (loading || !input.trim()) ? 'none' : '0 2px 8px rgba(99,102,241,0.3)',
             }}>
-              Enviar
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13" />
+                <polygon points="22 2 15 22 11 13 2 9 22 2" />
+              </svg>
             </button>
           </div>
-
-          {/* Disclaimer */}
-          <div style={{
-            padding: '0 1rem 0.6rem', color: '#475569', fontSize: '0.6rem', textAlign: 'center',
-          }}>
-            IA auxiliar — consulte seu advogado para orientações específicas
+          <div style={{ marginTop: '0.4rem', color: '#475569', fontSize: '0.58rem', textAlign: 'center' }}>
+            Assistente IA • Consulte seu advogado para orientações específicas
           </div>
         </div>
-      )}
-    </div>
+      </div>
+    </>
   );
 }
 
