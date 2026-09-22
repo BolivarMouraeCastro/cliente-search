@@ -7,10 +7,15 @@ interface AudienciaData {
   data: string; horario: string; tipo: string; orgaoJulgador: string;
   modalidade: string; endereco: string; advogado: string;
 }
+interface PastHearingData {
+  data: string; horario: string; tipo: string;
+  orgaoJulgador: string; advogado: string; status: string;
+}
 interface ProcessoData {
   numeroProcesso?: string; empresa?: string; entrada?: string;
   materia?: string; advogado?: string; fase?: string;
   proximoPasso?: string; audiencia?: AudienciaData | null;
+  audienciasPassadas?: PastHearingData[];
 }
 interface ConsultaResult {
   found: boolean; error?: string; message?: string;
@@ -344,10 +349,44 @@ function ProcessCard({ processo: p, index, total, nome, cpf }: {
       {/* Checklist Pré-Audiência */}
       {p.audiencia && <ChecklistSection isOnline={isOnline} />}
 
-      {/* No hearing */}
+      {/* No future hearing */}
       {!p.audiencia && p.numeroProcesso && (
         <div style={{ padding: '0.6rem 1.25rem', borderBottom: '1px solid rgba(148,163,184,0.1)',
           textAlign: 'center', color: '#64748b', fontSize: '0.8rem' }}>Nenhuma audiência agendada</div>
+      )}
+
+      {/* Past hearings */}
+      {p.audienciasPassadas && p.audienciasPassadas.length > 0 && (
+        <div style={{ padding: '0.75rem 1.25rem', borderBottom: '1px solid rgba(148,163,184,0.1)' }}>
+          <div style={{ color: '#64748b', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
+            📅 Audiências Realizadas
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+            {p.audienciasPassadas.map((ph, i) => (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '0.5rem 0.7rem', borderRadius: '0.5rem',
+                background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.15)',
+              }}>
+                <div>
+                  <div style={{ color: '#e2e8f0', fontSize: '0.78rem', fontWeight: 600 }}>
+                    {ph.data} {ph.horario ? `às ${ph.horario}` : ''}
+                  </div>
+                  <div style={{ color: '#94a3b8', fontSize: '0.68rem' }}>
+                    {ph.tipo || 'Audiência'} {ph.orgaoJulgador ? `• ${ph.orgaoJulgador}` : ''}
+                  </div>
+                </div>
+                <span style={{
+                  padding: '0.2rem 0.5rem', borderRadius: '1rem',
+                  background: 'rgba(34,197,94,0.15)', color: '#4ade80',
+                  fontSize: '0.6rem', fontWeight: 700,
+                }}>
+                  ✓ Realizada
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* WhatsApp */}

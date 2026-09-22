@@ -227,8 +227,9 @@ export async function POST(req: NextRequest) {
         const folders = res.data.files || [];
         for (const folder of folders) {
           const folderNameNorm = normalize(folder.name || '');
-          // Verificar se é realmente do cliente (primeiro nome + sobrenome)
-          if (folderNameNorm.includes(nameParts[0]) && folderNameNorm.includes(lastName)) {
+          // Verificar se é realmente do cliente — TODOS os nomes devem estar na pasta
+          const allPartsMatch = nameParts.length >= 2 && nameParts.every(part => part.length > 2 ? folderNameNorm.includes(part) : true);
+          if (allPartsMatch) {
             // Extrair número do processo do nome da pasta se possível
             // Padrão CNJ: 0001234-56.2026.5.02.0001
             const cnjMatch = (folder.name || '').match(/(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/);
@@ -248,7 +249,6 @@ export async function POST(req: NextRequest) {
               docs = (filesRes.data.files || []).map(f => f.name || '');
 
               // Tentar extrair empresa do nome da pasta
-              // Formato comum: "NOME DO CLIENTE x NOME DA EMPRESA" ou "NOME x EMPRESA"
               const pastaName = folder.name || '';
               const vsMatch = pastaName.match(/\s+(?:x|vs?\.?|contra)\s+(.+)/i);
               if (vsMatch) {
@@ -370,6 +370,16 @@ export async function POST(req: NextRequest) {
       proximoPasso = inferred.proximoPasso;
     }
 
+    // Audiências passadas (já ocorridas)
+    const pastHearings = processHearings.filter((h: any) => !h.isFuture).map((h: any) => ({
+      data: h.dataAudiencia,
+      horario: h.horario,
+      tipo: h.tipoAudiencia,
+      orgaoJulgador: h.orgaoJulgador,
+      advogado: h.advogado,
+      status: 'Realizada',
+    }));
+
     return {
       numeroProcesso: client.numeroProcesso || null,
       empresa: client.empresa || null,
@@ -387,6 +397,7 @@ export async function POST(req: NextRequest) {
         endereco,
         advogado: nextHearing.advogado,
       } : null,
+      audienciasPassadas: pastHearings,
     };
   });
 
