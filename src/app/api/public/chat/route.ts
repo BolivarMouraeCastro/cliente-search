@@ -137,7 +137,7 @@ async function findClientDocs(token: string, clientName: string): Promise<Array<
 
 // Chamar Gemini API
 async function askGemini(systemPrompt: string, question: string): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${GEMINI_API_KEY}`;
   
   const response = await fetch(url, {
     method: 'POST',
