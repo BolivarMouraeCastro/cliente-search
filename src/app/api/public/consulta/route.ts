@@ -335,11 +335,33 @@ export async function POST(req: NextRequest) {
     const searchN = normalize(clientName);
     // Buscar audiências deste processo específico
     const processHearings = allHearings.filter(h => {
+      // 1. Match por número do processo (mais confiável)
       if (client.numeroProcesso && h.numeroProcesso) {
         return h.numeroProcesso.includes(client.numeroProcesso) || client.numeroProcesso.includes(h.numeroProcesso);
       }
+      
+      // 2. Match pelo Reclamante
       const hN = normalize(h.reclamante);
-      return hN === searchN || hN.includes(searchN) || searchN.includes(hN);
+      const isSameClient = hN === searchN || hN.includes(searchN) || searchN.includes(hN);
+      if (!isSameClient) return false;
+
+      // 3. Como não tem número de processo, verificar se a Empresa (Reclamada) bate
+      // Isso evita que um cliente com 2 processos contra empresas diferentes puxe a mesma audiência
+      if (client.empresa && h.reclamada) {
+        const cleanEmp = normalize(client.empresa).replace(/[^a-z0-9 ]/g, '');
+        const cleanRec = normalize(h.reclamada).replace(/[^a-z0-9 ]/g, '');
+        const empWords = cleanEmp.split(' ').filter(w => w.length > 2);
+        const recWords = cleanRec.split(' ').filter(w => w.length > 2);
+        
+        if (empWords.length > 0 && recWords.length > 0) {
+           // Se a primeira palavra principal for diferente E uma não estiver contida na outra
+           if (empWords[0] !== recWords[0] && !cleanRec.includes(empWords[0]) && !cleanEmp.includes(recWords[0])) {
+             return false; // Empresa não bate, então essa audiência não é desse processo
+           }
+        }
+      }
+
+      return true; // Passou em todas as validações
     });
     processHearings.sort((a: any, b: any) => {
       const p = (d: string) => { const s = d.split('/'); return s.length === 3 ? new Date(+s[2], +s[1]-1, +s[0]).getTime() : 0; };
