@@ -122,12 +122,22 @@ function normalize(str: string): string {
   return str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 }
 
-export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const cpfDigits = (searchParams.get('cpf') || '').replace(/\D/g, '');
+export async function POST(req: NextRequest) {
+  let body: any;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ found: false, error: 'Dados inválidos.' }, { status: 400 });
+  }
+
+  const cpfDigits = (body.cpf || '').replace(/\D/g, '');
+  const nomeInformado = (body.nome || '').trim();
 
   if (cpfDigits.length !== 11) {
     return NextResponse.json({ found: false, error: 'CPF inválido. Informe os 11 dígitos.' }, { status: 400 });
+  }
+  if (!nomeInformado || nomeInformado.length < 3) {
+    return NextResponse.json({ found: false, error: 'Informe seu nome completo.' }, { status: 400 });
   }
 
   // Step 1: Token
@@ -139,7 +149,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ found: false, error: 'Erro de autenticação do servidor.' }, { status: 500 });
   }
 
-  // Step 2: Buscar CPF nos Contatos
+  // Step 2: Buscar CPF nos Contatos e validar nome
   let clientName = '';
   try {
     const sheets = getSheetsService(token);
@@ -160,6 +170,16 @@ export async function GET(req: NextRequest) {
   if (!clientName) {
     return NextResponse.json({ found: false, error: 'CPF não encontrado em nossos registros.' });
   }
+
+  // Validar que o nome informado confere com o cadastrado
+  const normInformado = normalize(nomeInformado);
+  const normCadastrado = normalize(clientName);
+  if (!normCadastrado.includes(normInformado) && !normInformado.includes(normCadastrado)) {
+    return NextResponse.json({ found: false, error: 'Nome e CPF não conferem. Verifique os dados informados.' });
+  }
+
+  // Log de acesso (async, não bloqueia a resposta)
+  logAccess(token, clientName, cpfDigits).catch(e => console.error('Log acesso erro:', e?.message));
 
   const cpfFormatted = cpfDigits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
 
@@ -266,4 +286,44 @@ export async function GET(req: NextRequest) {
     cpf: cpfFormatted,
     processos,
   });
+}
+
+async function logAccess(token: string, nome: string, cpf: string) {
+  try {
+    const sheets = getSheetsService(token);
+    const now = new Date();
+    const dataHora = now.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const data = now.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const hora = now.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const cpfFormatted = cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+
+    // Ensure Acessos tab exists
+    try {
+      await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Acessos!A1' });
+    } catch {
+      const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
+      const sheetExists = spreadsheet.data.sheets?.some(s => s.properties?.title === 'Acessos');
+      if (!sheetExists) {
+        await sheets.spreadsheets.batchUpdate({
+          spreadsheetId: SPREADSHEET_ID,
+          requestBody: { requests: [{ addSheet: { properties: { title: 'Acessos' } } }] },
+        });
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: SPREADSHEET_ID,
+          range: 'Acessos!A1:E1',
+          valueInputOption: 'RAW',
+          requestBody: { values: [['NOME', 'CPF', 'DATA', 'HORA', 'DATA_HORA']] },
+        });
+      }
+    }
+
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'Acessos!A:E',
+      valueInputOption: 'RAW',
+      requestBody: { values: [[nome, cpfFormatted, data, hora, dataHora]] },
+    });
+  } catch (e: any) {
+    console.error('logAccess error:', e?.message);
+  }
 }

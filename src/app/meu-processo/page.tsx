@@ -41,12 +41,17 @@ function formatCPF(value: string): string {
 }
 
 export default function MeuProcessoPage() {
+  const [nome, setNome] = useState('');
   const [cpf, setCpf] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ConsultaResult | null>(null);
 
   const handleConsulta = async () => {
     const digits = cpf.replace(/\D/g, '');
+    if (!nome.trim() || nome.trim().length < 3) {
+      setResult({ found: false, error: 'Informe seu nome completo.' });
+      return;
+    }
     if (digits.length !== 11) {
       setResult({ found: false, error: 'Informe os 11 dígitos do CPF.' });
       return;
@@ -54,7 +59,11 @@ export default function MeuProcessoPage() {
     setLoading(true);
     setResult(null);
     try {
-      const res = await fetch(`/api/public/consulta?cpf=${digits}`);
+      const res = await fetch('/api/public/consulta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome: nome.trim(), cpf: digits }),
+      });
       const data = await res.json();
       setResult(data);
     } catch {
@@ -64,6 +73,7 @@ export default function MeuProcessoPage() {
   };
 
   const processos = result?.processos || [];
+  const showResults = result && result.found && processos.length > 0;
 
   return (
     <div style={{
@@ -74,7 +84,7 @@ export default function MeuProcessoPage() {
       fontFamily: "'Inter', -apple-system, sans-serif",
     }}>
       {/* Header */}
-      <div style={{ textAlign: 'center', marginBottom: '2rem', maxWidth: '500px' }}>
+      <div style={{ textAlign: 'center', marginBottom: '1.5rem', maxWidth: '500px' }}>
         <div style={{
           width: '80px', height: '80px', borderRadius: '50%', margin: '0 auto 0.75rem',
           background: 'linear-gradient(135deg, rgba(212, 175, 55, 0.15), rgba(30, 41, 59, 0.8))',
@@ -88,79 +98,110 @@ export default function MeuProcessoPage() {
         <p style={{ color: '#94a3b8', fontSize: '0.85rem', margin: '0.25rem 0 0' }}>Consulte o andamento do seu processo</p>
       </div>
 
-      {/* Search */}
-      <div style={{
-        background: 'rgba(30, 41, 59, 0.8)', border: '1px solid rgba(148, 163, 184, 0.15)',
-        borderRadius: '1rem', padding: '1.5rem', maxWidth: '500px', width: '100%',
-        backdropFilter: 'blur(10px)',
-      }}>
-        <label style={{ color: '#cbd5e1', fontSize: '0.8rem', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>
-          Digite seu CPF
-        </label>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <input
-            type="text" value={cpf}
-            onChange={(e) => setCpf(formatCPF(e.target.value))}
-            onKeyDown={(e) => e.key === 'Enter' && handleConsulta()}
-            placeholder="000.000.000-00"
-            style={{
-              flex: 1, padding: '0.8rem 1rem', borderRadius: '0.5rem',
-              border: '1px solid rgba(148, 163, 184, 0.2)',
-              background: 'rgba(15, 23, 42, 0.6)', color: '#f1f5f9',
-              fontSize: '1.05rem', fontFamily: 'monospace', outline: 'none',
-            }}
-          />
-          <button onClick={handleConsulta} disabled={loading} style={{
-            padding: '0.8rem 1.5rem', borderRadius: '0.5rem', border: 'none',
-            background: loading ? '#475569' : 'linear-gradient(135deg, #3b82f6, #6366f1)',
-            color: '#fff', fontWeight: 700, fontSize: '0.9rem',
-            cursor: loading ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
-          }}>
-            {loading ? '⏳' : '🔍 Consultar'}
-          </button>
-        </div>
-      </div>
-
-      {/* Error */}
-      {result && !result.found && (
+      {/* Login Form */}
+      {!showResults && (
         <div style={{
-          marginTop: '1.5rem', maxWidth: '500px', width: '100%',
-          background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)',
-          borderRadius: '0.75rem', padding: '1rem 1.5rem',
-          color: '#fca5a5', fontSize: '0.9rem', textAlign: 'center',
-        }}>
-          ❌ {result.error || 'CPF não encontrado.'}
-        </div>
-      )}
-
-      {/* No processes linked */}
-      {result && result.found && result.message && processos.length === 0 && (
-        <div style={{
-          marginTop: '1.5rem', maxWidth: '500px', width: '100%',
           background: 'rgba(30, 41, 59, 0.8)', border: '1px solid rgba(148, 163, 184, 0.15)',
-          borderRadius: '1rem', padding: '1.5rem', textAlign: 'center',
+          borderRadius: '1rem', padding: '1.5rem', maxWidth: '460px', width: '100%',
+          backdropFilter: 'blur(10px)',
         }}>
-          <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#f1f5f9', marginBottom: '0.5rem' }}>{result.nome}</div>
-          <p style={{ color: '#94a3b8', margin: 0 }}>{result.message}</p>
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={{ color: '#cbd5e1', fontSize: '0.8rem', fontWeight: 600, display: 'block', marginBottom: '0.3rem' }}>
+              Nome Completo
+            </label>
+            <input
+              type="text" value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              placeholder="Seu nome completo"
+              style={{
+                width: '100%', padding: '0.8rem 1rem', borderRadius: '0.5rem',
+                border: '1px solid rgba(148, 163, 184, 0.2)',
+                background: 'rgba(15, 23, 42, 0.6)', color: '#f1f5f9',
+                fontSize: '0.95rem', outline: 'none', boxSizing: 'border-box',
+              }}
+            />
+          </div>
+          <div style={{ marginBottom: '1.25rem' }}>
+            <label style={{ color: '#cbd5e1', fontSize: '0.8rem', fontWeight: 600, display: 'block', marginBottom: '0.3rem' }}>
+              CPF
+            </label>
+            <input
+              type="text" value={cpf}
+              onChange={(e) => setCpf(formatCPF(e.target.value))}
+              onKeyDown={(e) => e.key === 'Enter' && handleConsulta()}
+              placeholder="000.000.000-00"
+              style={{
+                width: '100%', padding: '0.8rem 1rem', borderRadius: '0.5rem',
+                border: '1px solid rgba(148, 163, 184, 0.2)',
+                background: 'rgba(15, 23, 42, 0.6)', color: '#f1f5f9',
+                fontSize: '1rem', fontFamily: 'monospace', outline: 'none', boxSizing: 'border-box',
+              }}
+            />
+          </div>
+          <button onClick={handleConsulta} disabled={loading} style={{
+            width: '100%', padding: '0.85rem', borderRadius: '0.5rem', border: 'none',
+            background: loading ? '#475569' : 'linear-gradient(135deg, #3b82f6, #6366f1)',
+            color: '#fff', fontWeight: 700, fontSize: '0.95rem',
+            cursor: loading ? 'not-allowed' : 'pointer',
+          }}>
+            {loading ? '⏳ Consultando...' : '🔍 Acessar Meu Processo'}
+          </button>
+
+          {/* Error */}
+          {result && !result.found && (
+            <div style={{
+              marginTop: '1rem', background: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '0.5rem',
+              padding: '0.75rem', color: '#fca5a5', fontSize: '0.85rem', textAlign: 'center',
+            }}>
+              {result.error || 'Dados não encontrados.'}
+            </div>
+          )}
+
+          {/* No processes linked */}
+          {result && result.found && processos.length === 0 && result.message && (
+            <div style={{
+              marginTop: '1rem', background: 'rgba(59, 130, 246, 0.1)',
+              border: '1px solid rgba(59, 130, 246, 0.2)', borderRadius: '0.5rem',
+              padding: '0.75rem', color: '#93c5fd', fontSize: '0.85rem', textAlign: 'center',
+            }}>
+              {result.message}
+            </div>
+          )}
         </div>
       )}
 
       {/* Results */}
-      {result && result.found && processos.length > 0 && (
-        <div style={{ marginTop: '1.5rem', maxWidth: '550px', width: '100%', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {/* Client Name */}
-          <div style={{ textAlign: 'center', marginBottom: '0.25rem' }}>
-            <div style={{ fontSize: '1.15rem', fontWeight: 700, color: '#f1f5f9' }}>{result.nome}</div>
-            {processos.length > 1 && (
-              <div style={{ color: '#94a3b8', fontSize: '0.8rem', marginTop: '0.15rem' }}>
-                {processos.length} processos encontrados
-              </div>
-            )}
+      {showResults && (
+        <div style={{ maxWidth: '550px', width: '100%', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {/* Welcome */}
+          <div style={{
+            background: 'rgba(30, 41, 59, 0.8)', border: '1px solid rgba(148, 163, 184, 0.15)',
+            borderRadius: '1rem', padding: '1.25rem 1.5rem',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          }}>
+            <div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#f1f5f9' }}>{result!.nome}</div>
+              {processos.length > 1 && (
+                <div style={{ color: '#94a3b8', fontSize: '0.8rem', marginTop: '0.1rem' }}>
+                  {processos.length} processos encontrados
+                </div>
+              )}
+            </div>
+            <button
+              onClick={() => { setResult(null); setNome(''); setCpf(''); }}
+              style={{
+                padding: '0.4rem 0.75rem', borderRadius: '0.4rem', border: '1px solid rgba(148, 163, 184, 0.2)',
+                background: 'transparent', color: '#94a3b8', fontSize: '0.75rem', cursor: 'pointer',
+              }}
+            >
+              Sair
+            </button>
           </div>
 
-          {/* Process Cards */}
+          {/* Cards */}
           {processos.map((p, i) => (
-            <ProcessCard key={i} processo={p} index={i} total={processos.length} nome={result.nome || ''} cpf={result.cpf || ''} />
+            <ProcessCard key={i} processo={p} index={i} total={processos.length} nome={result!.nome || ''} cpf={result!.cpf || ''} />
           ))}
         </div>
       )}
@@ -179,12 +220,11 @@ function ProcessCard({ processo: p, index, total, nome, cpf }: {
   return (
     <div style={{
       background: 'rgba(30, 41, 59, 0.8)', border: '1px solid rgba(148, 163, 184, 0.15)',
-      borderRadius: '1rem', overflow: 'hidden', backdropFilter: 'blur(10px)',
+      borderRadius: '1rem', overflow: 'hidden',
     }}>
-      {/* Header with process number + empresa */}
+      {/* Header */}
       <div style={{
-        padding: '1rem 1.25rem',
-        borderBottom: '1px solid rgba(148, 163, 184, 0.1)',
+        padding: '1rem 1.25rem', borderBottom: '1px solid rgba(148, 163, 184, 0.1)',
         background: 'rgba(99, 102, 241, 0.04)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -200,22 +240,18 @@ function ProcessCard({ processo: p, index, total, nome, cpf }: {
           )}
           <div style={{ flex: 1, minWidth: 0 }}>
             {p.numeroProcesso && (
-              <div style={{
-                color: '#a78bfa', fontSize: '0.8rem', fontFamily: 'monospace', fontWeight: 600,
-              }}>
+              <div style={{ color: '#a78bfa', fontSize: '0.8rem', fontFamily: 'monospace', fontWeight: 600 }}>
                 {p.numeroProcesso}
               </div>
             )}
             {p.empresa && (
-              <div style={{ color: '#94a3b8', fontSize: '0.75rem', marginTop: '0.1rem' }}>
-                vs {p.empresa}
-              </div>
+              <div style={{ color: '#94a3b8', fontSize: '0.75rem', marginTop: '0.1rem' }}>vs {p.empresa}</div>
             )}
           </div>
         </div>
       </div>
 
-      {/* Info Grid */}
+      {/* Info */}
       {(p.entrada || p.advogado) && (
         <div style={{ padding: '0.75rem 1.25rem', borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
           <div style={{ display: 'flex', gap: '2rem' }}>
@@ -231,9 +267,7 @@ function ProcessCard({ processo: p, index, total, nome, cpf }: {
           padding: '0.75rem 1.25rem', borderBottom: '1px solid rgba(148, 163, 184, 0.1)',
           background: 'rgba(99, 102, 241, 0.03)',
         }}>
-          <div style={{ color: '#818cf8', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Fase Atual
-          </div>
+          <div style={{ color: '#818cf8', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Fase Atual</div>
           <div style={{ color: '#e2e8f0', fontWeight: 600, fontSize: '0.9rem', marginTop: '0.15rem' }}>{p.fase}</div>
           {p.proximoPasso && (
             <div style={{ color: '#94a3b8', fontSize: '0.75rem', lineHeight: 1.4, marginTop: '0.15rem' }}>{p.proximoPasso}</div>
@@ -277,7 +311,6 @@ function ProcessCard({ processo: p, index, total, nome, cpf }: {
         </div>
       )}
 
-      {/* No hearing */}
       {!p.audiencia && p.numeroProcesso && (
         <div style={{
           padding: '0.6rem 1.25rem', borderBottom: '1px solid rgba(148, 163, 184, 0.1)',

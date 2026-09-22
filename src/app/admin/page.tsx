@@ -16,6 +16,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState<string>('');
   const [kickingEmail, setKickingEmail] = useState<string | null>(null);
+  const [acessos, setAcessos] = useState<any>(null);
   const [kickMessage, setKickMessage] = useState<string | null>(null);
 
   const fetchData = () => {
@@ -28,6 +29,7 @@ export default function AdminPage() {
   useEffect(() => {
     if (session?.user?.email === ADMIN_EMAIL) {
       fetchData();
+      fetch('/api/admin/acessos').then(r => r.json()).then(setAcessos).catch(() => {});
     } else if (status !== 'loading') {
       setLoading(false);
     }
@@ -83,6 +85,9 @@ export default function AdminPage() {
 
   if (!data) return <div className="detail-page" style={{ padding: '2rem', color: '#fff' }}>Erro ao carregar dados.</div>;
 
+  const portalStats = acessos?.stats || { accessToday: 0, uniqueClients: 0, totalAccess: 0 };
+  const recentAccess = acessos?.recentAccess || [];
+
   const today = new Date().toISOString().split('T')[0];
 
   const loginsToday = data.activities.filter(act => {
@@ -136,6 +141,68 @@ export default function AdminPage() {
       <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1.5rem' }}>
         Gerencie usuários e monitore atividades do sistema
       </p>
+
+      {/* Portal do Cliente - Acessos */}
+      <div style={sectionStyle}>
+        <h2 style={{ color: '#4ade80', margin: '0 0 1rem', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          📱 Portal do Cliente — Acessos
+        </h2>
+
+        {/* Stats Cards */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem', marginBottom: '1rem' }}>
+          <div style={{
+            background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)',
+            borderRadius: '0.75rem', padding: '1rem', textAlign: 'center',
+          }}>
+            <div style={{ color: '#60a5fa', fontSize: '1.5rem', fontWeight: 800 }}>{portalStats.accessToday}</div>
+            <div style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 600, marginTop: '0.15rem' }}>ACESSOS HOJE</div>
+          </div>
+          <div style={{
+            background: 'rgba(139, 92, 246, 0.1)', border: '1px solid rgba(139, 92, 246, 0.2)',
+            borderRadius: '0.75rem', padding: '1rem', textAlign: 'center',
+          }}>
+            <div style={{ color: '#a78bfa', fontSize: '1.5rem', fontWeight: 800 }}>{portalStats.uniqueClients}</div>
+            <div style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 600, marginTop: '0.15rem' }}>CLIENTES ÚNICOS</div>
+          </div>
+          <div style={{
+            background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.2)',
+            borderRadius: '0.75rem', padding: '1rem', textAlign: 'center',
+          }}>
+            <div style={{ color: '#4ade80', fontSize: '1.5rem', fontWeight: 800 }}>{portalStats.totalAccess}</div>
+            <div style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 600, marginTop: '0.15rem' }}>TOTAL DE ACESSOS</div>
+          </div>
+        </div>
+
+        {/* Recent Access Table */}
+        {recentAccess.length > 0 ? (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>Cliente</th>
+                  <th style={thStyle}>CPF</th>
+                  <th style={thStyle}>Data</th>
+                  <th style={thStyle}>Hora</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentAccess.slice(0, 20).map((a: any, i: number) => (
+                  <tr key={i} style={{ background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)' }}>
+                    <td style={tdStyle}>{a.nome}</td>
+                    <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: '0.8rem' }}>{a.cpf}</td>
+                    <td style={tdStyle}>{a.data}</td>
+                    <td style={tdStyle}>{a.hora}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', color: '#64748b', padding: '1rem', fontSize: '0.85rem' }}>
+            Nenhum acesso registrado ainda
+          </div>
+        )}
+      </div>
 
       {/* Kick message */}
       {kickMessage && (
