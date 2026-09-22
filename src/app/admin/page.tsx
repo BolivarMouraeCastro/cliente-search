@@ -204,6 +204,211 @@ export default function AdminPage() {
         )}
       </div>
 
+      {/* Avaliações dos Clientes */}
+      <div style={sectionStyle}>
+        <h2 style={{ color: '#d4af37', margin: '0 0 1rem', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          ⭐ Avaliações dos Clientes
+        </h2>
+        
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem', marginBottom: '1rem' }}>
+          <div style={{
+            background: 'rgba(212, 175, 55, 0.1)', border: '1px solid rgba(212, 175, 55, 0.2)',
+            borderRadius: '0.75rem', padding: '1rem', textAlign: 'center',
+          }}>
+            <div style={{ color: '#d4af37', fontSize: '1.5rem', fontWeight: 800 }}>
+              {acessos?.avaliacoes?.media?.toFixed(1) || '0.0'} ⭐
+            </div>
+            <div style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 600, marginTop: '0.15rem' }}>MÉDIA DE AVALIAÇÕES</div>
+          </div>
+          <div style={{
+            background: 'rgba(212, 175, 55, 0.1)', border: '1px solid rgba(212, 175, 55, 0.2)',
+            borderRadius: '0.75rem', padding: '1rem', textAlign: 'center',
+          }}>
+            <div style={{ color: '#d4af37', fontSize: '1.5rem', fontWeight: 800 }}>{acessos?.avaliacoes?.total || 0}</div>
+            <div style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 600, marginTop: '0.15rem' }}>TOTAL DE AVALIAÇÕES</div>
+          </div>
+        </div>
+
+        {acessos?.avaliacoes?.recent?.length > 0 ? (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>Nome</th>
+                  <th style={thStyle}>Nota</th>
+                  <th style={thStyle}>Comentário</th>
+                  <th style={thStyle}>Data</th>
+                </tr>
+              </thead>
+              <tbody>
+                {acessos.avaliacoes.recent.map((av: any, i: number) => (
+                  <tr key={i} style={{ background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)' }}>
+                    <td style={tdStyle}>{av.nome}</td>
+                    <td style={tdStyle}>{'⭐'.repeat(av.nota)}</td>
+                    <td style={tdStyle}>{av.comentario || '—'}</td>
+                    <td style={tdStyle}>{av.data}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', color: '#64748b', padding: '1rem', fontSize: '0.85rem' }}>
+            Nenhuma avaliação registrada
+          </div>
+        )}
+      </div>
+
+      {/* Indicações de Clientes */}
+      <div style={sectionStyle}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+          <h2 style={{ color: '#4ade80', fontSize: '1rem', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            👥 Indicações de Clientes
+          </h2>
+          <div style={{ background: 'rgba(74, 222, 128, 0.1)', border: '1px solid rgba(74, 222, 128, 0.2)', padding: '0.5rem 1rem', borderRadius: '0.5rem' }}>
+            <span style={{ color: '#4ade80', fontWeight: 800, fontSize: '1.2rem' }}>{acessos?.indicacoes?.total || 0}</span>
+            <span style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 600, marginLeft: '0.5rem' }}>TOTAL</span>
+          </div>
+        </div>
+
+        {acessos?.indicacoes?.recent?.length > 0 ? (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>Indicado Por</th>
+                  <th style={thStyle}>Nome do Indicado</th>
+                  <th style={thStyle}>Telefone</th>
+                  <th style={thStyle}>Data</th>
+                </tr>
+              </thead>
+              <tbody>
+                {acessos.indicacoes.recent.map((ind: any, i: number) => (
+                  <tr key={i} style={{ background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)' }}>
+                    <td style={tdStyle}>{ind.indicadoPor}</td>
+                    <td style={tdStyle}>{ind.nomeIndicado}</td>
+                    <td style={tdStyle}>
+                      <a 
+                        href={`https://wa.me/${ind.telefone?.replace(/\D/g, '')}`} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        style={{ color: '#4ade80', textDecoration: 'none' }}
+                      >
+                        {ind.telefone}
+                      </a>
+                    </td>
+                    <td style={tdStyle}>{ind.data}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', color: '#64748b', padding: '1rem', fontSize: '0.85rem' }}>
+            Nenhuma indicação registrada
+          </div>
+        )}
+      </div>
+
+      {/* Engajamento do Portal */}
+      <div style={sectionStyle}>
+        <h2 style={{ color: '#60a5fa', margin: '0 0 1rem', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          📈 Engajamento do Portal
+        </h2>
+        
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          
+          {/* Clientes que nunca acessaram */}
+          <div>
+            <h3 style={{ color: '#ef4444', fontSize: '0.9rem', marginBottom: '0.75rem', display: 'flex', justifyContent: 'space-between' }}>
+              <span>Clientes que NUNCA acessaram</span>
+              <span style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '0.2rem 0.5rem', borderRadius: '0.3rem', color: '#ef4444' }}>
+                {acessos?.engajamento?.neverAccessed?.length || 0}
+              </span>
+            </h3>
+            {acessos?.engajamento?.neverAccessed?.length > 0 ? (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr>
+                      <th style={thStyle}>Nome</th>
+                      <th style={thStyle}>CPF</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {acessos.engajamento.neverAccessed.slice(0, 5).map((cliente: any, i: number) => (
+                      <tr key={i} style={{ background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)' }}>
+                        <td style={tdStyle}>{cliente.nome}</td>
+                        <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: '0.8rem' }}>{cliente.cpf}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div style={{ color: '#64748b', fontSize: '0.85rem' }}>Todos os clientes já acessaram!</div>
+            )}
+          </div>
+
+          {/* Top 10 mais ativos */}
+          <div>
+            <h3 style={{ color: '#60a5fa', fontSize: '0.9rem', marginBottom: '0.75rem' }}>Top 10 mais ativos</h3>
+            {acessos?.engajamento?.topAccessors?.length > 0 ? (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr>
+                      <th style={thStyle}>Nome</th>
+                      <th style={thStyle}>CPF</th>
+                      <th style={thStyle}>Qtd Acessos</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {acessos.engajamento.topAccessors.slice(0, 10).map((cliente: any, i: number) => (
+                      <tr key={i} style={{ background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)' }}>
+                        <td style={tdStyle}>{cliente.nome}</td>
+                        <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: '0.8rem' }}>{cliente.cpf}</td>
+                        <td style={{ ...tdStyle, fontWeight: 'bold', color: '#60a5fa' }}>{cliente.acessos}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div style={{ color: '#64748b', fontSize: '0.85rem' }}>Nenhum dado de acesso disponível</div>
+            )}
+          </div>
+
+          {/* Acessos por mês */}
+          <div>
+            <h3 style={{ color: '#a78bfa', fontSize: '0.9rem', marginBottom: '0.75rem' }}>Acessos por Mês</h3>
+            {acessos?.engajamento?.monthlyAccess?.length > 0 ? (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr>
+                      <th style={thStyle}>Mês</th>
+                      <th style={thStyle}>Quantidade</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {acessos.engajamento.monthlyAccess.map((mes: any, i: number) => (
+                      <tr key={i} style={{ background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)' }}>
+                        <td style={tdStyle}>{mes.mes}</td>
+                        <td style={tdStyle}>{mes.quantidade}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div style={{ color: '#64748b', fontSize: '0.85rem' }}>Nenhum dado mensal disponível</div>
+            )}
+          </div>
+
+        </div>
+      </div>
+
       {/* Kick message */}
       {kickMessage && (
         <div style={{
