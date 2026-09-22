@@ -199,6 +199,106 @@ export async function POST(req: NextRequest) {
     console.error('Consulta Step3 clients:', e?.message);
   }
 
+  // Step 3.5: Se não achou na planilha, buscar pasta do cliente no Drive (processos distribuídos)
+  if (allMatchedClients.length === 0) {
+    const DRIVE_DISTRIBUIDOS_2026 = process.env.DRIVE_DISTRIBUIDOS_2026_FOLDER_ID || '1UZboUcb7IoZKcEWKYKMwy9o_v6JWNMFj';
+    // Futuramente: DRIVE_DISTRIBUIDOS_2025 = process.env.DRIVE_DISTRIBUIDOS_2025_FOLDER_ID || '';
+    const folderIds = [DRIVE_DISTRIBUIDOS_2026]; // adicionar 2025 aqui quando tiver
+
+    try {
+      const { getDriveService } = await import('@/lib/google-auth');
+      const drive = getDriveService(token);
+      const searchN = normalize(clientName);
+      const nameParts = searchN.split(' ');
+      const lastName = nameParts[nameParts.length - 1];
+
+      for (const parentFolderId of folderIds) {
+        if (!parentFolderId) continue;
+
+        // Buscar subpastas que contenham o sobrenome do cliente
+        const res = await drive.files.list({
+          q: `'${parentFolderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and name contains '${lastName.toUpperCase()}' and trashed = false`,
+          fields: 'files(id, name, createdTime)',
+          pageSize: 50,
+          supportsAllDrives: true,
+          includeItemsFromAllDrives: true,
+        });
+
+        const folders = res.data.files || [];
+        for (const folder of folders) {
+          const folderNameNorm = normalize(folder.name || '');
+          // Verificar se é realmente do cliente (primeiro nome + sobrenome)
+          if (folderNameNorm.includes(nameParts[0]) && folderNameNorm.includes(lastName)) {
+            // Extrair número do processo do nome da pasta se possível
+            // Padrão CNJ: 0001234-56.2026.5.02.0001
+            const cnjMatch = (folder.name || '').match(/(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/);
+            const numeroProcesso = cnjMatch ? cnjMatch[1] : '';
+
+            // Buscar arquivos dentro da pasta para entender mais
+            let empresa = '';
+            let docs: string[] = [];
+            try {
+              const filesRes = await drive.files.list({
+                q: `'${folder.id}' in parents and trashed = false`,
+                fields: 'files(name, mimeType)',
+                pageSize: 50,
+                supportsAllDrives: true,
+                includeItemsFromAllDrives: true,
+              });
+              docs = (filesRes.data.files || []).map(f => f.name || '');
+
+              // Tentar extrair empresa do nome da pasta
+              // Formato comum: "NOME DO CLIENTE x NOME DA EMPRESA" ou "NOME x EMPRESA"
+              const pastaName = folder.name || '';
+              const vsMatch = pastaName.match(/\s+(?:x|vs?\.?|contra)\s+(.+)/i);
+              if (vsMatch) {
+                empresa = vsMatch[1].replace(/\s*-\s*\d{7}.*$/, '').trim();
+              }
+            } catch { /* ignore */ }
+
+            // Inferir fase pelos documentos encontrados
+            let faseFromDocs = 'Processo Distribuído';
+            let proximoPasso = 'Seu processo foi distribuído à vara trabalhista. Aguardando citação da empresa reclamada.';
+            const docsUpper = docs.map(d => d.toUpperCase());
+
+            if (docsUpper.some(d => d.includes('ACORDO'))) {
+              faseFromDocs = 'Acordo Realizado';
+              proximoPasso = 'O processo foi encerrado por acordo.';
+            } else if (docsUpper.some(d => d.startsWith('RO') || d.includes('RECURSO ORDINARIO') || d.includes('RECURSO ORDINÁRIO'))) {
+              faseFromDocs = 'Fase Recursal';
+              proximoPasso = 'Houve sentença e estamos recorrendo para buscar um resultado melhor.';
+            } else if (docsUpper.some(d => d.includes('SENTENCA') || d.includes('SENTENÇA'))) {
+              faseFromDocs = 'Sentença Proferida';
+              proximoPasso = 'A sentença foi proferida pelo juiz. Seu advogado está analisando os próximos passos.';
+            } else if (docsUpper.some(d => d.includes('ATA') && d.includes('INSTRUCAO'))) {
+              faseFromDocs = 'Audiência de Instrução Realizada';
+              proximoPasso = 'A audiência de instrução foi realizada. Aguardando sentença do juiz.';
+            } else if (docsUpper.some(d => d.includes('ATA') && d.includes('CONCILIA'))) {
+              faseFromDocs = 'Audiência de Conciliação Realizada';
+              proximoPasso = 'A audiência de conciliação foi realizada. Aguardando próximos andamentos.';
+            }
+
+            allMatchedClients.push({
+              nome: clientName,
+              entrada: folder.createdTime ? new Date(folder.createdTime).toLocaleDateString('pt-BR') : '',
+              status: 'DISTRIBUÍDO',
+              empresa: empresa || '',
+              materia: '',
+              responsavel: '',
+              funcao: '',
+              numeroProcesso,
+              _faseFromDocs: faseFromDocs,
+              _proximoPassoFromDocs: proximoPasso,
+              _docsEncontrados: docs,
+            });
+          }
+        }
+      }
+    } catch (e: any) {
+      console.error('Consulta Step3.5 Drive search:', e?.message);
+    }
+  }
+
   if (allMatchedClients.length === 0) {
     return NextResponse.json({
       found: true, nome: clientName, cpf: cpfFormatted, processos: [],
@@ -258,7 +358,17 @@ export async function POST(req: NextRequest) {
       endereco = findAddress(nextHearing.orgaoJulgador);
     }
 
-    const { fase, proximoPasso } = inferPhase(client.status, processHearings, client.numeroProcesso);
+    // Usar fase do Drive se disponível (Step 3.5), senão inferir da planilha
+    let fase: string;
+    let proximoPasso: string;
+    if (client._faseFromDocs) {
+      fase = client._faseFromDocs;
+      proximoPasso = client._proximoPassoFromDocs || '';
+    } else {
+      const inferred = inferPhase(client.status, processHearings, client.numeroProcesso);
+      fase = inferred.fase;
+      proximoPasso = inferred.proximoPasso;
+    }
 
     return {
       numeroProcesso: client.numeroProcesso || null,
