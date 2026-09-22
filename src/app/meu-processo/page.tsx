@@ -199,7 +199,7 @@ export default function MeuProcessoPage() {
           ))}
 
           {/* Chat IA */}
-          <ChatSection nome={result!.nome || ''} cpf={result!.cpf || ''} />
+          <ChatSection nome={result!.nome || ''} cpf={result!.cpf || ''} processos={processos} />
 
           {/* Indicação */}
           <IndicacaoSection nome={result!.nome || ''} />
@@ -549,7 +549,7 @@ function FAQSection() {
 }
 
 /* ==================== CHAT IA ==================== */
-function ChatSection({ nome, cpf }: { nome: string; cpf: string }) {
+function ChatSection({ nome, cpf, processos }: { nome: string; cpf: string; processos: any[] }) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Array<{ role: 'user' | 'ai'; text: string }>>([]);
   const [input, setInput] = useState('');
@@ -565,7 +565,7 @@ function ChatSection({ nome, cpf }: { nome: string; cpf: string }) {
     try {
       const res = await fetch('/api/public/chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome, cpf, pergunta: question }),
+        body: JSON.stringify({ nome, cpf, pergunta: question, processos }),
       });
       const data = await res.json();
       setMessages(prev => [...prev, { role: 'ai', text: data.resposta || data.error || 'Erro ao processar.' }]);

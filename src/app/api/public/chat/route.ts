@@ -176,7 +176,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Dados inválidos.' }, { status: 400 });
   }
   
-  const { nome, cpf, pergunta } = body;
+  const { nome, cpf, pergunta, processos } = body;
   if (!nome || !cpf || !pergunta) {
     return NextResponse.json({ error: 'Nome, CPF e pergunta são obrigatórios.' }, { status: 400 });
   }
@@ -184,7 +184,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Pergunta muito longa (máx 500 caracteres).' }, { status: 400 });
   }
   
-  // Validar CPF e nome (mesmo padrão do consulta)
+  // Validar CPF e nome
   const cpfDigits = cpf.replace(/\D/g, '');
   let token: string;
   let clientName = '';
@@ -214,74 +214,68 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Nome e CPF não conferem.' }, { status: 403 });
   }
   
-  // Buscar documentos do cliente no Drive
-  const docs = await findClientDocs(token, clientName);
-  
-  // Buscar dados do processo na planilha principal
-  let processInfo = '';
+  // Buscar documentos do cliente no Drive (contexto extra)
+  let docs: any[] = [];
   try {
-    const sheets = getSheetsService(token);
-    const res = await sheets.spreadsheets.values.get({
-      spreadsheetId: process.env.GOOGLE_SPREADSHEET_ID || '',
-      range: 'A:Z',
-    });
-    const rows = res.data.values || [];
-    const header = rows[0] || [];
-    for (const row of rows.slice(1)) {
-      const nomeRow = normalize(row[header.indexOf('NOME_CLIENTE')] || row[header.indexOf('NOME')] || '');
-      if (nomeRow && (nomeRow.includes(normCadastrado) || normCadastrado.includes(nomeRow))) {
-        const processo = row[header.indexOf('NUMERO_PROCESSO')] || row[header.indexOf('NUM_PROCESSO')] || '';
-        const empresa = row[header.indexOf('EMPRESA')] || row[header.indexOf('RECLAMADA')] || '';
-        const status = row[header.indexOf('STATUS')] || '';
-        const materia = row[header.indexOf('MATERIA')] || '';
-        processInfo += `\n- Processo: ${processo}, Empresa: ${empresa}, Status: ${status}, Matéria: ${materia}`;
-      }
-    }
+    docs = await findClientDocs(token, clientName);
   } catch { /* ignore */ }
   
-  // Montar contexto para a IA
-  let context = `Você é o assistente virtual do escritório BM&C Advogados. Está conversando com o cliente ${clientName}.
-
-REGRAS IMPORTANTES:
-- Responda SEMPRE em português do Brasil, de forma clara e SEM juridiquês
-- NUNCA invente informações que não estejam nos dados abaixo
-- NUNCA mencione valores financeiros, honorários ou estratégias jurídicas
-- NUNCA dê conselhos jurídicos específicos (diga "consulte seu advogado")
-- Se não souber, diga "Não tenho essa informação. Recomendo entrar em contato com o escritório pelo WhatsApp."
-- Seja empático, acolhedor e tranquilizador
-- Use linguagem simples que qualquer pessoa entenda
-- Ao final, sempre sugira entrar em contato pelo WhatsApp para mais detalhes
-
-DADOS DO PROCESSO DO CLIENTE:
-${processInfo || 'Dados da planilha não disponíveis no momento.'}
-
-DOCUMENTOS PROTOCOLADOS (encontrados no Drive):`;
-
-  if (docs.length > 0) {
-    for (const doc of docs) {
-      context += `\n- [${doc.data || 'sem data'}] ${doc.tipoDescricao} — Arquivo: "${doc.nome}"`;
-    }
-    
-    context += `\n\nCom base nos documentos acima, é possível inferir a fase processual:`;
-    
-    // Inferir fase com base no documento mais recente
-    const lastDoc = docs[0];
-    if (lastDoc) {
-      if (['RO', 'RR', 'AI', 'AP'].includes(lastDoc.tipo)) {
-        context += `\n- O processo está em FASE RECURSAL. O documento "${lastDoc.nome}" foi protocolado em ${lastDoc.data}, indicando que houve sentença e o escritório está recorrendo.`;
-      } else if (lastDoc.tipo === 'PI') {
-        context += `\n- O processo está na FASE INICIAL. A petição inicial foi protocolada em ${lastDoc.data}.`;
-      } else if (lastDoc.tipo === 'EXEC' || lastDoc.tipo === 'CALC') {
-        context += `\n- O processo está em FASE DE EXECUÇÃO. Já houve decisão favorável e estamos cobrando os valores.`;
-      } else if (lastDoc.tipo === 'CONT') {
-        context += `\n- O processo está em fase recursal. O escritório apresentou contrarrazões ao recurso da empresa em ${lastDoc.data}.`;
-      } else if (lastDoc.tipo === 'ACORDO') {
-        context += `\n- O processo foi ENCERRADO POR ACORDO.`;
+  // Montar contexto usando dados dos processos que JÁ vieram do frontend
+  let processContext = '';
+  if (processos && Array.isArray(processos) && processos.length > 0) {
+    processContext = `\nO cliente possui ${processos.length} processo(s):\n`;
+    for (let i = 0; i < processos.length; i++) {
+      const p = processos[i];
+      processContext += `\n--- PROCESSO ${i + 1} ---`;
+      processContext += `\n- Número: ${p.numeroProcesso || 'Ainda não distribuído'}`;
+      processContext += `\n- Empresa reclamada: ${p.empresa || 'Não informada'}`;
+      processContext += `\n- FASE ATUAL: ${p.fase || 'Em andamento'}`;
+      processContext += `\n- Próximo passo: ${p.proximoPasso || ''}`;
+      processContext += `\n- Data de entrada: ${p.entrada || 'Não informada'}`;
+      processContext += `\n- Matéria: ${p.materia || 'Não informada'}`;
+      processContext += `\n- Advogado responsável: ${p.advogado || 'Não informado'}`;
+      if (p.audiencia) {
+        processContext += `\n- AUDIÊNCIA MARCADA: ${p.audiencia.data} às ${p.audiencia.horario}`;
+        processContext += `\n  Tipo: ${p.audiencia.tipo || 'Não especificado'}`;
+        processContext += `\n  Modalidade: ${p.audiencia.modalidade || 'Presencial'}`;
+        processContext += `\n  Local: ${p.audiencia.orgaoJulgador || ''} - ${p.audiencia.endereco || ''}`;
+        processContext += `\n  Advogado na audiência: ${p.audiencia.advogado || ''}`;
+      } else {
+        processContext += `\n- Nenhuma audiência agendada no momento`;
       }
     }
   } else {
-    context += '\nNenhum documento específico encontrado no Drive para este cliente no momento.';
+    processContext = '\nDados dos processos não disponíveis no momento.';
   }
+  
+  // Contexto dos documentos do Drive (complementar)
+  let docsContext = '';
+  if (docs.length > 0) {
+    docsContext = '\n\nDOCUMENTOS PROTOCOLADOS (encontrados no Drive):';
+    for (const doc of docs) {
+      docsContext += `\n- [${doc.data || 'sem data'}] ${doc.tipoDescricao} — "${doc.nome}"`;
+    }
+  }
+  
+  const context = `Você é o assistente virtual do escritório BM&C Advogados. Está conversando com o cliente ${clientName}.
+
+REGRAS IMPORTANTES:
+- Responda SEMPRE em português do Brasil, de forma clara e SEM juridiquês
+- USE OS DADOS DO PROCESSO ABAIXO para responder — eles são a fonte de verdade
+- A FASE ATUAL do processo é a informação mais importante — SEMPRE baseie sua resposta nela
+- NUNCA diga que o processo está "distribuído" se a fase mostra "Recurso/Execução" ou outra fase avançada
+- NUNCA invente informações que não estejam nos dados abaixo
+- NUNCA mencione valores financeiros, honorários ou estratégias jurídicas
+- NUNCA dê conselhos jurídicos específicos (diga "consulte seu advogado")
+- Se não souber algo específico, diga "Para mais detalhes, entre em contato com o escritório pelo WhatsApp."
+- Seja empático, acolhedor e tranquilizador
+- Use linguagem simples que qualquer pessoa entenda
+- Se o cliente perguntar sobre um processo específico (ex: contra empresa X), responda apenas sobre esse
+- Ao final, sempre sugira entrar em contato pelo WhatsApp para mais detalhes
+
+DADOS DO PROCESSO DO CLIENTE:
+${processContext}
+${docsContext}`;
   
   try {
     const resposta = await askGemini(context, pergunta);
@@ -291,3 +285,4 @@ DOCUMENTOS PROTOCOLADOS (encontrados no Drive):`;
     return NextResponse.json({ error: 'Erro ao processar sua pergunta. Tente novamente.' }, { status: 500 });
   }
 }
+
