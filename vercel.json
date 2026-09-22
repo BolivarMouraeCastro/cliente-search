@@ -1,0 +1,5 @@
+{
+  "deploymentProtection": {
+    "production": "disabled"
+  }
+}
