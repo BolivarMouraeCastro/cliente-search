@@ -12,12 +12,7 @@ interface AudienciaData {
   advogado: string;
 }
 
-interface ConsultaResult {
-  found: boolean;
-  error?: string;
-  message?: string;
-  nome?: string;
-  cpf?: string;
+interface ProcessoData {
   numeroProcesso?: string;
   empresa?: string;
   entrada?: string;
@@ -26,6 +21,15 @@ interface ConsultaResult {
   fase?: string;
   proximoPasso?: string;
   audiencia?: AudienciaData | null;
+}
+
+interface ConsultaResult {
+  found: boolean;
+  error?: string;
+  message?: string;
+  nome?: string;
+  cpf?: string;
+  processos?: ProcessoData[];
 }
 
 function formatCPF(value: string): string {
@@ -40,6 +44,7 @@ export default function MeuProcessoPage() {
   const [cpf, setCpf] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ConsultaResult | null>(null);
+  const [selectedIdx, setSelectedIdx] = useState(0);
 
   const handleConsulta = async () => {
     const digits = cpf.replace(/\D/g, '');
@@ -49,6 +54,7 @@ export default function MeuProcessoPage() {
     }
     setLoading(true);
     setResult(null);
+    setSelectedIdx(0);
     try {
       const res = await fetch(`/api/public/consulta?cpf=${digits}`);
       const data = await res.json();
@@ -62,6 +68,9 @@ export default function MeuProcessoPage() {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') handleConsulta();
   };
+
+  const processos = result?.processos || [];
+  const selected = processos[selectedIdx] || null;
 
   return (
     <div style={{
@@ -152,174 +161,249 @@ export default function MeuProcessoPage() {
         </div>
       )}
 
-      {/* Result Card */}
-      {result && result.found && (
+      {/* Message (no processes linked) */}
+      {result && result.found && result.message && processos.length === 0 && (
         <div style={{
           marginTop: '1.5rem', maxWidth: '550px', width: '100%',
           background: 'rgba(30, 41, 59, 0.8)', border: '1px solid rgba(148, 163, 184, 0.15)',
-          borderRadius: '1rem', overflow: 'hidden', backdropFilter: 'blur(10px)',
+          borderRadius: '1rem', padding: '1.5rem', textAlign: 'center',
         }}>
-          {/* Client Info */}
-          <div style={{ padding: '1.5rem', borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
-            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#f1f5f9', marginBottom: '0.25rem' }}>
-              👤 {result.nome}
+          <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#f1f5f9', marginBottom: '0.5rem' }}>
+            {result.nome}
+          </div>
+          <p style={{ color: '#94a3b8', margin: 0 }}>{result.message}</p>
+        </div>
+      )}
+
+      {/* Results */}
+      {result && result.found && processos.length > 0 && (
+        <div style={{ marginTop: '1.5rem', maxWidth: '550px', width: '100%' }}>
+          {/* Client Name */}
+          <div style={{
+            background: 'rgba(30, 41, 59, 0.8)', border: '1px solid rgba(148, 163, 184, 0.15)',
+            borderRadius: '1rem 1rem 0 0', padding: '1.25rem 1.5rem',
+            borderBottom: 'none',
+          }}>
+            <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#f1f5f9' }}>
+              {result.nome}
             </div>
-            {result.message && (
-              <p style={{ color: '#94a3b8', margin: '0.5rem 0 0' }}>{result.message}</p>
-            )}
-            {result.numeroProcesso && (
-              <div style={{
-                display: 'inline-block', marginTop: '0.5rem', padding: '0.3rem 0.7rem',
-                background: 'rgba(139, 92, 246, 0.1)', borderRadius: '0.4rem',
-                border: '1px solid rgba(139, 92, 246, 0.2)',
-                color: '#a78bfa', fontSize: '0.8rem', fontFamily: 'monospace', fontWeight: 600,
-              }}>
-                📄 {result.numeroProcesso}
+            {processos.length > 1 && (
+              <div style={{ color: '#94a3b8', fontSize: '0.8rem', marginTop: '0.25rem' }}>
+                {processos.length} processos encontrados — selecione abaixo
               </div>
             )}
           </div>
 
-          {/* Process Details */}
-          {(result.empresa || result.entrada || result.advogado) && (
-            <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                {result.empresa && (
-                  <InfoItem icon="🏢" label="Empresa" value={result.empresa} />
-                )}
-                {result.entrada && (
-                  <InfoItem icon="📅" label="Entrada" value={result.entrada} />
-                )}
-                {result.advogado && (
-                  <InfoItem icon="👨‍⚖️" label="Advogado" value={result.advogado} />
-                )}
-              </div>
+          {/* Process Selector (only if multiple) */}
+          {processos.length > 1 && (
+            <div style={{
+              background: 'rgba(30, 41, 59, 0.6)',
+              border: '1px solid rgba(148, 163, 184, 0.15)',
+              borderBottom: 'none',
+              padding: '0.75rem 1rem',
+              display: 'flex', flexDirection: 'column', gap: '0.5rem',
+            }}>
+              {processos.map((p, i) => (
+                <button
+                  key={i}
+                  onClick={() => setSelectedIdx(i)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '0.75rem',
+                    padding: '0.7rem 1rem', borderRadius: '0.5rem',
+                    border: selectedIdx === i
+                      ? '1.5px solid rgba(99, 102, 241, 0.6)'
+                      : '1px solid rgba(148, 163, 184, 0.1)',
+                    background: selectedIdx === i
+                      ? 'rgba(99, 102, 241, 0.1)'
+                      : 'rgba(15, 23, 42, 0.4)',
+                    cursor: 'pointer', textAlign: 'left',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <div style={{
+                    width: '28px', height: '28px', borderRadius: '50%',
+                    background: selectedIdx === i
+                      ? 'linear-gradient(135deg, #6366f1, #8b5cf6)'
+                      : 'rgba(71, 85, 105, 0.5)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: '#fff', fontSize: '0.75rem', fontWeight: 700,
+                    flexShrink: 0,
+                  }}>
+                    {i + 1}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      color: selectedIdx === i ? '#a5b4fc' : '#94a3b8',
+                      fontSize: '0.7rem', fontFamily: 'monospace', fontWeight: 600,
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                    }}>
+                      {p.numeroProcesso || 'Sem número'}
+                    </div>
+                    <div style={{
+                      color: selectedIdx === i ? '#e2e8f0' : '#64748b',
+                      fontSize: '0.75rem', fontWeight: 500,
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                    }}>
+                      {p.empresa || 'Empresa não informada'}
+                    </div>
+                  </div>
+                  {selectedIdx === i && (
+                    <div style={{ color: '#818cf8', fontSize: '0.7rem', fontWeight: 700, flexShrink: 0 }}>
+                      ✓
+                    </div>
+                  )}
+                </button>
+              ))}
             </div>
           )}
 
-          {/* Phase & Next Step */}
-          {result.fase && (
+          {/* Selected Process Details */}
+          {selected && (
             <div style={{
-              padding: '1rem 1.5rem', borderBottom: '1px solid rgba(148, 163, 184, 0.1)',
-              background: 'rgba(99, 102, 241, 0.05)',
+              background: 'rgba(30, 41, 59, 0.8)',
+              border: '1px solid rgba(148, 163, 184, 0.15)',
+              borderRadius: processos.length > 1 ? '0' : '0',
+              overflow: 'hidden',
             }}>
-              <div style={{ color: '#818cf8', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.3rem' }}>
-                🔄 Fase Atual
-              </div>
-              <div style={{ color: '#e2e8f0', fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.3rem' }}>
-                {result.fase}
-              </div>
-              {result.proximoPasso && (
-                <div style={{ color: '#94a3b8', fontSize: '0.85rem', lineHeight: 1.5 }}>
-                  {result.proximoPasso}
+              {/* Process Number */}
+              {selected.numeroProcesso && (
+                <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
+                  <div style={{
+                    display: 'inline-block', padding: '0.3rem 0.7rem',
+                    background: 'rgba(139, 92, 246, 0.1)', borderRadius: '0.4rem',
+                    border: '1px solid rgba(139, 92, 246, 0.2)',
+                    color: '#a78bfa', fontSize: '0.8rem', fontFamily: 'monospace', fontWeight: 600,
+                  }}>
+                    Nº {selected.numeroProcesso}
+                  </div>
+                </div>
+              )}
+
+              {/* Process Info Grid */}
+              {(selected.empresa || selected.entrada || selected.advogado) && (
+                <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    {selected.empresa && (
+                      <InfoItem label="Empresa" value={selected.empresa} />
+                    )}
+                    {selected.entrada && (
+                      <InfoItem label="Entrada" value={selected.entrada} />
+                    )}
+                    {selected.advogado && (
+                      <InfoItem label="Advogado" value={selected.advogado} />
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Phase */}
+              {selected.fase && (
+                <div style={{
+                  padding: '1rem 1.5rem', borderBottom: '1px solid rgba(148, 163, 184, 0.1)',
+                  background: 'rgba(99, 102, 241, 0.05)',
+                }}>
+                  <div style={{ color: '#818cf8', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>
+                    Fase Atual
+                  </div>
+                  <div style={{ color: '#e2e8f0', fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.2rem' }}>
+                    {selected.fase}
+                  </div>
+                  {selected.proximoPasso && (
+                    <div style={{ color: '#94a3b8', fontSize: '0.8rem', lineHeight: 1.5 }}>
+                      {selected.proximoPasso}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Hearing */}
+              {selected.audiencia && (
+                <div style={{
+                  padding: '1rem 1.5rem', borderBottom: '1px solid rgba(148, 163, 184, 0.1)',
+                  background: 'rgba(34, 197, 94, 0.04)',
+                }}>
+                  <div style={{ color: '#4ade80', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
+                    Próxima Audiência
+                  </div>
+                  <div style={{ display: 'grid', gap: '0.6rem' }}>
+                    <HearingField label="Data e Horário">
+                      <span style={{ fontWeight: 700, fontSize: '1.05rem' }}>
+                        {selected.audiencia.data} às {selected.audiencia.horario || 'A confirmar'}
+                      </span>
+                    </HearingField>
+
+                    {selected.audiencia.tipo && (
+                      <HearingField label="Tipo">
+                        <span style={{ fontWeight: 600 }}>{selected.audiencia.tipo}</span>
+                      </HearingField>
+                    )}
+
+                    <HearingField label="Modalidade">
+                      <span style={{
+                        fontWeight: 700,
+                        color: selected.audiencia.modalidade.includes('Online') ? '#60a5fa' : '#f1f5f9',
+                      }}>
+                        {selected.audiencia.modalidade}
+                      </span>
+                    </HearingField>
+
+                    {selected.audiencia.orgaoJulgador && (
+                      <HearingField label="Vara / Órgão">
+                        <span style={{ fontWeight: 600 }}>{selected.audiencia.orgaoJulgador}</span>
+                      </HearingField>
+                    )}
+
+                    {selected.audiencia.endereco && !selected.audiencia.modalidade.includes('Online') && (
+                      <HearingField label="Endereço">
+                        <div>
+                          <span style={{ fontWeight: 500 }}>{selected.audiencia.endereco}</span>
+                          <button
+                            onClick={() => window.open(`https://www.google.com/maps/search/${encodeURIComponent(selected.audiencia!.endereco)}`, '_blank')}
+                            style={{
+                              display: 'block', marginTop: '0.3rem', padding: '0.2rem 0.5rem', borderRadius: '0.3rem',
+                              border: 'none', background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa',
+                              fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer',
+                            }}
+                          >
+                            📍 Abrir no Google Maps
+                          </button>
+                        </div>
+                      </HearingField>
+                    )}
+
+                    {selected.audiencia.advogado && (
+                      <HearingField label="Advogado Responsável">
+                        <span style={{ fontWeight: 600 }}>{selected.audiencia.advogado}</span>
+                      </HearingField>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* No hearing */}
+              {!selected.audiencia && selected.numeroProcesso && (
+                <div style={{
+                  padding: '1rem 1.5rem', borderBottom: '1px solid rgba(148, 163, 184, 0.1)',
+                  textAlign: 'center', color: '#64748b', fontSize: '0.85rem',
+                }}>
+                  Nenhuma audiência agendada no momento
                 </div>
               )}
             </div>
           )}
 
-          {/* Hearing Details */}
-          {result.audiencia && (
-            <div style={{
-              padding: '1rem 1.5rem', borderBottom: '1px solid rgba(148, 163, 184, 0.1)',
-              background: 'rgba(34, 197, 94, 0.04)',
-            }}>
-              <div style={{ color: '#4ade80', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
-                📅 Próxima Audiência
-              </div>
-
-              <div style={{ display: 'grid', gap: '0.6rem' }}>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <span style={{ fontSize: '1.1rem' }}>📅</span>
-                  <div>
-                    <div style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 600 }}>Data e Horário</div>
-                    <div style={{ color: '#f1f5f9', fontWeight: 700, fontSize: '1.05rem' }}>
-                      {result.audiencia.data} às {result.audiencia.horario || 'A confirmar'}
-                    </div>
-                  </div>
-                </div>
-
-                {result.audiencia.tipo && (
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <span style={{ fontSize: '1.1rem' }}>📋</span>
-                    <div>
-                      <div style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 600 }}>Tipo</div>
-                      <div style={{ color: '#e2e8f0', fontWeight: 600 }}>{result.audiencia.tipo}</div>
-                    </div>
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <span style={{ fontSize: '1.1rem' }}>
-                    {result.audiencia.modalidade.includes('Online') ? '💻' : '🏛️'}
-                  </span>
-                  <div>
-                    <div style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 600 }}>Modalidade</div>
-                    <div style={{
-                      color: result.audiencia.modalidade.includes('Online') ? '#60a5fa' : '#f1f5f9',
-                      fontWeight: 700,
-                    }}>
-                      {result.audiencia.modalidade}
-                    </div>
-                  </div>
-                </div>
-
-                {result.audiencia.orgaoJulgador && (
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <span style={{ fontSize: '1.1rem' }}>🏛️</span>
-                    <div>
-                      <div style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 600 }}>Vara / Órgão</div>
-                      <div style={{ color: '#e2e8f0', fontWeight: 600 }}>{result.audiencia.orgaoJulgador}</div>
-                    </div>
-                  </div>
-                )}
-
-                {result.audiencia.endereco && !result.audiencia.modalidade.includes('Online') && (
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <span style={{ fontSize: '1.1rem' }}>📍</span>
-                    <div>
-                      <div style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 600 }}>Endereço</div>
-                      <div style={{ color: '#e2e8f0', fontWeight: 500 }}>{result.audiencia.endereco}</div>
-                      <button
-                        onClick={() => window.open(`https://www.google.com/maps/search/${encodeURIComponent(result.audiencia!.endereco)}`, '_blank')}
-                        style={{
-                          marginTop: '0.3rem', padding: '0.2rem 0.5rem', borderRadius: '0.3rem',
-                          border: 'none', background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa',
-                          fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer',
-                        }}
-                      >
-                        📍 Abrir no Google Maps
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {result.audiencia.advogado && (
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <span style={{ fontSize: '1.1rem' }}>👨‍⚖️</span>
-                    <div>
-                      <div style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 600 }}>Advogado Responsável</div>
-                      <div style={{ color: '#e2e8f0', fontWeight: 600 }}>{result.audiencia.advogado}</div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* No hearing */}
-          {!result.audiencia && result.numeroProcesso && (
-            <div style={{
-              padding: '1rem 1.5rem', borderBottom: '1px solid rgba(148, 163, 184, 0.1)',
-              textAlign: 'center', color: '#64748b', fontSize: '0.85rem',
-            }}>
-              📅 Nenhuma audiência agendada no momento
-            </div>
-          )}
-
           {/* WhatsApp Button */}
-          <div style={{ padding: '1rem 1.5rem' }}>
+          <div style={{
+            background: 'rgba(30, 41, 59, 0.8)',
+            border: '1px solid rgba(148, 163, 184, 0.15)',
+            borderTop: 'none',
+            borderRadius: '0 0 1rem 1rem',
+            padding: '1rem 1.5rem',
+          }}>
             <button
               onClick={() => {
-                const msg = encodeURIComponent(`Olá! Meu nome é ${result.nome}, CPF ${result.cpf}. Gostaria de informações sobre meu processo.`);
+                const proc = selected?.numeroProcesso ? `, processo ${selected.numeroProcesso}` : '';
+                const msg = encodeURIComponent(`Olá! Meu nome é ${result.nome}, CPF ${result.cpf}${proc}. Gostaria de informações sobre meu processo.`);
                 window.open(`https://wa.me/5511943241698?text=${msg}`, '_blank');
               }}
               style={{
@@ -344,14 +428,20 @@ export default function MeuProcessoPage() {
   );
 }
 
-function InfoItem({ icon, label, value }: { icon: string; label: string; value: string }) {
+function InfoItem({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'flex-start' }}>
-      <span style={{ fontSize: '0.9rem' }}>{icon}</span>
-      <div>
-        <div style={{ color: '#64748b', fontSize: '0.7rem', fontWeight: 600 }}>{label}</div>
-        <div style={{ color: '#e2e8f0', fontSize: '0.85rem', fontWeight: 500 }}>{value}</div>
-      </div>
+    <div>
+      <div style={{ color: '#64748b', fontSize: '0.7rem', fontWeight: 600 }}>{label}</div>
+      <div style={{ color: '#e2e8f0', fontSize: '0.85rem', fontWeight: 500 }}>{value}</div>
+    </div>
+  );
+}
+
+function HearingField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 600 }}>{label}</div>
+      <div style={{ color: '#e2e8f0' }}>{children}</div>
     </div>
   );
 }

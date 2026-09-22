@@ -145,90 +145,92 @@ export async function GET(req: NextRequest) {
 
   const cpfFormatted = cpfDigits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
 
-  // Step 3: Buscar dados do processo
-  let clientData: any = null;
+  // Step 3: Buscar TODOS os processos do cliente
+  let allMatchedClients: any[] = [];
   try {
     const sid = CLIENT_SPREADSHEET_ID || process.env.GOOGLE_SPREADSHEET_ID || '';
     if (sid) {
       const allClients = await getClients(token, sid);
       const searchN = normalize(clientName);
-      const match = allClients.find(c => {
+      allMatchedClients = allClients.filter(c => {
         const n = normalize(c.nome);
         return n === searchN || n.includes(searchN) || searchN.includes(n);
       });
-      if (match) {
-        clientData = {
-          entrada: match.entrada, nome: match.nome, status: match.status,
-          materia: match.materia, responsavel: match.responsavel,
-          empresa: match.empresa, numeroProcesso: match.numeroProcesso,
-        };
-      }
     }
   } catch (e: any) {
     console.error('Consulta Step3 clients:', e?.message);
   }
 
-  if (!clientData) {
+  if (allMatchedClients.length === 0) {
     return NextResponse.json({
-      found: true, nome: clientName, cpf: cpfFormatted,
+      found: true, nome: clientName, cpf: cpfFormatted, processos: [],
       message: 'Encontramos seu cadastro, porém os dados do processo ainda não foram vinculados. Entre em contato com o escritório.',
     });
   }
 
-  // Step 4: Audiências
-  let clientHearings: any[] = [];
+  // Step 4: Audiências (buscar todas de uma vez)
+  let allHearings: any[] = [];
   try {
-    const all = await getAllHearings(token);
-    const searchN = normalize(clientName);
-    clientHearings = all.filter(h => {
-      if (clientData.numeroProcesso && h.numeroProcesso) {
-        return h.numeroProcesso.includes(clientData.numeroProcesso) || clientData.numeroProcesso.includes(h.numeroProcesso);
-      }
-      const hN = normalize(h.reclamante);
-      return hN === searchN || hN.includes(searchN) || searchN.includes(hN);
-    });
-    clientHearings.sort((a, b) => {
-      const p = (d: string) => { const s = d.split('/'); return s.length === 3 ? new Date(+s[2], +s[1]-1, +s[0]).getTime() : 0; };
-      return p(a.dataAudiencia) - p(b.dataAudiencia);
-    });
+    allHearings = await getAllHearings(token);
   } catch (e: any) {
     console.error('Consulta Step4 hearings:', e?.message);
   }
 
-  const nextHearing = clientHearings.filter(h => h.isFuture)[0] || null;
-  let modalidade = 'Presencial';
-  let endereco = '';
+  // Step 5: Montar dados para cada processo
+  const processos = allMatchedClients.map(client => {
+    const searchN = normalize(clientName);
+    // Buscar audiências deste processo específico
+    const processHearings = allHearings.filter(h => {
+      if (client.numeroProcesso && h.numeroProcesso) {
+        return h.numeroProcesso.includes(client.numeroProcesso) || client.numeroProcesso.includes(h.numeroProcesso);
+      }
+      const hN = normalize(h.reclamante);
+      return hN === searchN || hN.includes(searchN) || searchN.includes(hN);
+    });
+    processHearings.sort((a: any, b: any) => {
+      const p = (d: string) => { const s = d.split('/'); return s.length === 3 ? new Date(+s[2], +s[1]-1, +s[0]).getTime() : 0; };
+      return p(a.dataAudiencia) - p(b.dataAudiencia);
+    });
 
-  if (nextHearing) {
-    const tipo = (nextHearing.tipoAudiencia || '').toUpperCase();
-    const orgao = (nextHearing.orgaoJulgador || '').toUpperCase();
-    if (tipo.includes('TELE') || tipo.includes('VIRTUAL') || tipo.includes('ONLINE') || tipo.includes('REMOT') || orgao.includes('TELE') || orgao.includes('VIRTUAL')) {
-      modalidade = 'Online (Telepresencial)';
+    const nextHearing = processHearings.filter((h: any) => h.isFuture)[0] || null;
+    let modalidade = 'Presencial';
+    let endereco = '';
+
+    if (nextHearing) {
+      const tipo = (nextHearing.tipoAudiencia || '').toUpperCase();
+      const orgao = (nextHearing.orgaoJulgador || '').toUpperCase();
+      if (tipo.includes('TELE') || tipo.includes('VIRTUAL') || tipo.includes('ONLINE') || tipo.includes('REMOT') || orgao.includes('TELE') || orgao.includes('VIRTUAL')) {
+        modalidade = 'Online (Telepresencial)';
+      }
+      endereco = findAddress(nextHearing.orgaoJulgador);
     }
-    endereco = findAddress(nextHearing.orgaoJulgador);
-  }
 
-  const { fase, proximoPasso } = inferPhase(clientData.status, clientHearings);
+    const { fase, proximoPasso } = inferPhase(client.status, processHearings);
+
+    return {
+      numeroProcesso: client.numeroProcesso || null,
+      empresa: client.empresa || null,
+      entrada: client.entrada || null,
+      materia: client.materia || null,
+      advogado: client.responsavel || null,
+      fase,
+      proximoPasso,
+      audiencia: nextHearing ? {
+        data: nextHearing.dataAudiencia,
+        horario: nextHearing.horario,
+        tipo: nextHearing.tipoAudiencia,
+        orgaoJulgador: nextHearing.orgaoJulgador,
+        modalidade,
+        endereco,
+        advogado: nextHearing.advogado,
+      } : null,
+    };
+  });
 
   return NextResponse.json({
     found: true,
-    nome: clientData.nome,
+    nome: allMatchedClients[0].nome,
     cpf: cpfFormatted,
-    numeroProcesso: clientData.numeroProcesso || null,
-    empresa: clientData.empresa || null,
-    entrada: clientData.entrada || null,
-    materia: clientData.materia || null,
-    advogado: clientData.responsavel || null,
-    fase,
-    proximoPasso,
-    audiencia: nextHearing ? {
-      data: nextHearing.dataAudiencia,
-      horario: nextHearing.horario,
-      tipo: nextHearing.tipoAudiencia,
-      orgaoJulgador: nextHearing.orgaoJulgador,
-      modalidade,
-      endereco,
-      advogado: nextHearing.advogado,
-    } : null,
+    processos,
   });
 }
