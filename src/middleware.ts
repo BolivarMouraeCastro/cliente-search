@@ -33,9 +33,10 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Check if user is revoked (kicked by admin)
+  // Check if user is revoked (kicked by admin) — only for page routes, not API calls
   const email = (token.email as string)?.toLowerCase();
-  if (email && !pathname.startsWith("/api/admin/revoke")) {
+  const isApiRoute = pathname.startsWith("/api/");
+  if (email && !isApiRoute) {
     try {
       const checkUrl = new URL("/api/admin/revoke", request.nextUrl.origin);
       checkUrl.searchParams.set("email", email);
@@ -43,18 +44,19 @@ export async function middleware(request: NextRequest) {
         headers: { cookie: request.headers.get("cookie") || "" },
       });
       if (res.ok) {
-        const data = await res.json();
-        if (data.revoked) {
-          // Clear session and redirect to login
-          const url = request.nextUrl.clone();
-          url.pathname = "/login";
-          url.searchParams.set("kicked", "true");
-          const response = NextResponse.redirect(url);
-          // Delete the session cookie
-          response.cookies.delete("next-auth.session-token");
-          response.cookies.delete("__Secure-next-auth.session-token");
-          return response;
-        }
+        const text = await res.text();
+        try {
+          const data = JSON.parse(text);
+          if (data.revoked) {
+            const url = request.nextUrl.clone();
+            url.pathname = "/login";
+            url.searchParams.set("kicked", "true");
+            const response = NextResponse.redirect(url);
+            response.cookies.delete("next-auth.session-token");
+            response.cookies.delete("__Secure-next-auth.session-token");
+            return response;
+          }
+        } catch {}
       }
     } catch {
       // Don't block if check fails
