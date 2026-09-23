@@ -226,7 +226,7 @@ export async function POST(req: NextRequest) {
           if (byProcess) {
             // Merge a empresa se houver
             if (empName && !byProcess.empresa) byProcess.empresa = empName;
-            else if (empName) byProcess._empresaOriginal = empName; // pra logica de filtro
+            else if (empName) (byProcess as any)._empresaOriginal = empName; // pra logica de filtro
             allMatchedClients.push(byProcess);
           } else {
             // Se não encontrou na planilha, criar entrada com dados do Contatos
