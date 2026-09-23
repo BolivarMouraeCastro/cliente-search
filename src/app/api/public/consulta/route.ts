@@ -148,38 +148,37 @@ export async function POST(req: NextRequest) {
 
   // Step 2: Buscar CPF nos Contatos — coletar TODAS as linhas (uma por processo)
   let clientName = '';
-  let contatoProcessos: string[] = []; // números de processo extraídos da coluna D
+  let contatoProcessos: string[] = []; // números de processo extraídos das colunas
   try {
     const sheets = getSheetsService(token);
     const res = await sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
-      range: 'Contatos!A:D',
+      range: 'Contatos!A:H',
     });
     for (const row of (res.data.values || []).slice(1)) {
       const nome = (row[0] || '').trim();
       const cpf = (row[1] || '').replace(/\D/g, '');
       if (cpf === cpfDigits && nome) {
         if (!clientName) clientName = nome;
-        // Extrair número do processo da coluna D
-        const colD = (row[3] || '').trim();
-        if (colD) {
+        // Procurar número do processo em TODAS as colunas (C em diante)
+        const allColsText = row.slice(2).join(' ');
+        if (allColsText) {
           // Tentar extrair CNJ formatado: 0001234-56.2026.5.02.0001
-          const cnjMatch = colD.match(/(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/);
+          const cnjMatch = allColsText.match(/(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/);
           if (cnjMatch) {
-            contatoProcessos.push(cnjMatch[1]);
+            if (!contatoProcessos.includes(cnjMatch[1])) contatoProcessos.push(cnjMatch[1]);
           } else {
             // Tentar extrair sequência de 20 dígitos (CNJ sem formatação)
-            const digitsMatch = colD.match(/(\d{20})/);
+            const digitsMatch = allColsText.match(/(\d{20})/);
             if (digitsMatch) {
               const d = digitsMatch[1];
-              // Formatar como CNJ: NNNNNNN-DD.AAAA.J.TT.OOOO
               const formatted = `${d.slice(0,7)}-${d.slice(7,9)}.${d.slice(9,13)}.${d.slice(13,14)}.${d.slice(14,16)}.${d.slice(16,20)}`;
-              contatoProcessos.push(formatted);
+              if (!contatoProcessos.includes(formatted)) contatoProcessos.push(formatted);
             } else {
-              // Tentar extrair "Processo: NNNN..." seguido de dígitos
-              const procMatch = colD.match(/Processo[:\s]*(\d{13,})/i);
+              // Tentar extrair "Processo: NNNN..." seguido de dígitos (13+)
+              const procMatch = allColsText.match(/Processo[:\s]*(\d{13,})/i);
               if (procMatch) {
-                contatoProcessos.push(procMatch[1]);
+                if (!contatoProcessos.includes(procMatch[1])) contatoProcessos.push(procMatch[1]);
               }
             }
           }
