@@ -174,6 +174,7 @@ export async function POST(req: NextRequest) {
   // Fallback para buscar nome no Contatos se não estiver na Planilha de Clientes
   if (!clientName) {
     try {
+      if (!sheets) sheets = getSheetsService(token);
       const res = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
         range: 'Contatos!A:B',
