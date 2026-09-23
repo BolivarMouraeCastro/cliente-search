@@ -475,7 +475,7 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     found: true,
-    nome: allMatchedClients[0].nome,
+    nome: clientName, // Use the name matched by CPF, not the one from the process match
     cpf: cpfFormatted,
     processos,
   });
