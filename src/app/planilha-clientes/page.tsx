@@ -32,14 +32,24 @@ export default function PlanilhaClientesPage() {
   const fetchClientes = async () => {
     try {
       const res = await fetch('/api/planilha-clientes');
+      const contentType = res.headers.get('content-type') || '';
+      
+      if (res.redirected || !contentType.includes('application/json')) {
+        // API retornou HTML (provavelmente redirect para login)
+        showFlash('err', 'Sessão expirada. Faça login novamente.');
+        return;
+      }
+      
       if (res.ok) {
-        setAllClientes(await res.json());
+        const data = await res.json();
+        setAllClientes(Array.isArray(data) ? data : []);
       } else {
         const data = await res.json().catch(() => ({}));
-        showFlash('err', data.error || `Erro ${res.status} ao carregar clientes.`);
+        showFlash('err', data.error || `Erro ${res.status} ao carregar.`);
       }
     } catch (e: any) {
-      showFlash('err', 'Erro de conexão: ' + (e?.message || 'verifique sua internet.'));
+      console.error('fetchClientes error:', e);
+      showFlash('err', 'Erro ao conectar: ' + (e?.message || 'verifique sua internet'));
     }
     setLoading(false);
   };
