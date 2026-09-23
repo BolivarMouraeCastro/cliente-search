@@ -32,8 +32,15 @@ export default function PlanilhaClientesPage() {
   const fetchClientes = async () => {
     try {
       const res = await fetch('/api/planilha-clientes');
-      if (res.ok) setAllClientes(await res.json());
-    } catch {}
+      if (res.ok) {
+        setAllClientes(await res.json());
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showFlash('err', data.error || `Erro ${res.status} ao carregar clientes.`);
+      }
+    } catch (e: any) {
+      showFlash('err', 'Erro de conexão: ' + (e?.message || 'verifique sua internet.'));
+    }
     setLoading(false);
   };
 

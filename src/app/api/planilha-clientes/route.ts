@@ -13,7 +13,9 @@ async function ensureTab(sheets: any) {
       spreadsheetId: SPREADSHEET_ID,
       range: `${TAB}!A1`,
     });
-  } catch {
+    console.log(`[PlanilhaClientes] Tab "${TAB}" exists.`);
+  } catch (e: any) {
+    console.log(`[PlanilhaClientes] Tab "${TAB}" not found, creating...`, e?.message);
     try {
       await sheets.spreadsheets.batchUpdate({
         spreadsheetId: SPREADSHEET_ID,
@@ -27,7 +29,10 @@ async function ensureTab(sheets: any) {
         valueInputOption: 'RAW',
         requestBody: { values: [['NOME_COMPLETO', 'CPF', 'NUMERO_PROCESSO']] },
       });
-    } catch {}
+      console.log(`[PlanilhaClientes] Tab "${TAB}" created successfully.`);
+    } catch (e2: any) {
+      console.error(`[PlanilhaClientes] Failed to create tab:`, e2?.message);
+    }
   }
 }
 
@@ -40,27 +45,32 @@ export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
 
-  const token = await getAdminAccessToken();
-  const sheets = getSheetsService(token);
-  await ensureTab(sheets);
+  try {
+    const token = await getAdminAccessToken();
+    const sheets = getSheetsService(token);
+    await ensureTab(sheets);
 
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: SPREADSHEET_ID,
-    range: `${TAB}!A:C`,
-  });
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${TAB}!A:C`,
+    });
 
-  const rows = (res.data.values || []) as string[][];
-  const clientes = rows
-    .slice(1)
-    .map((row, i) => ({
-      nome: row[0] || '',
-      cpf: row[1] || '',
-      numeroProcesso: row[2] || '',
-      rowIndex: i + 2,
-    }))
-    .filter(c => c.nome);
+    const rows = (res.data.values || []) as string[][];
+    const clientes = rows
+      .slice(1)
+      .map((row, i) => ({
+        nome: row[0] || '',
+        cpf: row[1] || '',
+        numeroProcesso: row[2] || '',
+        rowIndex: i + 2,
+      }))
+      .filter(c => c.nome);
 
-  return NextResponse.json(clientes);
+    return NextResponse.json(clientes);
+  } catch (e: any) {
+    console.error('[PlanilhaClientes] GET error:', e?.message);
+    return NextResponse.json({ error: 'Erro ao buscar clientes: ' + (e?.message || 'desconhecido') }, { status: 500 });
+  }
 }
 
 /** POST — adicionar cliente */
