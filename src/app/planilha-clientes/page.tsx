@@ -31,7 +31,7 @@ export default function PlanilhaClientesPage() {
 
   const fetchClientes = async () => {
     try {
-      const res = await fetch('/api/planilha-clientes');
+      const res = await fetch('/api/public/planilha-clientes');
       const contentType = res.headers.get('content-type') || '';
       
       if (res.redirected || !contentType.includes('application/json')) {
@@ -85,7 +85,7 @@ export default function PlanilhaClientesPage() {
       const body: any = { nome: formNome.trim(), cpf: formCpf.replace(/\D/g, ''), numeroProcesso: formProcesso.trim() };
       const method = editRow ? 'PUT' : 'POST';
       if (editRow) body.rowIndex = editRow.rowIndex;
-      const res = await fetch('/api/planilha-clientes', {
+      const res = await fetch('/api/public/planilha-clientes', {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -110,7 +110,7 @@ export default function PlanilhaClientesPage() {
   const handleDelete = async (c: ClienteRow) => {
     if (!confirm(`Excluir ${c.nome}?`)) return;
     try {
-      await fetch('/api/planilha-clientes', {
+      await fetch('/api/public/planilha-clientes', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rowIndex: c.rowIndex }),
@@ -131,7 +131,7 @@ export default function PlanilhaClientesPage() {
     const formData = new FormData();
     formData.append('file', file);
     try {
-      const res = await fetch('/api/planilha-clientes/import', { method: 'POST', body: formData });
+      const res = await fetch('/api/public/planilha-clientes/import', { method: 'POST', body: formData });
       const text = await res.text();
       try {
         const data = JSON.parse(text);
