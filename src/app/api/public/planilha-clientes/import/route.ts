@@ -25,9 +25,9 @@ async function ensureTab(sheets: any) {
       });
       await sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${TAB}!A1:C1`,
+        range: `${TAB}!A1:D1`,
         valueInputOption: 'RAW',
-        requestBody: { values: [['NOME_COMPLETO', 'CPF', 'NUMERO_PROCESSO']] },
+        requestBody: { values: [['NOME_COMPLETO', 'CPF', 'NUMERO_PROCESSO', 'EMPRESA']] },
       });
     } catch {}
   }
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
       const batch = validRows.slice(i, i + BATCH_SIZE);
       await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${TAB}!A:C`,
+        range: `${TAB}!A:D`,
         valueInputOption: 'RAW',
         requestBody: { values: batch },
       });

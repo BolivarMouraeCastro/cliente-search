@@ -154,7 +154,7 @@ export async function POST(req: NextRequest) {
     sheets = getSheetsService(token);
     const res = await sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
-      range: 'PlanilhaClientes!A:C',
+      range: 'PlanilhaClientes!A:D',
     });
     for (const row of (res.data.values || []).slice(1)) {
       const nome = (row[0] || '').trim();
@@ -162,8 +162,12 @@ export async function POST(req: NextRequest) {
       if (cpf === cpfDigits && nome) {
         if (!clientName) clientName = nome;
         const processo = (row[2] || '').trim();
-        if (processo && !contatoProcessos.includes(processo)) {
-          contatoProcessos.push(processo);
+        const empresa = (row[3] || '').trim();
+        if (processo) {
+          const key = `${processo}|${empresa}`;
+          if (!contatoProcessos.includes(key)) {
+            contatoProcessos.push(key);
+          }
         }
       }
     }
@@ -211,7 +215,8 @@ export async function POST(req: NextRequest) {
       
       if (contatoProcessos.length > 0) {
         // Match PRIORITÁRIO: usar números do processo dos Contatos
-        for (const procNum of contatoProcessos) {
+        for (const procKey of contatoProcessos) {
+          const [procNum, empName] = procKey.split('|');
           // Primeiro tenta achar pelo número do processo na planilha de clientes
           const byProcess = allClients.find(c => {
             if (!c.numeroProcesso) return false;
@@ -219,6 +224,9 @@ export async function POST(req: NextRequest) {
                    procNum.replace(/\D/g, '').includes(c.numeroProcesso.replace(/\D/g, ''));
           });
           if (byProcess) {
+            // Merge a empresa se houver
+            if (empName && !byProcess.empresa) byProcess.empresa = empName;
+            else if (empName) byProcess._empresaOriginal = empName; // pra logica de filtro
             allMatchedClients.push(byProcess);
           } else {
             // Se não encontrou na planilha, criar entrada com dados do Contatos
@@ -226,7 +234,7 @@ export async function POST(req: NextRequest) {
               nome: clientName,
               entrada: '',
               status: 'DISTRIBUÍDO',
-              empresa: '',
+              empresa: empName || '',
               materia: '',
               responsavel: '',
               funcao: '',
@@ -395,8 +403,9 @@ export async function POST(req: NextRequest) {
 
       // 3. Como não tem número de processo, verificar se a Empresa (Reclamada) bate
       // Isso evita que um cliente com 2 processos contra empresas diferentes puxe a mesma audiência
-      if (client.empresa && h.reclamada) {
-        const cleanEmp = normalize(client.empresa).replace(/[^a-z0-9 ]/g, '');
+      const empToCheck = client._empresaOriginal || client.empresa;
+      if (empToCheck && h.reclamada) {
+        const cleanEmp = normalize(empToCheck).replace(/[^a-z0-9 ]/g, '');
         const cleanRec = normalize(h.reclamada).replace(/[^a-z0-9 ]/g, '');
         const empWords = cleanEmp.split(' ').filter(w => w.length > 2);
         const recWords = cleanRec.split(' ').filter(w => w.length > 2);

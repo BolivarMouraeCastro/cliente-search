@@ -7,6 +7,7 @@ interface ClienteRow {
   nome: string;
   cpf: string;
   numeroProcesso: string;
+  empresa: string;
 }
 
 const PER_PAGE = 30;
@@ -20,6 +21,7 @@ export default function PlanilhaClientesPage() {
   const [formNome, setFormNome] = useState('');
   const [formCpf, setFormCpf] = useState('');
   const [formProcesso, setFormProcesso] = useState('');
+  const [formEmpresa, setFormEmpresa] = useState('');
   const [editRow, setEditRow] = useState<ClienteRow | null>(null);
   const [flash, setFlash] = useState<{ type: 'ok' | 'err'; msg: string } | null>(null);
   const [importing, setImporting] = useState(false);
@@ -60,7 +62,8 @@ export default function PlanilhaClientesPage() {
     ? allClientes.filter(c =>
         c.nome.toLowerCase().includes(search.toLowerCase()) ||
         c.cpf.includes(search.replace(/\D/g, '')) ||
-        c.numeroProcesso.includes(search)
+        c.numeroProcesso.includes(search) ||
+        (c.empresa && c.empresa.toLowerCase().includes(search.toLowerCase()))
       )
     : allClientes;
 
@@ -82,7 +85,7 @@ export default function PlanilhaClientesPage() {
       return;
     }
     try {
-      const body: any = { nome: formNome.trim(), cpf: formCpf.replace(/\D/g, ''), numeroProcesso: formProcesso.trim() };
+      const body: any = { nome: formNome.trim(), cpf: formCpf.replace(/\D/g, ''), numeroProcesso: formProcesso.trim(), empresa: formEmpresa.trim() };
       const method = editRow ? 'PUT' : 'POST';
       if (editRow) body.rowIndex = editRow.rowIndex;
       const res = await fetch('/api/public/planilha-clientes', {
@@ -96,7 +99,7 @@ export default function PlanilhaClientesPage() {
         showFlash('ok', editRow ? '✅ Atualizado!' : '✅ Adicionado!');
         setShowForm(false);
         setEditRow(null);
-        setFormNome(''); setFormCpf(''); setFormProcesso('');
+        setFormNome(''); setFormCpf(''); setFormProcesso(''); setFormEmpresa('');
         setLoading(true);
         fetchClientes();
       } else {
@@ -146,6 +149,7 @@ export default function PlanilhaClientesPage() {
       const NOME_KEYS = ['nome', 'razão social', 'razao social', 'nome completo', 'reclamante'];
       const CPF_KEYS = ['cpf', 'cpf/cnpj', 'documento', 'doc'];
       const PROC_KEYS = ['processo', 'andamento', 'ultimo andamento', 'último andamento', 'movimentação'];
+      const EMPRESA_KEYS = ['reclamado', 'empresa', 'parte adversa', 'réu', 'reu'];
       
       const findColumn = (headers: string[], candidates: string[]) => {
         const normalized = headers.map(h => String(h).toLowerCase().trim());
@@ -156,12 +160,13 @@ export default function PlanilhaClientesPage() {
         return -1;
       };
 
-      let headerIdx = -1, nomeIdx = -1, cpfIdx = -1, procIdx = -1;
+      let headerIdx = -1, nomeIdx = -1, cpfIdx = -1, procIdx = -1, empIdx = -1;
       for (let r = 0; r < Math.min(5, rawData.length); r++) {
         const row = rawData[r].map(c => String(c || ''));
         nomeIdx = findColumn(row, NOME_KEYS);
         cpfIdx = findColumn(row, CPF_KEYS);
         procIdx = findColumn(row, PROC_KEYS);
+        empIdx = findColumn(row, EMPRESA_KEYS);
         if ([nomeIdx, cpfIdx, procIdx].filter(i => i >= 0).length >= 2) {
           headerIdx = r;
           break;
@@ -195,8 +200,10 @@ export default function PlanilhaClientesPage() {
             const match20 = processoStr.match(/\d{7}-?\d{2}\.?\d{4}\.?\d\.?\d{2}\.?\d{4}/);
             if (match20) processo = match20[0];
         }
+        
+        let empresa = empIdx >= 0 ? String(row[empIdx] ?? '').trim().toUpperCase() : '';
 
-        validRows.push([nome, cpf, processo]);
+        validRows.push([nome, cpf, processo, empresa]);
       }
       
       if (validRows.length === 0) {
@@ -238,6 +245,7 @@ export default function PlanilhaClientesPage() {
     setFormNome(c.nome);
     setFormCpf(formatCPF(c.cpf));
     setFormProcesso(c.numeroProcesso);
+    setFormEmpresa(c.empresa || '');
     setShowForm(true);
   };
 
@@ -278,7 +286,7 @@ export default function PlanilhaClientesPage() {
             📥 Importar Excel
             <input type="file" accept=".xlsx,.xls,.csv" onChange={handleImport} hidden />
           </label>
-          <button onClick={() => { setEditRow(null); setFormNome(''); setFormCpf(''); setFormProcesso(''); setShowForm(true); }} style={{
+          <button onClick={() => { setEditRow(null); setFormNome(''); setFormCpf(''); setFormProcesso(''); setFormEmpresa(''); setShowForm(true); }} style={{
             padding: '0.5rem 1rem', borderRadius: '0.5rem', border: 'none',
             background: 'linear-gradient(135deg, #d4af37, #b8941f)', color: '#fff',
             fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer',
@@ -314,6 +322,10 @@ export default function PlanilhaClientesPage() {
             <div>
               <label style={{ color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 600 }}>Nº Processo</label>
               <input value={formProcesso} onChange={e => setFormProcesso(e.target.value)} placeholder="0001234-56.2026.5.02.0001" style={{ ...inputStyle, fontFamily: 'monospace' }} />
+            </div>
+            <div>
+              <label style={{ color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 600 }}>Empresa (Reclamado)</label>
+              <input value={formEmpresa} onChange={e => setFormEmpresa(e.target.value)} placeholder="Nome da empresa" style={inputStyle} />
             </div>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
@@ -351,7 +363,7 @@ export default function PlanilhaClientesPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                {['NOME', 'CPF', 'Nº PROCESSO', 'AÇÕES'].map(h => (
+                {['NOME', 'CPF', 'Nº PROCESSO', 'EMPRESA', 'AÇÕES'].map(h => (
                   <th key={h} style={{
                     padding: '0.6rem 0.75rem', textAlign: 'left', fontSize: '0.7rem', fontWeight: 700,
                     color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '0.05em',
@@ -367,6 +379,9 @@ export default function PlanilhaClientesPage() {
                   <td style={{ padding: '0.6rem 0.75rem', color: 'var(--text-secondary)', fontSize: '0.85rem', fontFamily: 'monospace' }}>{formatCPF(c.cpf)}</td>
                   <td style={{ padding: '0.6rem 0.75rem', color: c.numeroProcesso ? 'var(--text-secondary)' : 'var(--text-muted)', fontSize: '0.8rem', fontFamily: 'monospace' }}>
                     {c.numeroProcesso || '—'}
+                  </td>
+                  <td style={{ padding: '0.6rem 0.75rem', color: c.empresa ? 'var(--text-primary)' : 'var(--text-muted)', fontSize: '0.8rem' }}>
+                    {c.empresa || '—'}
                   </td>
                   <td style={{ padding: '0.6rem 0.75rem' }}>
                     <div style={{ display: 'flex', gap: '0.3rem' }}>

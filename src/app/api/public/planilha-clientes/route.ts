@@ -28,9 +28,9 @@ async function tabExists(sheets: any): Promise<boolean> {
     });
     await sheets.spreadsheets.values.update({
       spreadsheetId: SPREADSHEET_ID,
-      range: `${TAB}!A1:C1`,
+      range: `${TAB}!A1:D1`,
       valueInputOption: 'RAW',
-      requestBody: { values: [['NOME_COMPLETO', 'CPF', 'NUMERO_PROCESSO']] },
+      requestBody: { values: [['NOME_COMPLETO', 'CPF', 'NUMERO_PROCESSO', 'EMPRESA']] },
     });
     console.log(`[PlanilhaClientes] Aba "${TAB}" criada com sucesso.`);
     return true;
@@ -62,7 +62,7 @@ export async function GET() {
 
     const res = await sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
-      range: `${TAB}!A:C`,
+      range: `${TAB}!A:D`,
     });
 
     const rows = (res.data.values || []) as string[][];
@@ -72,6 +72,7 @@ export async function GET() {
         nome: row[0] || '',
         cpf: row[1] || '',
         numeroProcesso: row[2] || '',
+        empresa: row[3] || '',
         rowIndex: i + 2,
       }))
       .filter(c => c.nome);
@@ -89,7 +90,7 @@ export async function POST(request: NextRequest) {
     const session = await getServerSession(authOptions);
     if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
 
-    const { nome, cpf, numeroProcesso } = await request.json();
+    const { nome, cpf, numeroProcesso, empresa } = await request.json();
     if (!nome || !cpf) {
       return NextResponse.json({ error: 'Nome e CPF são obrigatórios' }, { status: 400 });
     }
@@ -105,10 +106,10 @@ export async function POST(request: NextRequest) {
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: SPREADSHEET_ID,
-      range: `${TAB}!A:C`,
+      range: `${TAB}!A:D`,
       valueInputOption: 'RAW',
       requestBody: {
-        values: [[nome.toUpperCase().trim(), cpfClean, (numeroProcesso || '').trim()]],
+        values: [[nome.toUpperCase().trim(), cpfClean, (numeroProcesso || '').trim(), (empresa || '').trim()]],
       },
     });
 
@@ -125,7 +126,7 @@ export async function PUT(request: NextRequest) {
     const session = await getServerSession(authOptions);
     if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
 
-    const { rowIndex, nome, cpf, numeroProcesso } = await request.json();
+    const { rowIndex, nome, cpf, numeroProcesso, empresa } = await request.json();
     if (!rowIndex || !nome || !cpf) {
       return NextResponse.json({ error: 'Dados incompletos' }, { status: 400 });
     }
@@ -136,10 +137,10 @@ export async function PUT(request: NextRequest) {
 
     await sheets.spreadsheets.values.update({
       spreadsheetId: SPREADSHEET_ID,
-      range: `${TAB}!A${rowIndex}:C${rowIndex}`,
+      range: `${TAB}!A${rowIndex}:D${rowIndex}`,
       valueInputOption: 'RAW',
       requestBody: {
-        values: [[nome.toUpperCase().trim(), cpfClean, (numeroProcesso || '').trim()]],
+        values: [[nome.toUpperCase().trim(), cpfClean, (numeroProcesso || '').trim(), (empresa || '').trim()]],
       },
     });
 
@@ -163,16 +164,16 @@ export async function DELETE(request: NextRequest) {
     if (body.deleteAll === true) {
       const res = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${TAB}!A:C`,
+        range: `${TAB}!A:D`,
       });
       const totalRows = (res.data.values || []).length;
       if (totalRows > 1) {
         await sheets.spreadsheets.values.update({
           spreadsheetId: SPREADSHEET_ID,
-          range: `${TAB}!A2:C${totalRows}`,
+          range: `${TAB}!A2:D${totalRows}`,
           valueInputOption: 'RAW',
           requestBody: {
-            values: Array.from({ length: totalRows - 1 }, () => ['', '', '']),
+            values: Array.from({ length: totalRows - 1 }, () => ['', '', '', '']),
           },
         });
       }
@@ -184,9 +185,9 @@ export async function DELETE(request: NextRequest) {
 
     await sheets.spreadsheets.values.update({
       spreadsheetId: SPREADSHEET_ID,
-      range: `${TAB}!A${rowIndex}:C${rowIndex}`,
+      range: `${TAB}!A${rowIndex}:D${rowIndex}`,
       valueInputOption: 'RAW',
-      requestBody: { values: [['', '', '']] },
+      requestBody: { values: [['', '', '', '']] },
     });
 
     return NextResponse.json({ success: true });
