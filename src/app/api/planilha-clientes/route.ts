@@ -7,32 +7,36 @@ import { getSheetsService } from '@/lib/google-auth';
 const SPREADSHEET_ID = '11ni1pXu0QbPQ_QmMGxdqdT4PsDNz6Z0ITBUW-E1ogMM';
 const TAB = 'PlanilhaClientes';
 
-async function ensureTab(sheets: any) {
+/** Verifica se a aba existe. Se não, tenta criar. Retorna true se a aba existe. */
+async function tabExists(sheets: any): Promise<boolean> {
   try {
-    await sheets.spreadsheets.values.get({
+    const meta = await sheets.spreadsheets.get({
       spreadsheetId: SPREADSHEET_ID,
-      range: `${TAB}!A1`,
+      fields: 'sheets.properties.title',
     });
-    console.log(`[PlanilhaClientes] Tab "${TAB}" exists.`);
+    const titles = (meta.data.sheets || []).map((s: any) => s.properties?.title);
+    console.log('[PlanilhaClientes] Abas encontradas:', titles.join(', '));
+    if (titles.includes(TAB)) return true;
+
+    // Tentar criar
+    console.log(`[PlanilhaClientes] Criando aba "${TAB}"...`);
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: {
+        requests: [{ addSheet: { properties: { title: TAB } } }],
+      },
+    });
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${TAB}!A1:C1`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [['NOME_COMPLETO', 'CPF', 'NUMERO_PROCESSO']] },
+    });
+    console.log(`[PlanilhaClientes] Aba "${TAB}" criada com sucesso.`);
+    return true;
   } catch (e: any) {
-    console.log(`[PlanilhaClientes] Tab "${TAB}" not found, creating...`, e?.message);
-    try {
-      await sheets.spreadsheets.batchUpdate({
-        spreadsheetId: SPREADSHEET_ID,
-        requestBody: {
-          requests: [{ addSheet: { properties: { title: TAB } } }],
-        },
-      });
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: SPREADSHEET_ID,
-        range: `${TAB}!A1:C1`,
-        valueInputOption: 'RAW',
-        requestBody: { values: [['NOME_COMPLETO', 'CPF', 'NUMERO_PROCESSO']] },
-      });
-      console.log(`[PlanilhaClientes] Tab "${TAB}" created successfully.`);
-    } catch (e2: any) {
-      console.error(`[PlanilhaClientes] Failed to create tab:`, e2?.message);
-    }
+    console.error('[PlanilhaClientes] Erro ao verificar/criar aba:', e?.message);
+    return false;
   }
 }
 
@@ -42,13 +46,19 @@ function cleanDigits(s: string): string {
 
 /** GET — lista clientes */
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
-
   try {
+    const session = await getServerSession(authOptions);
+    if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
+
     const token = await getAdminAccessToken();
     const sheets = getSheetsService(token);
-    await ensureTab(sheets);
+
+    const exists = await tabExists(sheets);
+    if (!exists) {
+      // Tab doesn't exist yet and couldn't be created - return empty
+      console.log('[PlanilhaClientes] Aba não existe, retornando lista vazia.');
+      return NextResponse.json([]);
+    }
 
     const res = await sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
@@ -68,107 +78,120 @@ export async function GET() {
 
     return NextResponse.json(clientes);
   } catch (e: any) {
-    console.error('[PlanilhaClientes] GET error:', e?.message);
-    return NextResponse.json({ error: 'Erro ao buscar clientes: ' + (e?.message || 'desconhecido') }, { status: 500 });
+    console.error('[PlanilhaClientes] GET error:', e?.message, e?.stack);
+    return NextResponse.json({ error: 'Erro: ' + (e?.message || 'desconhecido') }, { status: 500 });
   }
 }
 
 /** POST — adicionar cliente */
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
 
-  const { nome, cpf, numeroProcesso } = await request.json();
+    const { nome, cpf, numeroProcesso } = await request.json();
+    if (!nome || !cpf) {
+      return NextResponse.json({ error: 'Nome e CPF são obrigatórios' }, { status: 400 });
+    }
 
-  if (!nome || !cpf) {
-    return NextResponse.json({ error: 'Nome e CPF são obrigatórios' }, { status: 400 });
+    const cpfClean = cleanDigits(cpf);
+    if (cpfClean.length !== 11) {
+      return NextResponse.json({ error: 'CPF deve ter 11 dígitos' }, { status: 400 });
+    }
+
+    const token = await getAdminAccessToken();
+    const sheets = getSheetsService(token);
+    await tabExists(sheets);
+
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${TAB}!A:C`,
+      valueInputOption: 'RAW',
+      requestBody: {
+        values: [[nome.toUpperCase().trim(), cpfClean, (numeroProcesso || '').trim()]],
+      },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (e: any) {
+    console.error('[PlanilhaClientes] POST error:', e?.message);
+    return NextResponse.json({ error: 'Erro ao adicionar: ' + (e?.message || 'desconhecido') }, { status: 500 });
   }
-
-  const cpfClean = cleanDigits(cpf);
-  if (cpfClean.length !== 11) {
-    return NextResponse.json({ error: 'CPF deve ter 11 dígitos' }, { status: 400 });
-  }
-
-  const token = await getAdminAccessToken();
-  const sheets = getSheetsService(token);
-  await ensureTab(sheets);
-
-  await sheets.spreadsheets.values.append({
-    spreadsheetId: SPREADSHEET_ID,
-    range: `${TAB}!A:C`,
-    valueInputOption: 'RAW',
-    requestBody: {
-      values: [[nome.toUpperCase().trim(), cpfClean, (numeroProcesso || '').trim()]],
-    },
-  });
-
-  return NextResponse.json({ success: true });
 }
 
 /** PUT — editar cliente */
 export async function PUT(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
 
-  const { rowIndex, nome, cpf, numeroProcesso } = await request.json();
-  if (!rowIndex || !nome || !cpf) {
-    return NextResponse.json({ error: 'Dados incompletos' }, { status: 400 });
+    const { rowIndex, nome, cpf, numeroProcesso } = await request.json();
+    if (!rowIndex || !nome || !cpf) {
+      return NextResponse.json({ error: 'Dados incompletos' }, { status: 400 });
+    }
+
+    const cpfClean = cleanDigits(cpf);
+    const token = await getAdminAccessToken();
+    const sheets = getSheetsService(token);
+
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${TAB}!A${rowIndex}:C${rowIndex}`,
+      valueInputOption: 'RAW',
+      requestBody: {
+        values: [[nome.toUpperCase().trim(), cpfClean, (numeroProcesso || '').trim()]],
+      },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (e: any) {
+    console.error('[PlanilhaClientes] PUT error:', e?.message);
+    return NextResponse.json({ error: 'Erro ao editar: ' + (e?.message || 'desconhecido') }, { status: 500 });
   }
-
-  const cpfClean = cleanDigits(cpf);
-
-  const token = await getAdminAccessToken();
-  const sheets = getSheetsService(token);
-
-  await sheets.spreadsheets.values.update({
-    spreadsheetId: SPREADSHEET_ID,
-    range: `${TAB}!A${rowIndex}:C${rowIndex}`,
-    valueInputOption: 'RAW',
-    requestBody: {
-      values: [[nome.toUpperCase().trim(), cpfClean, (numeroProcesso || '').trim()]],
-    },
-  });
-
-  return NextResponse.json({ success: true });
 }
 
 /** DELETE — remover cliente */
 export async function DELETE(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
 
-  const body = await request.json();
-  const token = await getAdminAccessToken();
-  const sheets = getSheetsService(token);
+    const body = await request.json();
+    const token = await getAdminAccessToken();
+    const sheets = getSheetsService(token);
 
-  if (body.deleteAll === true) {
-    const res = await sheets.spreadsheets.values.get({
-      spreadsheetId: SPREADSHEET_ID,
-      range: `${TAB}!A:C`,
-    });
-    const totalRows = (res.data.values || []).length;
-    if (totalRows > 1) {
-      await sheets.spreadsheets.values.update({
+    if (body.deleteAll === true) {
+      const res = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${TAB}!A2:C${totalRows}`,
-        valueInputOption: 'RAW',
-        requestBody: {
-          values: Array.from({ length: totalRows - 1 }, () => ['', '', '']),
-        },
+        range: `${TAB}!A:C`,
       });
+      const totalRows = (res.data.values || []).length;
+      if (totalRows > 1) {
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `${TAB}!A2:C${totalRows}`,
+          valueInputOption: 'RAW',
+          requestBody: {
+            values: Array.from({ length: totalRows - 1 }, () => ['', '', '']),
+          },
+        });
+      }
+      return NextResponse.json({ success: true, deleted: totalRows - 1 });
     }
-    return NextResponse.json({ success: true, deleted: totalRows - 1 });
+
+    const { rowIndex } = body;
+    if (!rowIndex) return NextResponse.json({ error: 'rowIndex obrigatório' }, { status: 400 });
+
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${TAB}!A${rowIndex}:C${rowIndex}`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [['', '', '']] },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (e: any) {
+    console.error('[PlanilhaClientes] DELETE error:', e?.message);
+    return NextResponse.json({ error: 'Erro ao excluir: ' + (e?.message || 'desconhecido') }, { status: 500 });
   }
-
-  const { rowIndex } = body;
-  if (!rowIndex) return NextResponse.json({ error: 'rowIndex obrigatório' }, { status: 400 });
-
-  await sheets.spreadsheets.values.update({
-    spreadsheetId: SPREADSHEET_ID,
-    range: `${TAB}!A${rowIndex}:C${rowIndex}`,
-    valueInputOption: 'RAW',
-    requestBody: { values: [['', '', '']] },
-  });
-
-  return NextResponse.json({ success: true });
 }
