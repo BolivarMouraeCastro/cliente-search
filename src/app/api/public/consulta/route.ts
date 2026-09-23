@@ -146,18 +146,45 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ found: false, error: 'Erro de autenticação do servidor.' }, { status: 500 });
   }
 
-  // Step 2: Buscar CPF nos Contatos e validar nome
+  // Step 2: Buscar CPF nos Contatos — coletar TODAS as linhas (uma por processo)
   let clientName = '';
+  let contatoProcessos: string[] = []; // números de processo extraídos da coluna D
   try {
     const sheets = getSheetsService(token);
     const res = await sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
-      range: 'Contatos!A:C',
+      range: 'Contatos!A:D',
     });
     for (const row of (res.data.values || []).slice(1)) {
       const nome = (row[0] || '').trim();
       const cpf = (row[1] || '').replace(/\D/g, '');
-      if (cpf === cpfDigits && nome) { clientName = nome; break; }
+      if (cpf === cpfDigits && nome) {
+        if (!clientName) clientName = nome;
+        // Extrair número do processo da coluna D
+        const colD = (row[3] || '').trim();
+        if (colD) {
+          // Tentar extrair CNJ formatado: 0001234-56.2026.5.02.0001
+          const cnjMatch = colD.match(/(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/);
+          if (cnjMatch) {
+            contatoProcessos.push(cnjMatch[1]);
+          } else {
+            // Tentar extrair sequência de 20 dígitos (CNJ sem formatação)
+            const digitsMatch = colD.match(/(\d{20})/);
+            if (digitsMatch) {
+              const d = digitsMatch[1];
+              // Formatar como CNJ: NNNNNNN-DD.AAAA.J.TT.OOOO
+              const formatted = `${d.slice(0,7)}-${d.slice(7,9)}.${d.slice(9,13)}.${d.slice(13,14)}.${d.slice(14,16)}.${d.slice(16,20)}`;
+              contatoProcessos.push(formatted);
+            } else {
+              // Tentar extrair "Processo: NNNN..." seguido de dígitos
+              const procMatch = colD.match(/Processo[:\s]*(\d{13,})/i);
+              if (procMatch) {
+                contatoProcessos.push(procMatch[1]);
+              }
+            }
+          }
+        }
+      }
     }
   } catch (e: any) {
     console.error('Consulta Step2 contatos:', e?.message);
@@ -180,10 +207,41 @@ export async function POST(req: NextRequest) {
     if (sid) {
       const allClients = await getClients(token, sid);
       const searchN = normalize(clientName);
-      allMatchedClients = allClients.filter(c => {
-        const n = normalize(c.nome);
-        return n === searchN || n.includes(searchN) || searchN.includes(n);
-      });
+      
+      if (contatoProcessos.length > 0) {
+        // Match PRIORITÁRIO: usar números do processo dos Contatos
+        for (const procNum of contatoProcessos) {
+          // Primeiro tenta achar pelo número do processo na planilha de clientes
+          const byProcess = allClients.find(c => {
+            if (!c.numeroProcesso) return false;
+            return c.numeroProcesso.replace(/\D/g, '').includes(procNum.replace(/\D/g, '')) ||
+                   procNum.replace(/\D/g, '').includes(c.numeroProcesso.replace(/\D/g, ''));
+          });
+          if (byProcess) {
+            allMatchedClients.push(byProcess);
+          } else {
+            // Se não encontrou na planilha, criar entrada com dados do Contatos
+            allMatchedClients.push({
+              nome: clientName,
+              entrada: '',
+              status: 'DISTRIBUÍDO',
+              empresa: '',
+              materia: '',
+              responsavel: '',
+              funcao: '',
+              numeroProcesso: procNum,
+            });
+          }
+        }
+      }
+      
+      // Fallback: se não achou pelo processo, buscar por nome
+      if (allMatchedClients.length === 0) {
+        allMatchedClients = allClients.filter(c => {
+          const n = normalize(c.nome);
+          return n === searchN || n.includes(searchN) || searchN.includes(n);
+        });
+      }
     }
   } catch (e: any) {
     console.error('Consulta Step3 clients:', e?.message);
