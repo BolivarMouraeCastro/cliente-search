@@ -400,7 +400,7 @@ function ProcessCard({ processo: p, index, total, nome, cpf }: {
         <button onClick={() => {
           const proc = p.numeroProcesso ? `, processo ${p.numeroProcesso}` : '';
           const msg = encodeURIComponent(`Olá! Meu nome é ${nome}, CPF ${cpf}${proc}. Gostaria de informações sobre meu processo.`);
-          window.open(`https://wa.me/5511943241698?text=${msg}`, '_blank');
+          window.open(`https://wa.me/5511983648425?text=${msg}`, '_blank');
         }} style={{
           width: '100%', padding: '0.7rem', borderRadius: '0.5rem', border: 'none',
           background: 'linear-gradient(135deg, #25D366, #128C7E)',
