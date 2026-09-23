@@ -89,7 +89,9 @@ export default function PlanilhaClientesPage() {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        cache: 'no-store',
       });
+      const text = await res.text();
       if (res.ok) {
         showFlash('ok', editRow ? '✅ Atualizado!' : '✅ Adicionado!');
         setShowForm(false);
@@ -98,10 +100,10 @@ export default function PlanilhaClientesPage() {
         setLoading(true);
         fetchClientes();
       } else {
-        showFlash('err', 'Erro ao salvar.');
+        try { const d = JSON.parse(text); showFlash('err', d.error || 'Erro ao salvar.'); } catch { showFlash('err', `Erro ${res.status} ao salvar.`); }
       }
-    } catch {
-      showFlash('err', 'Erro de conexão.');
+    } catch (e: any) {
+      showFlash('err', 'Falha na conexão: ' + (e?.message || ''));
     }
   };
 
@@ -112,11 +114,14 @@ export default function PlanilhaClientesPage() {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rowIndex: c.rowIndex }),
+        cache: 'no-store',
       });
       showFlash('ok', '🗑️ Excluído');
       setLoading(true);
       fetchClientes();
-    } catch {}
+    } catch (e: any) {
+      showFlash('err', 'Falha ao excluir: ' + (e?.message || ''));
+    }
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -127,15 +132,20 @@ export default function PlanilhaClientesPage() {
     formData.append('file', file);
     try {
       const res = await fetch('/api/planilha-clientes/import', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (res.ok) {
-        showFlash('ok', `✅ ${data.imported} clientes importados!`);
-        fetchClientes();
-      } else {
-        showFlash('err', data.error || 'Erro na importação.');
+      const text = await res.text();
+      try {
+        const data = JSON.parse(text);
+        if (res.ok) {
+          showFlash('ok', `✅ ${data.imported} clientes importados!`);
+          fetchClientes();
+        } else {
+          showFlash('err', data.error || 'Erro na importação.');
+        }
+      } catch {
+        showFlash('err', `Erro ${res.status}: resposta inválida do servidor.`);
       }
-    } catch {
-      showFlash('err', 'Erro de conexão.');
+    } catch (e: any) {
+      showFlash('err', 'Falha na importação: ' + (e?.message || ''));
     }
     setImporting(false);
     e.target.value = '';
