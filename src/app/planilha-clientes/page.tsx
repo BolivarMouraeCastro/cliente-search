@@ -128,10 +128,92 @@ export default function PlanilhaClientesPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     setImporting(true);
-    const formData = new FormData();
-    formData.append('file', file);
+    
     try {
-      const res = await fetch('/api/public/planilha-clientes/import', { method: 'POST', body: formData });
+      const XLSX = await import('xlsx');
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      const rawData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: true, defval: '' }) as (string | number)[][];
+      
+      if (!rawData || rawData.length < 2) {
+        showFlash('err', 'Planilha vazia ou sem dados');
+        setImporting(false);
+        e.target.value = '';
+        return;
+      }
+
+      const NOME_KEYS = ['nome', 'razão social', 'razao social', 'nome completo', 'reclamante'];
+      const CPF_KEYS = ['cpf', 'cpf/cnpj', 'documento', 'doc'];
+      const PROC_KEYS = ['processo', 'andamento', 'ultimo andamento', 'último andamento', 'movimentação'];
+      
+      const findColumn = (headers: string[], candidates: string[]) => {
+        const normalized = headers.map(h => String(h).toLowerCase().trim());
+        for (const candidate of candidates) {
+          const idx = normalized.findIndex(h => h.includes(candidate));
+          if (idx >= 0) return idx;
+        }
+        return -1;
+      };
+
+      let headerIdx = -1, nomeIdx = -1, cpfIdx = -1, procIdx = -1;
+      for (let r = 0; r < Math.min(5, rawData.length); r++) {
+        const row = rawData[r].map(c => String(c || ''));
+        nomeIdx = findColumn(row, NOME_KEYS);
+        cpfIdx = findColumn(row, CPF_KEYS);
+        procIdx = findColumn(row, PROC_KEYS);
+        if ([nomeIdx, cpfIdx, procIdx].filter(i => i >= 0).length >= 2) {
+          headerIdx = r;
+          break;
+        }
+      }
+
+      if (headerIdx < 0 || nomeIdx < 0) {
+         showFlash('err', 'Colunas "Nome" e/ou "CPF" não encontradas.');
+         setImporting(false);
+         e.target.value = '';
+         return;
+      }
+
+      const validRows: string[][] = [];
+      const dataRows = rawData.slice(headerIdx + 1);
+      
+      for (const row of dataRows) {
+        const nome = String(row[nomeIdx] ?? '').trim().toUpperCase();
+        if (!nome || nome.length < 2) continue;
+        
+        const cpf = cpfIdx >= 0 ? String(row[cpfIdx] ?? '').replace(/\D/g, '') : '';
+        let processoStr = procIdx >= 0 ? String(row[procIdx] ?? '').trim() : '';
+        let processo = processoStr;
+        
+        // Smart extract process number from text (e.g. from "Último Andamento" column)
+        const procMatch = processoStr.match(/(?:Processo|Proc|Nº)\s*:?\s*([\d\.\-]+)/i);
+        if (procMatch && procMatch[1].replace(/\D/g, '').length >= 7) {
+            processo = procMatch[1].replace(/[^\d.-]/g, '');
+        } else {
+            // Find a generic 20-digit judicial format in the text
+            const match20 = processoStr.match(/\d{7}-?\d{2}\.?\d{4}\.?\d\.?\d{2}\.?\d{4}/);
+            if (match20) processo = match20[0];
+        }
+
+        validRows.push([nome, cpf, processo]);
+      }
+      
+      if (validRows.length === 0) {
+        showFlash('err', 'Nenhum cliente válido encontrado na planilha.');
+        setImporting(false);
+        e.target.value = '';
+        return;
+      }
+
+      showFlash('ok', `Processando ${validRows.length} clientes...`);
+
+      // Send processed JSON to backend
+      const res = await fetch('/api/public/planilha-clientes/import', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: validRows }) 
+      });
       const text = await res.text();
       try {
         const data = JSON.parse(text);
@@ -142,10 +224,10 @@ export default function PlanilhaClientesPage() {
           showFlash('err', data.error || 'Erro na importação.');
         }
       } catch {
-        showFlash('err', `Erro ${res.status}: resposta inválida do servidor.`);
+        showFlash('err', `Erro ${res.status}: resposta inválida.`);
       }
     } catch (e: any) {
-      showFlash('err', 'Falha na importação: ' + (e?.message || ''));
+      showFlash('err', 'Falha na leitura do Excel: ' + (e?.message || ''));
     }
     setImporting(false);
     e.target.value = '';
