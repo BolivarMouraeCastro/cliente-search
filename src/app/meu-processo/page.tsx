@@ -5,7 +5,7 @@ import { useState, useRef, useEffect } from 'react';
 /* ==================== TYPES ==================== */
 interface AudienciaData {
   data: string; horario: string; tipo: string; orgaoJulgador: string;
-  modalidade: string; endereco: string; advogado: string;
+  modalidade: string; endereco: string; advogado: string; reclamada?: string;
 }
 interface PastHearingData {
   data: string; horario: string; tipo: string;
@@ -101,9 +101,6 @@ export default function MeuProcessoPage() {
 
   const handleConsulta = async () => {
     const digits = cpf.replace(/\D/g, '');
-    if (!nome.trim() || nome.trim().length < 3) {
-      setResult({ found: false, error: 'Informe seu nome completo.' }); return;
-    }
     if (digits.length !== 11) {
       setResult({ found: false, error: 'Informe os 11 dígitos do CPF.' }); return;
     }
@@ -111,7 +108,7 @@ export default function MeuProcessoPage() {
     try {
       const res = await fetch('/api/public/consulta', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome: nome.trim(), cpf: digits }),
+        body: JSON.stringify({ cpf: digits }),
       });
       setResult(await res.json());
     } catch { setResult({ found: false, error: 'Erro de conexão. Tente novamente.' }); }
@@ -147,11 +144,6 @@ export default function MeuProcessoPage() {
           background: 'rgba(30,41,59,0.8)', border: '1px solid rgba(148,163,184,0.15)',
           borderRadius: '1rem', padding: '1.5rem', maxWidth: '460px', width: '100%',
         }}>
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={{ color: '#cbd5e1', fontSize: '0.8rem', fontWeight: 600, display: 'block', marginBottom: '0.3rem' }}>Nome Completo</label>
-            <input type="text" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Seu nome completo"
-              style={{ ...inputStyle }} />
-          </div>
           <div style={{ marginBottom: '1.25rem' }}>
             <label style={{ color: '#cbd5e1', fontSize: '0.8rem', fontWeight: 600, display: 'block', marginBottom: '0.3rem' }}>CPF</label>
             <input type="text" value={cpf} onChange={(e) => setCpf(formatCPF(e.target.value))}
@@ -196,6 +188,19 @@ export default function MeuProcessoPage() {
               padding: '0.4rem 0.75rem', borderRadius: '0.4rem', border: '1px solid rgba(148,163,184,0.2)',
               background: 'transparent', color: '#94a3b8', fontSize: '0.75rem', cursor: 'pointer',
             }}>Sair</button>
+          </div>
+
+          {/* AI Disclaimer Banner */}
+          <div style={{
+            background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)',
+            borderRadius: '0.75rem', padding: '0.85rem 1rem', display: 'flex', gap: '0.6rem', alignItems: 'flex-start',
+          }}>
+            <span style={{ fontSize: '1.1rem', flexShrink: 0, marginTop: '0.1rem' }}>⚠️</span>
+            <div style={{ color: '#fbbf24', fontSize: '0.72rem', lineHeight: 1.5 }}>
+              <strong>Aviso Importante:</strong> Este aplicativo utiliza tecnologia de Inteligência Artificial como auxílio.
+              As informações exibidas são meramente informativas e <strong>não substituem orientação jurídica profissional</strong>.
+              Não tome nenhuma decisão baseada exclusivamente na IA. Em caso de dúvidas, entre em contato diretamente com o escritório.
+            </div>
           </div>
 
           {/* Process Cards */}
@@ -328,6 +333,7 @@ function ProcessCard({ processo: p, index, total, nome, cpf }: {
           <div style={{ display: 'grid', gap: '0.4rem' }}>
             <Field label="Data e Horário" value={`${p.audiencia.data} às ${p.audiencia.horario || 'A confirmar'}`} bold />
             {p.audiencia.tipo && <Field label="Tipo" value={p.audiencia.tipo} />}
+            {p.audiencia.reclamada && <Field label="Empresa" value={p.audiencia.reclamada} />}
             <Field label="Modalidade" value={p.audiencia.modalidade} valueColor={isOnline ? '#60a5fa' : '#e2e8f0'} />
             {p.audiencia.orgaoJulgador && <Field label="Vara / Órgão" value={p.audiencia.orgaoJulgador} />}
             {p.audiencia.endereco && !isOnline && (

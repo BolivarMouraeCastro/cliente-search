@@ -132,13 +132,9 @@ export async function POST(req: NextRequest) {
   }
 
   const cpfDigits = (body.cpf || '').replace(/\D/g, '');
-  const nomeInformado = (body.nome || '').trim();
 
   if (cpfDigits.length !== 11) {
     return NextResponse.json({ found: false, error: 'CPF inválido. Informe os 11 dígitos.' }, { status: 400 });
-  }
-  if (!nomeInformado || nomeInformado.length < 3) {
-    return NextResponse.json({ found: false, error: 'Informe seu nome completo.' }, { status: 400 });
   }
 
   // Step 1: Token
@@ -170,13 +166,6 @@ export async function POST(req: NextRequest) {
 
   if (!clientName) {
     return NextResponse.json({ found: false, error: 'CPF não encontrado em nossos registros.' });
-  }
-
-  // Validar que o nome informado confere com o cadastrado
-  const normInformado = normalize(nomeInformado);
-  const normCadastrado = normalize(clientName);
-  if (!normCadastrado.includes(normInformado) && !normInformado.includes(normCadastrado)) {
-    return NextResponse.json({ found: false, error: 'Nome e CPF não conferem. Verifique os dados informados.' });
   }
 
   // Log de acesso (async, não bloqueia a resposta)
@@ -419,6 +408,7 @@ export async function POST(req: NextRequest) {
         modalidade,
         endereco,
         advogado: nextHearing.advogado,
+        reclamada: nextHearing.reclamada || '',
       } : null,
       audienciasPassadas: pastHearings,
     };
