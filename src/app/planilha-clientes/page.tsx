@@ -127,6 +127,27 @@ export default function PlanilhaClientesPage() {
     }
   };
 
+  const handleDeleteAll = async () => {
+    if (!confirm('⚠️ TEM CERTEZA QUE DESEJA APAGAR TODOS OS CLIENTES?\nEsta ação não pode ser desfeita!')) return;
+    try {
+      const res = await fetch('/api/public/planilha-clientes', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deleteAll: true }),
+        cache: 'no-store',
+      });
+      if (res.ok) {
+        showFlash('ok', '🗑️ Todos os clientes foram excluídos!');
+        setLoading(true);
+        fetchClientes();
+      } else {
+        showFlash('err', 'Erro ao excluir todos.');
+      }
+    } catch (e: any) {
+      showFlash('err', 'Falha ao excluir todos: ' + (e?.message || ''));
+    }
+  };
+
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -278,6 +299,11 @@ export default function PlanilhaClientesPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button onClick={handleDeleteAll} style={{
+            padding: '0.5rem 1rem', borderRadius: '0.5rem', border: '1px solid rgba(239,68,68,0.3)',
+            background: 'rgba(239,68,68,0.15)', color: '#fca5a5',
+            fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer',
+          }}>🗑️ Apagar Todos</button>
           <label style={{
             padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer',
             background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.3)',
