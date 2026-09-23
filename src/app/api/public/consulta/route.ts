@@ -146,48 +146,49 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ found: false, error: 'Erro de autenticação do servidor.' }, { status: 500 });
   }
 
-  // Step 2: Buscar CPF nos Contatos — coletar TODAS as linhas (uma por processo)
+  // Step 2: Buscar CPF na PlanilhaClientes — coletar TODAS as linhas (uma por processo)
   let clientName = '';
   let contatoProcessos: string[] = []; // números de processo extraídos das colunas
+  let sheets;
   try {
-    const sheets = getSheetsService(token);
+    sheets = getSheetsService(token);
     const res = await sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
-      range: 'Contatos!A:H',
+      range: 'PlanilhaClientes!A:C',
     });
     for (const row of (res.data.values || []).slice(1)) {
       const nome = (row[0] || '').trim();
       const cpf = (row[1] || '').replace(/\D/g, '');
       if (cpf === cpfDigits && nome) {
         if (!clientName) clientName = nome;
-        // Procurar número do processo em TODAS as colunas (C em diante)
-        const allColsText = row.slice(2).join(' ');
-        if (allColsText) {
-          // Tentar extrair CNJ formatado: 0001234-56.2026.5.02.0001
-          const cnjMatch = allColsText.match(/(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/);
-          if (cnjMatch) {
-            if (!contatoProcessos.includes(cnjMatch[1])) contatoProcessos.push(cnjMatch[1]);
-          } else {
-            // Tentar extrair sequência de 20 dígitos (CNJ sem formatação)
-            const digitsMatch = allColsText.match(/(\d{20})/);
-            if (digitsMatch) {
-              const d = digitsMatch[1];
-              const formatted = `${d.slice(0,7)}-${d.slice(7,9)}.${d.slice(9,13)}.${d.slice(13,14)}.${d.slice(14,16)}.${d.slice(16,20)}`;
-              if (!contatoProcessos.includes(formatted)) contatoProcessos.push(formatted);
-            } else {
-              // Tentar extrair "Processo: NNNN..." seguido de dígitos (13+)
-              const procMatch = allColsText.match(/Processo[:\s]*(\d{13,})/i);
-              if (procMatch) {
-                if (!contatoProcessos.includes(procMatch[1])) contatoProcessos.push(procMatch[1]);
-              }
-            }
-          }
+        const processo = (row[2] || '').trim();
+        if (processo && !contatoProcessos.includes(processo)) {
+          contatoProcessos.push(processo);
         }
       }
     }
   } catch (e: any) {
-    console.error('Consulta Step2 contatos:', e?.message);
-    return NextResponse.json({ found: false, error: 'Erro ao buscar contatos.' }, { status: 500 });
+    console.error('Consulta Step2 planilhaclientes:', e?.message);
+  }
+
+  // Fallback para buscar nome no Contatos se não estiver na Planilha de Clientes
+  if (!clientName) {
+    try {
+      const res = await sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: 'Contatos!A:B',
+      });
+      for (const row of (res.data.values || []).slice(1)) {
+        const nome = (row[0] || '').trim();
+        const cpf = (row[1] || '').replace(/\D/g, '');
+        if (cpf === cpfDigits && nome) {
+          clientName = nome;
+          break;
+        }
+      }
+    } catch (e: any) {
+      console.error('Consulta Step2 contatos fallback:', e?.message);
+    }
   }
 
   if (!clientName) {
