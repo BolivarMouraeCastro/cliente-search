@@ -388,7 +388,7 @@ export default function AgendaPublicaPage() {
                             `*BM&C Advogados*`;
                           const encoded = encodeURIComponent(msg);
                           try {
-                            const res = await fetch(`/api/contatos/lookup?nome=${encodeURIComponent(h.reclamante)}`);
+                            const res = await fetch(`/api/public/contatos-lookup?nome=${encodeURIComponent(h.reclamante)}`);
                             const data = await res.json();
                             if (data.found && data.telefone) {
                               window.open(`https://wa.me/${data.telefone}?text=${encoded}`, '_blank');
