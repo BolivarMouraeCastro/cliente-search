@@ -3,7 +3,7 @@
 import { usePathname } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 
-const PUBLIC_ROUTES = ['/meu-processo'];
+const PUBLIC_ROUTES = ['/meu-processo', '/agenda-publica'];
 
 export default function ConditionalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
