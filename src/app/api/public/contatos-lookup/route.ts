@@ -6,9 +6,28 @@ export const dynamic = 'force-dynamic';
 
 const SPREADSHEET_ID = '11ni1pXu0QbPQ_QmMGxdqdT4PsDNz6Z0ITBUW-E1ogMM';
 
+/**
+ * Remove modalidade do nome: (presencial), (telepresencial), (online), (virtual), etc.
+ */
+function cleanName(name: string): string {
+  return name
+    .replace(/\s*\(presencial\)\s*/gi, '')
+    .replace(/\s*\(telepresencial\)\s*/gi, '')
+    .replace(/\s*\(online\)\s*/gi, '')
+    .replace(/\s*\(virtual\)\s*/gi, '')
+    .replace(/\s*\(remoto\)\s*/gi, '')
+    .replace(/\s*\(videoconfer[eê]ncia\)\s*/gi, '')
+    .replace(/\s*\([^)]*presencial[^)]*\)\s*/gi, '')
+    .trim();
+}
+
 /** GET — busca contato por nome (público, sem auth) */
 export async function GET(request: NextRequest) {
-  const nome = new URL(request.url).searchParams.get('nome')?.trim().toUpperCase();
+  const rawNome = new URL(request.url).searchParams.get('nome')?.trim() || '';
+  if (!rawNome) return NextResponse.json({ found: false });
+
+  // Limpar modalidade do nome antes de buscar
+  const nome = cleanName(rawNome).toUpperCase();
   if (!nome) return NextResponse.json({ found: false });
 
   try {
@@ -23,7 +42,7 @@ export async function GET(request: NextRequest) {
     const rows = (res.data.values || []) as string[][];
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
-      const rowNome = (row[0] || '').trim().toUpperCase();
+      const rowNome = cleanName(row[0] || '').trim().toUpperCase();
       if (rowNome === nome || rowNome.includes(nome) || nome.includes(rowNome)) {
         return NextResponse.json({
           found: true,
