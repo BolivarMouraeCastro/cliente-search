@@ -389,7 +389,7 @@ export default function AgendaPublicaPage() {
                       )}
                       {/* WhatsApp button to contact client */}
                       <button
-                        onClick={() => {
+                        onClick={async () => {
                           const msg =
                             `Olá *${h.reclamante}*! 👋\n\n` +
                             `Informamos que sua audiência está agendada:\n\n` +
@@ -401,7 +401,21 @@ export default function AgendaPublicaPage() {
                             (h.numeroProcesso ? `📄 *Processo:* ${h.numeroProcesso}\n` : '') +
                             `\nPor favor, confirme o recebimento. Qualquer dúvida, estamos à disposição! 🤝\n\n` +
                             `*BM&C Advogados*`;
-                          window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+                          const encoded = encodeURIComponent(msg);
+                          try {
+                            const res = await fetch(`/api/contatos/lookup?nome=${encodeURIComponent(h.reclamante)}`);
+                            const data = await res.json();
+                            if (data.found && data.telefone) {
+                              window.open(`https://wa.me/${data.telefone}?text=${encoded}`, '_blank');
+                            } else {
+                              const go = confirm(
+                                `Contato "${h.reclamante}" não encontrado nos Contatos.\n\nDeseja enviar sem número?\n(Cadastre o telefone em "Contatos" no painel administrativo)`
+                              );
+                              if (go) window.open(`https://wa.me/?text=${encoded}`, '_blank');
+                            }
+                          } catch {
+                            window.open(`https://wa.me/?text=${encoded}`, '_blank');
+                          }
                         }}
                         style={{
                           display: 'flex', alignItems: 'center', gap: '0.3rem',

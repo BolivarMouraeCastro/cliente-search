@@ -8,8 +8,6 @@ const SPREADSHEET_ID = '11ni1pXu0QbPQ_QmMGxdqdT4PsDNz6Z0ITBUW-E1ogMM';
 
 /** GET — busca contato por nome exato */
 export async function GET(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ found: false }, { status: 401 });
 
   const nome = new URL(request.url).searchParams.get('nome')?.trim().toUpperCase();
   if (!nome) return NextResponse.json({ found: false });
