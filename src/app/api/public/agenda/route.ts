@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAdminAccessToken } from '@/lib/admin-token';
+import { getEffectiveAccessToken } from '@/lib/admin-token';
 import { getAllHearings } from '@/lib/hearings';
 
 export const dynamic = 'force-dynamic';
@@ -11,7 +11,8 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(req: Request) {
   try {
-    const token = await getAdminAccessToken();
+    // Use getEffectiveAccessToken (same as internal /api/agenda)
+    const token = await getEffectiveAccessToken(null, null);
 
     const { searchParams } = new URL(req.url);
     const advogadoFilter = searchParams.get('advogado')?.trim().toUpperCase() || '';
@@ -42,7 +43,7 @@ export async function GET(req: Request) {
   } catch (err) {
     console.error('Public agenda error:', err);
     return NextResponse.json(
-      { error: `Erro: ${err instanceof Error ? err.message : String(err)}` },
+      { error: `Erro: ${err instanceof Error ? err.message : String(err)}`, hearings: [], advogados: [], total: 0 },
       { status: 500 }
     );
   }
