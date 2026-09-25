@@ -222,14 +222,11 @@ export default function AgendaPublicaPage() {
       {/* Header */}
       <div style={headerStyle}>
         <div style={logoStyle}>
-          <div style={{
-            width: '36px', height: '36px', borderRadius: '50%',
-            background: 'linear-gradient(135deg, #d4af37, #b8941f)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '0.9rem', fontWeight: 800, color: '#111',
-          }}>
-            BMC
-          </div>
+          <img
+            src="/bmc-logo.png"
+            alt="BM&C Advogados"
+            style={{ width: '50px', height: '50px', borderRadius: '50%', objectFit: 'cover' }}
+          />
           <div>
             <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#d4af37' }}>
               Agenda de Audiências
