@@ -178,7 +178,7 @@ export async function GET(req: Request) {
     let hearings = rows
       .slice(1)
       .map((row) => rowToHearing(row))
-      .filter((h) => h.reclamante.trim() !== '');
+      .filter((h) => h.reclamante.trim() !== '' && h.dataAudiencia.trim() !== '');
 
     const advogados = [...new Set(hearings.map((h) => h.advogado).filter(Boolean))].sort();
 
