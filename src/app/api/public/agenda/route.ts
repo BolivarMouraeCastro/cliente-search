@@ -1,6 +1,4 @@
 import { NextResponse } from 'next/server';
-import { getAdminAccessToken, getEffectiveAccessToken } from '@/lib/admin-token';
-import { getSheetsService } from '@/lib/google-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -72,26 +70,108 @@ function rowToHearing(row: string[]): Hearing {
 }
 
 /**
+ * Fetch hearings from a PUBLIC Google Sheet using the gviz JSON endpoint.
+ * No OAuth token needed — the spreadsheet must be shared as "Anyone with the link".
+ */
+async function fetchPublicSheetData(): Promise<string[][]> {
+  // Use the Google Visualization API (works for public sheets without auth)
+  const url = `https://docs.google.com/spreadsheets/d/${HEARINGS_SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=AUDIÊNCIA`;
+  
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) {
+    // Try without sheet name (default first sheet)
+    const url2 = `https://docs.google.com/spreadsheets/d/${HEARINGS_SPREADSHEET_ID}/gviz/tq?tqx=out:csv`;
+    const res2 = await fetch(url2, { cache: 'no-store' });
+    if (!res2.ok) {
+      throw new Error(`Failed to fetch public sheet: ${res2.status} ${res2.statusText}`);
+    }
+    const csv = await res2.text();
+    return parseCSV(csv);
+  }
+  
+  const csv = await res.text();
+  return parseCSV(csv);
+}
+
+/**
+ * Simple CSV parser that handles quoted fields
+ */
+function parseCSV(csv: string): string[][] {
+  const rows: string[][] = [];
+  const lines = csv.split('\n');
+  
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const cells: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        cells.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    cells.push(current.trim());
+    rows.push(cells);
+  }
+  
+  return rows;
+}
+
+/**
+ * Fallback: try using the admin token via googleapis
+ */
+async function fetchWithAdminToken(): Promise<string[][]> {
+  const { getAdminAccessToken } = await import('@/lib/admin-token');
+  const { getSheetsService } = await import('@/lib/google-auth');
+  
+  const token = await getAdminAccessToken();
+  const sheets = getSheetsService(token);
+  
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId: HEARINGS_SPREADSHEET_ID,
+    range: 'A:H',
+    valueRenderOption: 'FORMATTED_VALUE',
+    dateTimeRenderOption: 'FORMATTED_STRING',
+  });
+  
+  return (response.data.values || []) as string[][];
+}
+
+/**
  * GET /api/public/agenda — Public endpoint for hearings (no auth required).
- * Reads directly from the hearings spreadsheet using admin token.
  */
 export async function GET(req: Request) {
   try {
-    const token = await getAdminAccessToken();
-    const sheets = getSheetsService(token);
-
     const { searchParams } = new URL(req.url);
     const advogadoFilter = searchParams.get('advogado')?.trim().toUpperCase() || '';
 
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: HEARINGS_SPREADSHEET_ID,
-      range: 'A:H',
-      valueRenderOption: 'FORMATTED_VALUE',
-      dateTimeRenderOption: 'FORMATTED_STRING',
-    });
+    // Try public CSV export first, then admin token as fallback
+    let rows: string[][] = [];
+    try {
+      rows = await fetchPublicSheetData();
+    } catch (csvError) {
+      console.warn('Public CSV fetch failed, trying admin token:', csvError);
+      try {
+        rows = await fetchWithAdminToken();
+      } catch (tokenError) {
+        console.error('Admin token also failed:', tokenError);
+        throw new Error(`Ambos métodos falharam. CSV: ${csvError instanceof Error ? csvError.message : String(csvError)}. Token: ${tokenError instanceof Error ? tokenError.message : String(tokenError)}`);
+      }
+    }
 
-    const rows = response.data.values;
-    if (!rows || rows.length <= 1) {
+    if (rows.length <= 1) {
       return NextResponse.json({ hearings: [], advogados: [], total: 0 });
     }
 
