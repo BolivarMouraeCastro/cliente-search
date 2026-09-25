@@ -58,7 +58,20 @@ export default function AgendaPublicaPage() {
   const [advogados, setAdvogados] = useState<string[]>([]);
   const [selectedAdvogado, setSelectedAdvogado] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const [weekStart, setWeekStart] = useState(() => getMonday(new Date()));
+  // A partir de sábado 00h, mostra a semana que vem automaticamente
+  const [weekStart] = useState(() => {
+    const now = new Date();
+    const dayOfWeek = now.getDay(); // 0=dom, 6=sab
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      // Sábado ou Domingo → mostra próxima semana (segunda que vem)
+      const nextMonday = new Date(now);
+      const daysUntilMonday = dayOfWeek === 0 ? 1 : 2; // dom→+1, sab→+2
+      nextMonday.setDate(nextMonday.getDate() + daysUntilMonday);
+      nextMonday.setHours(0, 0, 0, 0);
+      return nextMonday;
+    }
+    return getMonday(now);
+  });
   const [collapsedDays, setCollapsedDays] = useState<Record<number, boolean>>({});
 
   const toggleDay = (dayIndex: number) => {
@@ -111,21 +124,6 @@ export default function AgendaPublicaPage() {
 
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekEnd.getDate() + 4);
-
-  const goToday = () => setWeekStart(getMonday(new Date()));
-  const goPrev = () => {
-    const prev = new Date(weekStart);
-    prev.setDate(prev.getDate() - 7);
-    setWeekStart(prev);
-  };
-  const goNext = () => {
-    const next = new Date(weekStart);
-    next.setDate(next.getDate() + 7);
-    setWeekStart(next);
-  };
-
-  const isCurrentWeek =
-    getMonday(new Date()).getTime() === weekStart.getTime();
 
   // Styles
   const containerStyle: React.CSSProperties = {
@@ -252,24 +250,11 @@ export default function AgendaPublicaPage() {
 
         {/* Navigation */}
         <div style={navStyle}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <button onClick={goPrev} style={navBtnStyle} title="Semana anterior">◀</button>
-            <div style={{
-              padding: '0.4rem 0.75rem', fontSize: '0.8rem', fontWeight: 600,
-              color: '#d4af37', letterSpacing: '0.02em',
-            }}>
-              {formatFullDateBR(weekStart)} — {formatFullDateBR(weekEnd)}
-            </div>
-            <button onClick={goNext} style={navBtnStyle} title="Próxima semana">▶</button>
-            {!isCurrentWeek && (
-              <button onClick={goToday} style={{
-                ...navBtnStyle,
-                background: 'rgba(212, 175, 55, 0.15)',
-                border: '1px solid rgba(212, 175, 55, 0.3)',
-                color: '#d4af37',
-                fontWeight: 700,
-              }}>Hoje</button>
-            )}
+          <div style={{
+            padding: '0.4rem 0.75rem', fontSize: '0.8rem', fontWeight: 600,
+            color: '#d4af37', letterSpacing: '0.02em',
+          }}>
+            📅 Semana: {formatFullDateBR(weekStart)} — {formatFullDateBR(weekEnd)}
           </div>
 
           {/* Filter */}
